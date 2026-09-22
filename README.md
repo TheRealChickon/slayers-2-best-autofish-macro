@@ -2,6 +2,30 @@
 
 A Windows fishing assistant for the Project Slayers 2 / Ouwland fishing minigame. Includes a game-inspired inventory window, a keyboard terminal app, item history, live events, bait estimates, and reconnect recovery.
 
+## Launch it
+
+**First time:** extract the repository, install Python 3.12 x64, and double-click **Setup.cmd**. Then open **Fishing** on the desktop, set your Roblox username and rod slot in Settings, prepare the game as described below, and click **Continue**.
+
+**After setup:**
+
+- **Fishing** on the desktop opens the window. Continue starts/resumes; Pause and Stop release game input.
+- **Fishing CLI** opens the terminal dashboard. Press **C** to continue, **P** to pause, **S** to stop, and **Q** to close only the dashboard.
+- **Start Fishing** resumes the saved run directly.
+- Without desktop shortcuts, run `Open-Controls.ps1`, `Open-CLI.ps1`, or `fishing.cmd --color tui` from the extracted application folder.
+
+## Where it works
+
+| Requirement | Support |
+| --- | --- |
+| Accounts | Any account that owns a rod, has it in the visible hotbar, and can use this game's private-server Join menu; configure the username for that account's presence checks |
+| Operating system | Windows x64; not macOS, Linux, mobile, or Roblox console |
+| Game | This game's Ouwland fishing minigame; not arbitrary Roblox games |
+| Display | The calibrated 2560 × 1440 layout and normal game UI scale; other resolutions need recalibration |
+| Position | Saved spawn at the fishing spot, with a usable camera after rejoin; the bot does not walk to the spot |
+| Focus | Roblox must stay visible and foreground; switching apps pauses input |
+
+Setup has been tested from a clean source checkout on Windows with Python 3.12. Portability removes hardcoded account and computer paths; it does not remove the screen-layout and in-game setup requirements.
+
 ## First setup
 
 1. Install **Python 3.12, 64-bit** from [python.org](https://www.python.org/downloads/windows/). Include the Python launcher and Tcl/Tk when installing.
