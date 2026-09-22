@@ -46,6 +46,7 @@ class PickupEvidence(unittest.TestCase):
 class RecoveryDecisions(unittest.TestCase):
     def test_local_repairs_are_bounded_and_manual_stop_is_final(self):
         policy=RecoveryPolicy()
+        self.assertEqual(policy.choose('no_minigame',0,True),'rejoin')
         self.assertEqual(policy.choose('pickup_other',0,False),'rejoin')
         self.assertEqual(policy.choose('pickup_other',0,True),'local')
         self.assertEqual(policy.choose('pickup_other',60,True),'rejoin')
