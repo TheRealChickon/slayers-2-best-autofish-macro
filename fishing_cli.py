@@ -84,6 +84,11 @@ def parser():
     tui=sub.add_parser('tui', help='Keyboard interface with live logs and settings')
     tui.add_argument('--page', choices=('run','items','log','setup'), default='run')
     sub.add_parser('shell', help='Interactive command prompt; does not start fishing')
+    from control_api import COMMANDS
+    api = sub.add_parser('api', help='Versioned JSON interface for local integrations')
+    api.add_argument('operation', choices=COMMANDS)
+    api.add_argument('--request-id', help='Caller correlation ID; not an idempotency key')
+    api.add_argument('--limit', type=int, default=50, help='Recent events, 1–200 (default 50)')
     return p
 
 
@@ -126,6 +131,11 @@ def stream_logs(args, journal, colors):
 
 def execute(args, colors=False):
     command = args.command or 'status'
+    if command == 'api':
+        from control_api import dispatch
+        response, code = dispatch(args.operation, args.request_id, args.limit)
+        print(json.dumps(response, ensure_ascii=True), flush=True)
+        return code
     if command in ('pause', 'stop', 'continue', 'resume'):
         action = {'pause': actions.pause, 'stop': actions.stop, 'continue': actions.resume, 'resume': actions.resume}[command]
         print(color(action(), 'green' if command in ('continue', 'resume') else 'gold', colors))
