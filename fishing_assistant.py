@@ -20,7 +20,15 @@ def move_pointer(x,y):
     left=min(r[0] for r in monitors);top=min(r[1] for r in monitors)
     width=max(r[2] for r in monitors)-left;height=max(r[3] for r in monitors)-top
     if not (left<=x<left+width and top<=y<top+height):raise RuntimeError(f'Input ({x}, {y}) is outside desktop ({left}, {top}, {width}, {height})')
-    USER.mouse_event(0xC001,round((x-left)*65535/(width-1)),round((y-top)*65535/(height-1)),0,0)
+    primary_width=USER.GetSystemMetrics(0);primary_height=USER.GetSystemMetrics(1)
+    if 0<=x<primary_width and 0<=y<primary_height:
+        # Use primary-screen absolute events on that screen, as Roblox's normal
+        # UI expects. Virtual-desktop events can leave its hit test behind the
+        # OS cursor on a multi-monitor desktop. Other monitors still use their
+        # full virtual-desktop coordinates and the position check below.
+        USER.mouse_event(0x8001,round(x*65535/(primary_width-1)),round(y*65535/(primary_height-1)),0,0)
+    else:
+        USER.mouse_event(0xC001,round((x-left)*65535/(width-1)),round((y-top)*65535/(height-1)),0,0)
     # Some display transitions briefly report stale virtual-desktop metrics.
     # Confirm physical position before any click can be issued.
     actual=win32gui.GetCursorPos()
@@ -66,11 +74,12 @@ class Input:
             USER.keybd_event(ord('T'),scan,0 if down else 2,0); self.t=down
     def release(self): self.hold(False); self.grab(False)
 
-    def aim(self,x,y):
+    def aim(self,x,y,after_menu=False):
         # Roblox can process its hotbar hover one frame behind the OS cursor.
         # Let the same small hover movement used by recovery settle before a
         # cast or rod click, rather than clicking the previous hotbar target.
-        for point,delay in (((x,y),.10),((x+1,y),.06),((x,y),.10)):
+        delays=(.30,.15,.30) if after_menu else (.10,.06,.10)
+        for point,delay in zip(((x,y),(x+1,y),(x,y)),delays):
             self.guard_press(True)
             if (RUN/'STOP').exists():raise RuntimeError('Stopped by stop file')
             move_pointer(*point)
@@ -137,7 +146,7 @@ def main():
     exit_template=cv2.imread(str(ROOT/'assets'/'exit.png'))
     inp=Input(hwnd);started=time.monotonic();now=started;stage='casting';since=now;lastseen=now;ledger=Ledger();last_gui_scan=0;last_tracking_cast=None;last_game_activity=time.time()
     prev=None;velocity=0.;target_velocity=0.;cycles=0;casts=0;missing_casts=0;track_frames=0;inside_frames=0;laststate=0;lastimage=0;last_rod_check=0
-    completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None
+    completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
     telemetry=open(RUN/f'tracking-{session}.csv','w',buffering=1);telemetry.write('time,cycle,ball,target,height,velocity,held,inside\n')
     def event(kind,**kw):log.write(json.dumps({'at':time.time(),'event':kind,**kw})+'\n');print(json.dumps({'event':kind,**kw}),flush=True)
@@ -232,12 +241,12 @@ def main():
                             # Recheck focus immediately before each injected button action.
                             if win32gui.GetForegroundWindow()!=hwnd:raise RuntimeError('Roblox lost focus; all inputs released')
                             inp.hold(True);time.sleep(.15);inp.hold(False)
-                            event('rod_equipped',method='visible hotbar');stage='equipping';since=time.monotonic();continue
+                            event('rod_equipped',method='visible hotbar');cast_needs_settle=True;stage='equipping';since=time.monotonic();continue
                     # Time the actual press, not entry into the casting state:
                     # OCR and rod detection can delay this iteration substantially.
                     if not inp.mouse:
                         inventory.begin_round()
-                        inp.aim(*screen.point(1650,800))
+                        inp.aim(*screen.point(1650,800),after_menu=cast_needs_settle);cast_needs_settle=False
                         inp.hold(True);cast_press_started=time.monotonic()
                     elif cast_press_started is not None and time.monotonic()-cast_press_started>=.16:
                         inp.hold(False);cast_press_started=None;casts+=1;event('cast',cast=casts);stage='waiting';since=time.monotonic()
