@@ -55,14 +55,16 @@ class FaultRecorder:
 
 class RecoveryPolicy:
     """One local repair per two minutes; persistent trouble escalates to rejoin."""
-    LOCAL = {'pickup_other','pickup_timeout','no_minigame','tracking_lost','window','alignment_drift'}
+    # Repeated casts with no minigame can mean the player fell into water.
+    # Re-equipping the rod there cannot restore the saved fishing position.
+    LOCAL = {'pickup_other','pickup_timeout','tracking_lost','window','alignment_drift'}
 
     def __init__(self): self.last_local = -float('inf')
 
     def choose(self, code, now, reference_ready):
         if code in ('manual_stop','session_limit'): return 'stop'
         if code == 'focus': return 'wait_focus'
-        if code in self.LOCAL and (reference_ready or code in ('window','no_minigame')) and now-self.last_local >= 120:
+        if code in self.LOCAL and (reference_ready or code == 'window') and now-self.last_local >= 120:
             self.last_local = now
             return 'local'
         return 'rejoin'
