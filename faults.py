@@ -15,7 +15,7 @@ class FishingFault(RuntimeError):
 def reason_code(reason):
     text = reason.lower()
     for word, code in (('stopped by', 'manual_stop'), ('session_limit', 'session_limit'),
-                       ('lost focus', 'focus'), ('moved or resized', 'window'), ('window changed', 'window'),
+                       ('lost focus', 'focus'), ('pointer is outside', 'focus'), ('moved or resized', 'window'), ('window changed', 'window'),
                        ('disconnect', 'disconnect'), ('presence', 'disconnect'), ('non-fishing', 'pickup_other'),
                        ('pickup prompt', 'pickup_timeout'), ('three casts', 'no_minigame'),
                        ('marker detection', 'tracking_lost'), ('alignment', 'alignment')):

@@ -104,6 +104,7 @@ def resume(mode=None):
             if current_mode!=mode:return 'Pause the current mode before switching modes.'
             if mode=='assist':return 'Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.'
             if mode=='spot':return 'Fish here is active. Equip your rod, position the mouse, then press F8.'
+            (RUN/'F8_PAUSE').unlink(missing_ok=True)
             focus_game()
             event('continue', 'Returned focus to Roblox.')
             return 'Roblox is focused. Fishing will resume automatically.'
@@ -111,6 +112,7 @@ def resume(mode=None):
         save_config({'mode':mode})
         (RUN / 'PAUSE').unlink(missing_ok=True)
         (RUN / 'STOP').unlink(missing_ok=True)
+        (RUN / 'F8_PAUSE').unlink(missing_ok=True)
         args = ([sys.executable,str(ROOT/'minigame_assist.py'),'--respect-stop','--mode',mode] if mode in ('assist','spot') else
                 [sys.executable, str(ROOT / 'recovery.py'), '--seconds', '0', '--rejoin',
                  '--focus', '--resume-counters', '--respect-stop'])
