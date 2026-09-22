@@ -11,14 +11,14 @@ import time
 import control_actions as actions
 from app_config import load_config, resolve_account, save_config
 from item_journal import Journal
-from live_feed import LiveFeed
+from live_feed import LiveFeed, event_tone, state_tone
 from metrics import read, write
 from status_view import duration, estimate, snapshot
 
 ESC = '\033['
 RESET = ESC + '0m'
 TONES = {'text': '234;236;226', 'dim': '128;142;137', 'gold': '232;186;64',
-         'green': '156;219;112', 'red': '226;146;135', 'selected': '245;224;165'}
+         'green': '156;219;112', 'red': '226;146;135', 'cyan': '111;193;207', 'selected': '245;224;165'}
 ANSI = re.compile(r'\x1b\[[0-9;]*m')
 
 
@@ -183,7 +183,7 @@ class Terminal:
             rows += [tint('› ' + label, 'selected') if self.selection == i else '  '+label
                      for i, label in enumerate(('Continue', 'Pause', 'Stop', 'Export log'))]
             rows += ['', tint('Recent', 'dim')]
-            rows += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+r['text'] for r in self.feed.rows[-max(0, available-len(rows)):]] if available > len(rows) else []
+            rows += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+tint(r['text'],event_tone(r)) for r in self.feed.rows[-max(0, available-len(rows)):]] if available > len(rows) else []
             return rows
         if self.page == 1:
             rows = self.item_rows()
@@ -200,7 +200,7 @@ class Terminal:
             self.scroll = max(0, len(rows)-visible) if self.follow else min(self.scroll, max(0, len(rows)-visible))
             result = [tint(self.categories[self.category] + ('   ● Following' if self.follow else '   History') + (f'   / {self.query}' if self.query else ''), 'gold'), '']
             result += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+
-                       tint(r['text'], 'green' if r['level']=='good' else 'gold' if r['level']=='warn' else 'text')
+                       tint(r['text'],event_tone(r))
                        for r in rows[self.scroll:self.scroll+visible]]
             return result
         settings = [('Username', self.config['account_username'] or 'Not set'), ('Rod slot', self.config['rod_slot']),
@@ -215,7 +215,7 @@ class Terminal:
             return ['Fishing  /  '+d.get('state', ''), '', 'Enlarge the terminal to at least 65 columns × 22 rows.', '', 'Q close   C continue   P pause   S stop']
         active = d['running'] and not d['stop_requested'] and d['state'] != 'Waiting for Roblox'
         spin = '●' if self.config['reduced_motion'] or not active else '◐◓◑◒'[int(time.monotonic()*5)%4]
-        state = tint(spin+' '+d['state'], 'green' if active else 'gold')
+        state = tint(spin+' '+d['state'],state_tone(d['state'],active))
         lines = ['', '  '+tint('FISHING', 'gold')+'     '+state+'     '+tint(d['presence'], 'dim'), '',
                  '  '+'     '.join(tint(f'{i+1} {name}', 'gold' if i==self.page else 'dim') for i,name in enumerate(self.pages)), '',
                  '  '+tint('─'*min(width-4, 110), 'dim'), '']
