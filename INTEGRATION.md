@@ -99,4 +99,6 @@ def fishing(command, request_id):
 A remotely hosted Discord bot will need an authenticated bridge to this function on the gaming PC. Keep that future transport separate from Fishing's game controller. Authorize the intended Discord owner/server and allowlisted operations there; do not expose arbitrary shell commands or the state directory. The PC must still be awake, unlocked, and able to foreground Roblox. None of that bridge is installed or enabled by this release.
 ## Fishing modes
 
-The saved `mode` is `full`, `assist`, or `spot`. Resume uses that selection. The `spot` mode waits for a local F8 selection, pauses when Roblox loses focus, and resumes without recovery or reconnect actions. `selected_point` in status is the session's normalized client coordinate, or null. External integrations should leave spot selection to the local player.
+The saved `mode` is `full`, `assist`, or `spot`. Resume uses that selection. The `spot` mode waits for the local player to equip a rod and press F8, pauses when Roblox loses focus, and resumes without recovery or reconnect actions. `spot_armed` in status indicates whether F8 has enabled repeated fishing for this session. It sends only left-button and T holds/releases; the player controls the pointer, camera, equipment and focus. No mouse coordinate is saved or restored.
+
+F8 toggles local pause/resume in Roblox; `spot_paused` reports that manual toggle independently of focus. Focus return never overrides an F8 pause. Starting the controller waits for F8 and sends no game input.
