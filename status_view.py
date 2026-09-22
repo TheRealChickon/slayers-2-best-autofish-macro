@@ -25,10 +25,11 @@ def snapshot(journal=None):
     elif starting:
         state = 'Starting'
     elif live:
-        state = ('Waiting for Roblox' if stage == 'paused_focus' else
-                 {'tracking': 'Fishing', 'pickup': 'Collecting', 'waiting': 'Waiting for a bite',
-                  'casting': 'Casting', 'inventory': 'Reading inventory'}.get(worker.get('stage'), 'Fishing')
-                 if stage == 'fishing' else stage.replace('_', ' ').title())
+        fishing_states = {'tracking':'Assisting minigame' if supervisor.get('mode')=='assist' else 'Fishing',
+                          'pickup':'Collecting','waiting':'Waiting for a bite','casting':'Casting',
+                          'inventory':'Reading inventory','assist_waiting':'Waiting for your cast'}
+        state = ('Waiting for Roblox' if stage=='paused_focus' else fishing_states.get(worker.get('stage'),'Fishing')
+                 if stage=='fishing' else stage.replace('_',' ').title())
     else:
         state = 'Paused' if paused else 'Stopped'
     rounds, seconds = totals.get('rounds', 0), totals.get('active_seconds', 0)
@@ -39,7 +40,7 @@ def snapshot(journal=None):
     unknown = sum(qty for name, qty in journal.counts.items()
                   if name == 'Unidentified item' or name.endswith('(partial)'))
     return {
-        'state': state, 'running': live, 'starting': starting, 'stop_requested': stop,
+        'state': state, 'mode': supervisor.get('mode','full'), 'running': live, 'starting': starting, 'stop_requested': stop,
         'paused': paused, 'started': totals.get('started'), 'updated': totals.get('updated'),
         'collections': totals.get('rewards', 0), 'items': sum(journal.counts.values()),
         'logged_collections': len(journal.items), 'unread_items': unknown,

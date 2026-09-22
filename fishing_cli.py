@@ -78,7 +78,9 @@ def parser():
     plan = sub.add_parser('plan', help='Estimate bait for a future session using the observed hook rate')
     plan.add_argument('--hours', type=float, required=True)
     sub.add_parser('pause', help='Release game input and retain counters')
-    sub.add_parser('continue', aliases=['resume'], help='Explicitly rejoin/resume the saved run')
+    resume=sub.add_parser('continue', aliases=['resume'], help='Explicitly start the selected mode')
+    resume.add_argument('--mode',choices=('full','assist'),help='Full farmer or minigame only')
+    sub.add_parser('assist',help='Start minigame only; you cast and collect manually')
     sub.add_parser('stop', help='Stop game input and retain counters')
     sub.add_parser('export', help='Save the complete item log and totals as CSV')
     tui=sub.add_parser('tui', help='Keyboard interface with live logs and settings')
@@ -136,8 +138,11 @@ def execute(args, colors=False):
         response, code = dispatch(args.operation, args.request_id, args.limit)
         print(json.dumps(response, ensure_ascii=True), flush=True)
         return code
-    if command in ('pause', 'stop', 'continue', 'resume'):
-        action = {'pause': actions.pause, 'stop': actions.stop, 'continue': actions.resume, 'resume': actions.resume}[command]
+    if command in ('pause', 'stop', 'continue', 'resume', 'assist'):
+        action = {'pause': actions.pause, 'stop': actions.stop,
+                  'continue':lambda:actions.resume(getattr(args,'mode',None)),
+                  'resume':lambda:actions.resume(getattr(args,'mode',None)),
+                  'assist':lambda:actions.resume('assist')}[command]
         print(color(action(), 'green' if command in ('continue', 'resume') else 'gold', colors))
         return 0
     if command == 'tui':
