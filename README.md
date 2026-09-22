@@ -72,6 +72,20 @@ If you move the installation folder, run `Setup.cmd` again to refresh the shortc
 
 ## Terminal app
 
+### Minigame only
+
+For semi-automatic fishing, select **Settings → Mode → Minigame only**, save, and Continue. In terminal Setup, select **Mode** and press Enter, then C. Pause first when switching from a running mode.
+
+Or start it directly:
+
+```powershell
+.\fishing.cmd assist
+```
+
+You choose the spot, position the camera, equip the rod, cast, and collect with T. The assistant only holds/releases the left mouse button while it recognizes the fishing minigame. It does not move the mouse or character, cast, equip, open inventory, collect, purchase, rejoin, or relaunch Roblox. It releases input when the UI disappears or focus is lost, and waits for Roblox to be foreground again. Q closes the view; P/S or F9/F12/Escape stop the controller as usual.
+
+Detected minigames add to the hook count. Manual pickups are not recorded in the item journal in this mode. Waiting for your next cast is normal and does not trigger recovery. Use `fishing.cmd continue --mode full` after pausing to return to the full farmer.
+
 Launch **Fishing CLI**, or run:
 
 ```powershell

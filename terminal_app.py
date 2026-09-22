@@ -132,7 +132,12 @@ class Terminal:
                 name = rows[self.selection][0]
                 self.switch(2); self.query = name; self.category = 1; self.follow = True
         elif self.page == 3:
-            key = ('Username', 'Rod slot', 'Auto rod', 'Motion', 'Bait left', 'Plan hours')[self.selection]
+            key = ('Username', 'Rod slot', 'Auto rod', 'Motion', 'Bait left', 'Plan hours', 'Mode')[self.selection]
+            if key == 'Mode':
+                if self.data.get('running') or self.data.get('starting'):
+                    self.toast('Pause before switching modes.',False);return
+                save_config({'mode':'assist' if self.config.get('mode','full')=='full' else 'full'})
+                self.config=load_config();return
             if key in ('Auto rod', 'Motion'):
                 option = 'auto_rod' if key == 'Auto rod' else 'reduced_motion'
                 save_config({option: not self.config[option]}); self.config = load_config()
@@ -173,7 +178,7 @@ class Terminal:
                 self.follow = key == 'END'
                 self.scroll = 0 if key == 'HOME' else limit if key == 'END' else max(0, min(limit, self.scroll+step))
             else:
-                count = 4 if self.page == 0 else 6 if self.page == 3 else len(self.item_rows())
+                count = 4 if self.page == 0 else 7 if self.page == 3 else len(self.item_rows())
                 self.selection = 0 if key == 'HOME' else max(0, count-1) if key == 'END' else max(0, min(count-1, self.selection+step))
 
     def body(self, available):
@@ -210,7 +215,8 @@ class Terminal:
             return result
         settings = [('Username', self.config['account_username'] or 'Not set'), ('Rod slot', self.config['rod_slot']),
                     ('Auto equip rod', 'On' if self.config['auto_rod'] else 'Off'), ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On'),
-                    ('Bait left', d['bait_remaining_estimate'] if d['bait_remaining_estimate'] is not None else 'Unknown'), ('Plan hours', f'{self.hours:g}')]
+                    ('Bait left', d['bait_remaining_estimate'] if d['bait_remaining_estimate'] is not None else 'Unknown'), ('Plan hours', f'{self.hours:g}'),
+                    ('Mode','Minigame only' if self.config.get('mode')=='assist' else 'Full farmer')]
         return [tint(f"{'›' if i == self.selection else ' '}  {label:<23} {value}", 'selected' if i==self.selection else 'text') for i,(label,value) in enumerate(settings)]
 
     def render(self, width, height):
@@ -221,7 +227,8 @@ class Terminal:
         active = d['running'] and not d['stop_requested'] and d['state'] != 'Waiting for Roblox'
         spin = '●' if self.config['reduced_motion'] or not active else '◐◓◑◒'[int(time.monotonic()*5)%4]
         state = tint(spin+' '+d['state'],state_tone(d['state'],active))
-        lines = ['', '  '+tint('FISHING', 'gold')+'     '+state+'     '+tint(d['presence'], 'dim'), '',
+        mode = '  /  Minigame only' if d.get('mode')=='assist' else ''
+        lines = ['', '  '+tint('FISHING'+mode, 'gold')+'     '+state+'     '+tint(d['presence'], 'dim'), '',
                  '  '+'     '.join(tint(f'{i+1} {name}', 'gold' if i==self.page else 'dim') for i,name in enumerate(self.pages)), '',
                  '  '+tint('─'*min(width-4, 110), 'dim'), '']
         effect_rows = self.effects.rows(width-4, time.monotonic(), self.config['reduced_motion'])
