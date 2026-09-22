@@ -13,7 +13,7 @@ from tkinter import ttk
 import psutil
 import win32api
 import win32gui
-from metrics import RUN, write
+from metrics import RUN, write, read
 from fishing_assistant import ROOT, find_window, rectangle
 from item_journal import Journal
 from status_view import snapshot, duration
@@ -22,15 +22,15 @@ from app_config import load_config, save_config, resolve_account
 from live_feed import LiveFeed
 from ui_motion import SoftButton, tween, mix
 
-BG = '#0b1013'
-SIDE = '#181919'
-PANEL = '#242727'
-LINE = '#434640'
-TEXT = '#f3f4f2'
-MUTED = '#979d9a'
-GOLD = '#e8ba40'
-GREEN = '#9cdb70'
-RED = '#e29287'
+BG = '#18191c'
+SIDE = '#18191c'
+PANEL = '#24262b'
+LINE = '#34373e'
+TEXT = '#e9eaec'
+MUTED = '#a0a4ad'
+GOLD = '#ccd4df'
+GREEN = '#90bca4'
+RED = '#df9b9b'
 TITLE = 'Fishing'
 FONT = 'Segoe UI'
 FISH = {'OuwFish', 'OuwFwesh', 'Sea Horse', 'Golden Fish', 'Zebra Fish', 'Clown Fish'}
@@ -45,155 +45,82 @@ def rounded(canvas, x1, y1, x2, y2, radius=8, **kwargs):
 
 class Window:
     def __init__(self):
-        self.root = tk.Tk()
-        self.root.title(TITLE)
-        self.root.configure(bg=BG)
-        self.root.minsize(940, 650)
-        self.place_window()
-        self.jobs = queue.Queue()
-        self.busy = False
-        self.journal = Journal()
-        self.feed = LiveFeed()
-        self.feed_version = -1
-        self.reduced_motion = load_config()['reduced_motion']
-        self.display_counts = {}
-        self.toast_until = 0
-        self.page_generation = 0
-        self.last_version = -1
-        self.messages = []
-        self.page = 'Inventory'
-        self.category = 'All'
-        self.export_pending = False
-        self.export_warned = False
-        self.data = {}
-        self.art = {name: tk.PhotoImage(file=str(ROOT/'assets'/'items'/(file+'.png'))) for name,file in ART.items()}
-        style = ttk.Style(self.root)
-        style.theme_use('clam')
-        style.configure('Treeview', background=BG, fieldbackground=BG, foreground=TEXT,
-                        rowheight=32, borderwidth=0, font=(FONT,10))
-        style.layout('Treeview', [('Treeview.treearea', {'sticky':'nswe'})])
-        style.configure('Treeview.Heading', background=PANEL, foreground=MUTED,
-                        font=(FONT,10,'bold'), relief='flat')
-        style.map('Treeview', background=[('selected','#484330')], foreground=[('selected',TEXT)])
-        style.configure('Vertical.TScrollbar', background=LINE, troughcolor=BG,
-                        bordercolor=BG, arrowcolor=MUTED)
-        self.build_sidebar()
-        self.main = tk.Frame(self.root, bg=BG)
-        self.main.pack(side='left', fill='both', expand=True, padx=30, pady=24)
-        top = tk.Frame(self.main,bg=BG)
-        top.pack(fill='x',pady=(0,5))
-        self.heading = tk.Label(top,text='Inventory',bg=BG,fg=TEXT,font=(FONT,23,'bold'))
-        # Navigation already names the page; no duplicate heading.
-        self.pulse = tk.Canvas(top,width=12,height=12,bg=BG,highlightthickness=0)
-        self.pulse.pack(side='left',padx=(0,8))
-        self.pulse_dot = self.pulse.create_oval(2,2,10,10,fill=MUTED,outline='')
-        self.badge = tk.Label(top,text='Stopped',bg=BG,fg=MUTED,font=(FONT,11,'bold'),padx=0,pady=7)
-        self.badge.pack(side='left')
-        self.subtitle = tk.Label(self.main,text='Collected this run',bg=BG,fg=MUTED,font=(FONT,10),anchor='w')
-        self.button(top,'>_ CLI',self.open_cli,MUTED,BG,padx=9,pady=5).pack(side='right')
-        self.toolbar = tk.Frame(self.main,bg=BG)
-        self.toolbar.pack(fill='x',pady=(12,18))
-        self.chips = {}
+        self.root=tk.Tk();self.root.title(TITLE);self.root.configure(bg=BG)
+        self.root.minsize(900,650);self.place_window()
+        self.jobs=queue.Queue();self.busy=False;self.journal=Journal();self.feed=LiveFeed()
+        self.feed_version=-1;self.reduced_motion=load_config()['reduced_motion']
+        self.toast_until=0;self.page_generation=0;self.last_version=-1;self.messages=[]
+        self.page='Inventory';self.category='All';self.export_pending=False;self.export_warned=False;self.data={}
+        self.art={name:tk.PhotoImage(file=str(ROOT/'assets'/'items'/(file+'.png'))) for name,file in ART.items()}
+        self.art_version=None
+        style=ttk.Style(self.root);style.theme_use('clam')
+        style.configure('Treeview',background=BG,fieldbackground=BG,foreground=TEXT,rowheight=36,borderwidth=0,font=(FONT,10))
+        style.layout('Treeview',[('Treeview.treearea',{'sticky':'nswe'})])
+        style.configure('Treeview.Heading',background=PANEL,foreground=MUTED,font=(FONT,10),relief='flat')
+        style.map('Treeview',background=[('selected',LINE)],foreground=[('selected',TEXT)])
+        style.configure('Vertical.TScrollbar',background=LINE,troughcolor=BG,bordercolor=BG,arrowcolor=MUTED,arrowsize=10)
+        self.main=tk.Frame(self.root,bg=BG);self.main.pack(fill='both',expand=True,padx=30,pady=22)
+        top=tk.Frame(self.main,bg=BG);top.pack(fill='x')
+        tk.Label(top,text='Fishing',bg=BG,fg=TEXT,font=(FONT,22,'bold')).pack(side='left')
+        self.button(top,'>_ CLI',self.open_cli,MUTED,BG,padx=12,pady=5).pack(side='right',padx=(18,0))
+        self.badge=tk.Label(top,text='Stopped',bg=BG,fg=MUTED,font=(FONT,10));self.badge.pack(side='right')
+        self.pulse=tk.Canvas(top,width=16,height=14,bg=BG,highlightthickness=0);self.pulse.pack(side='right',padx=6)
+        self.pulse_dot=self.pulse.create_oval(4,3,11,10,fill=MUTED,outline='')
+        stats=tk.Frame(self.main,bg=BG);stats.pack(fill='x',pady=(24,22));self.values={}
+        for key,label in [('items','items collected'),('hooks','Hooks'),('time','Fishing time'),('joins','Rejoins'),('launches','Game launches')]:
+            cell=tk.Frame(stats,bg=BG);cell.pack(side='left',expand=key!='items',fill='x',padx=(0,34) if key=='items' else 0)
+            var=tk.StringVar(value='—');self.values[key]=var
+            tk.Label(cell,textvariable=var,bg=BG,fg=TEXT,font=(FONT,29 if key=='items' else 17,'bold' if key=='items' else 'normal'),anchor='w').pack(fill='x')
+            tk.Label(cell,text=label,bg=BG,fg=MUTED,font=(FONT,10),anchor='w').pack(fill='x',pady=(1,0))
+        nav=tk.Frame(self.main,bg=BG,height=45);nav.pack(fill='x');nav.pack_propagate(False);self.nav={}
+        for name,label in [('Inventory','Inventory'),('Item log','History'),('Recovery','Activity'),('Settings','Settings')]:
+            button=self.button(nav,label,lambda n=name:self.select_page(n),MUTED,BG,padx=2,pady=10)
+            button.pack(side='left',padx=(0,30));self.nav[name]=button
+        tk.Frame(self.main,bg=LINE,height=1).pack(fill='x')
+        self.nav_line=tk.Frame(nav,bg=TEXT,height=2);self.nav_line.place(x=0,y=40,width=70)
+        self.toolbar=tk.Frame(self.main,bg=BG);self.chips={}
         for name in ('All','Fish','Materials','Unread'):
-            b = self.button(self.toolbar,name,lambda n=name:self.select_category(n),TEXT,PANEL,padx=12,pady=5)
-            b.pack(side='left',padx=(0,7))
-            self.chips[name] = b
-        search_box = tk.Frame(self.toolbar,bg=PANEL)
-        search_box.pack(side='right')
-        tk.Label(search_box,text='⌕',bg=PANEL,fg=MUTED,font=(FONT,17)).pack(side='left',padx=(8,3))
-        self.filter = tk.StringVar()
-        self.filter.trace_add('write',lambda *_:self.render_items())
-        self.search = tk.Entry(search_box,textvariable=self.filter,width=17,bg=PANEL,fg=TEXT,
-                               insertbackground=GOLD,relief='flat',font=(FONT,11))
+            button=self.button(self.toolbar,name,lambda n=name:self.select_category(n),MUTED,BG,padx=9,pady=6)
+            button.pack(side='left',padx=(0,7));self.chips[name]=button
+        search_box=tk.Frame(self.toolbar,bg=PANEL);search_box.pack(side='right')
+        tk.Label(search_box,text='⌕',bg=PANEL,fg=MUTED,font=(FONT,16)).pack(side='left',padx=(9,4))
+        self.filter=tk.StringVar();self.filter.trace_add('write',lambda *_:self.render_items())
+        self.search=tk.Entry(search_box,textvariable=self.filter,width=18,bg=PANEL,fg=TEXT,insertbackground=TEXT,relief='flat',font=(FONT,10),highlightthickness=0)
         self.search.pack(side='left',ipady=6,padx=(0,10))
-        self.search.configure(highlightthickness=0)
-        self.deck = tk.Frame(self.main,bg=BG)
-        self.deck.pack(fill='both',expand=True)
-        self.inventory = tk.Frame(self.deck,bg=BG)
-        self.grid_canvas = tk.Canvas(self.inventory,bg=BG,highlightthickness=0,height=400)
-        grid_scroll = ttk.Scrollbar(self.inventory,orient='vertical',command=self.grid_canvas.yview)
-        self.grid_canvas.configure(yscrollcommand=grid_scroll.set)
-        grid_scroll.pack(side='right',fill='y')
-        self.grid_canvas.pack(fill='both',expand=True)
+        self.deck=tk.Frame(self.main,bg=BG);self.deck.pack(fill='both',expand=True,pady=(18,0))
+        self.inventory=tk.Frame(self.deck,bg=BG)
+        self.grid_canvas=tk.Canvas(self.inventory,bg=BG,highlightthickness=0,height=330)
+        scroll=ttk.Scrollbar(self.inventory,orient='vertical',command=self.grid_canvas.yview)
+        self.grid_canvas.configure(yscrollcommand=scroll.set);scroll.pack(side='right',fill='y');self.grid_canvas.pack(fill='both',expand=True)
         self.grid_canvas.bind('<Configure>',lambda e:self.draw_inventory())
         self.grid_canvas.bind('<MouseWheel>',lambda e:self.grid_canvas.yview_scroll(-int(e.delta/120),'units'))
-        self.loot_page = tk.Frame(self.deck,bg=BG)
-        self.log = self.tree(self.loot_page,[('time','Time',90),('item','Item',190),('quantity','Qty',45),('raw','Original screen text',225)])
-        self.log.tag_configure('special',foreground=GOLD)
-        self.activity_page = tk.Frame(self.deck,bg=BG)
-        self.activity = tk.Text(self.activity_page,bg=BG,fg=MUTED,font=(FONT,10),wrap='word',
-                                relief='flat',padx=4,pady=6,state='disabled')
-        activity_scroll = ttk.Scrollbar(self.activity_page,command=self.activity.yview)
-        self.activity.configure(yscrollcommand=activity_scroll.set)
-        activity_scroll.pack(side='right',fill='y')
-        self.activity.pack(fill='both',expand=True)
-        for tag,col in [('normal',MUTED),('good',GREEN),('warn',GOLD),('error',RED)]:
-            self.activity.tag_configure(tag,foreground=col)
-        self.note = tk.Label(self.main,bg=BG,fg=MUTED,font=(FONT,9),anchor='w')
-        self.settings_page = tk.Frame(self.deck,bg=BG)
-        self.build_settings()
-        # The bottom strip stays compact and borderless.
-        bait_row = tk.Frame(self.main,bg=BG)
-        bait_row.pack(fill='x',pady=(14,4))
-        self.bait = tk.Label(bait_row,bg=BG,fg=TEXT,font=(FONT,11,'bold'))
-        self.bait.pack(side='left')
-        self.rate = tk.Label(bait_row,bg=BG,fg=MUTED,font=(FONT,10))
-        self.rate.pack(side='right')
-        bait_row.pack_configure(pady=(12,14))
-        controls = tk.Frame(self.main,bg=BG)
-        controls.pack(fill='x')
-        self.continue_button = self.button(controls,'Continue',self.resume,'#182611','#91d258',padx=31)
-        self.continue_button.pack(side='left',padx=(0,9))
-        self.pause_button = self.button(controls,'Pause',self.pause,TEXT,PANEL)
-        self.pause_button.pack(side='left',padx=(0,9))
-        self.stop_button = self.button(controls,'Stop',self.stop,RED,'#332522')
-        self.stop_button.pack(side='left')
-        self.button(controls,'Export log',self.open_csv,MUTED,BG,padx=8).pack(side='right')
-        self.status = tk.Label(self.main,text='Reading saved run…',bg=BG,fg=MUTED,font=(FONT,9),anchor='w',wraplength=740,justify='left')
-        self.status.pack(fill='x',pady=(12,0))
+        self.loot_page=tk.Frame(self.deck,bg=BG)
+        self.log=self.tree(self.loot_page,[('time','Time',90),('item','Item',210),('quantity','Qty',45),('raw','Screen text',300)])
+        self.log.tag_configure('special',foreground=TEXT)
+        self.activity_page=tk.Frame(self.deck,bg=BG)
+        self.activity=tk.Text(self.activity_page,bg=BG,fg=MUTED,font=('Cascadia Mono',10),wrap='word',relief='flat',padx=3,pady=6,spacing3=9,state='disabled',highlightthickness=0)
+        scroll=ttk.Scrollbar(self.activity_page,command=self.activity.yview);self.activity.configure(yscrollcommand=scroll.set)
+        scroll.pack(side='right',fill='y');self.activity.pack(fill='both',expand=True)
+        for tag,color in [('normal',MUTED),('good',GREEN),('warn',GOLD),('error',RED)]:self.activity.tag_configure(tag,foreground=color)
+        self.settings_page=tk.Frame(self.deck,bg=BG);self.build_settings()
+        self.note=tk.Label(self.main,bg=BG,fg=MUTED,font=(FONT,9),anchor='w')
+        footer=tk.Frame(self.main,bg=BG);footer.pack(fill='x',pady=(18,12))
+        self.bait=tk.Label(footer,bg=BG,fg=MUTED,font=(FONT,10));self.bait.pack(side='left')
+        self.rate=tk.Label(footer,bg=BG,fg=MUTED,font=(FONT,10));self.rate.pack(side='right')
+        self.controls=tk.Frame(self.main,bg=BG);self.controls.pack(fill='x')
+        self.continue_button=self.button(self.controls,'Continue',self.resume,BG,TEXT,padx=28)
+        self.pause_button=self.button(self.controls,'Pause',self.pause,BG,TEXT,padx=34)
+        self.stop_button=self.button(self.controls,'Stop',self.stop,MUTED,BG,padx=18);self.stop_button.pack(side='left',padx=(10,0))
+        self.button(self.controls,'Export CSV',self.open_csv,MUTED,BG,padx=5).pack(side='right')
+        self.presence=tk.Label(self.controls,bg=BG,fg=MUTED,font=(FONT,9));self.presence.pack(side='right',padx=22)
+        self.status=tk.Label(self.main,bg=BG,fg=MUTED,font=(FONT,9),anchor='w',wraplength=900,justify='left');self.status.pack(fill='x',pady=(8,0))
         self.select_page('Inventory')
-        for key in ('<F9>','<F12>','<Escape>'):
-            self.root.bind(key,lambda event:self.stop())
+        for key in ('<F9>','<F12>','<Escape>'):self.root.bind(key,lambda event:self.stop())
         self.root.update_idletasks()
         try:
-            value=ctypes.c_int(1)
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(win32gui.GetParent(self.root.winfo_id()),20,ctypes.byref(value),4)
-        except Exception:
-            pass
-        self.root.after(50,self.refresh)
-        self.root.after(150,lambda:self.select_page(self.page))
-        self.animate_status()
-
-    def build_sidebar(self):
-        side=tk.Frame(self.root,bg=SIDE,width=190)
-        side.pack(side='left',fill='y')
-        side.pack_propagate(False)
-        tk.Label(side,text='Fishing',bg=SIDE,fg=TEXT,font=(FONT,19,'bold'),anchor='w').pack(fill='x',padx=25,pady=(31,1))
-        tk.Frame(side,bg=SIDE,height=26).pack(fill='x')
-        self.nav={}
-        for name,label in [('Inventory','◇   Inventory'),('Item log','≡   Item log'),('Recovery','↻   Live log'),('Settings','⚙   Settings')]:
-            b=self.button(side,label,lambda n=name:self.select_page(n),MUTED,SIDE,padx=25,pady=12)
-            b.configure(anchor='w',font=(FONT,12))
-            b.pack(fill='x',pady=2)
-            self.nav[name]=b
-        self.nav_line=tk.Frame(side,bg=GOLD,width=2,height=28)
-        self.nav_line.place(x=0,y=107)
-        footer=tk.Frame(side,bg=SIDE)
-        footer.pack(side='bottom',fill='x',padx=25,pady=24)
-        self.presence=tk.Label(footer,bg=SIDE,fg=MUTED,font=(FONT,9),wraplength=168,justify='left',anchor='w')
-        self.presence.pack(fill='x',pady=(0,13))
-        tk.Label(footer,text='F9  Stop',bg=SIDE,fg=MUTED,font=(FONT,9),anchor='w').pack(fill='x')
-        stats=tk.Frame(side,bg=SIDE)
-        stats.pack(side='bottom',fill='x',padx=25,pady=(30,20))
-
-        self.values={}
-        for key,label in [('items','Items'),('hooks','Hooks'),('joins','Rejoins'),('launches','Game launches'),('time','Fishing time')]:
-            row=tk.Frame(stats,bg=SIDE)
-            row.pack(fill='x',pady=4)
-            tk.Label(row,text=label,bg=SIDE,fg=MUTED,font=(FONT,10)).pack(side='left')
-            var=tk.StringVar(value='—')
-            self.values[key]=var
-            tk.Label(row,textvariable=var,bg=SIDE,fg=GOLD if key=='items' else TEXT,font=(FONT,11,'bold')).pack(side='right')
+            value=ctypes.c_int(1);ctypes.windll.dwmapi.DwmSetWindowAttribute(win32gui.GetParent(self.root.winfo_id()),20,ctypes.byref(value),4)
+        except Exception:pass
+        self.root.after(50,self.refresh);self.root.after(150,lambda:self.select_page(self.page));self.animate_status()
 
     def place_window(self):
         monitors=[win32api.GetMonitorInfo(m[0])['Work'] for m in win32api.EnumDisplayMonitors()]
@@ -207,14 +134,14 @@ class Window:
 
     def button(self,parent,label,callback,fg=TEXT,bg=PANEL,padx=22,pady=9):
         return SoftButton(parent,text=label,command=callback,bg=bg,fg=fg,activebackground=LINE,
-                         activeforeground=TEXT,disabledforeground='#727773',font=(FONT,10,'bold'),
+                         activeforeground=fg,disabledforeground='#727773',font=(FONT,10,'bold'),
                          padx=padx,pady=pady,cursor='hand2',takefocus=True,motion=lambda:not self.reduced_motion)
 
     @staticmethod
     def tree(parent,columns):
         tree=ttk.Treeview(parent,columns=[x[0] for x in columns],show='headings',height=8)
         for key,label,width in columns:
-            tree.heading(key,text=label)
+            tree.heading(key,text=label,anchor='e' if key=='quantity' else 'w')
             tree.column(key,width=width,minwidth=40,anchor='e' if key=='quantity' else 'w',stretch=key in ('item','raw'))
         scroll=ttk.Scrollbar(parent,orient='vertical',command=tree.yview)
         tree.configure(yscrollcommand=scroll.set)
@@ -224,7 +151,7 @@ class Window:
     def select_page(self,page):
         self.page=page
         for name,button in self.nav.items():
-            button.configure(fg=GOLD if name==page else MUTED,bg='#383224' if name==page else SIDE)
+            button.configure(fg=TEXT if name==page else MUTED,bg=BG)
         for frame in (self.inventory,self.loot_page,self.activity_page,self.settings_page):
             frame.place_forget()
         frame={'Inventory':self.inventory,'Item log':self.loot_page,'Recovery':self.activity_page,'Settings':self.settings_page}[page]
@@ -232,15 +159,11 @@ class Window:
         self.page_generation+=1;generation=self.page_generation
         tween(frame,lambda t:frame.place_configure(x=round(14*(1-t))) if generation==self.page_generation else None,enabled=not self.reduced_motion)
         self.root.update_idletasks()
-        current=self.nav_line.winfo_y();target=self.nav[page].winfo_y()+12
-        tween(self.nav_line,lambda t:self.nav_line.place_configure(y=round(current+(target-current)*t)),enabled=not self.reduced_motion)
-        self.heading.configure(text=page)
-        self.subtitle.configure(text={'Inventory':'Collected this run · Select an item to see its drops',
-            'Item log':'Every confirmed collection · Original screen text retained',
-            'Recovery':'','Settings':''}[page])
+        current=self.nav_line.winfo_x();target=self.nav[page].winfo_x();width=self.nav[page].winfo_width()
+        tween(self.nav_line,lambda t:self.nav_line.place_configure(x=round(current+(target-current)*t),y=40,width=width),enabled=not self.reduced_motion)
         self.toolbar.pack_forget()
         if page in ('Inventory','Item log'):
-            self.toolbar.pack(fill='x',pady=(12,18),before=self.deck)
+            self.toolbar.pack(fill='x',pady=(17,0),before=self.deck)
         self.render_items()
 
     def select_category(self,name):
@@ -258,8 +181,8 @@ class Window:
         if not hasattr(self,'grid_canvas'):
             return
         c=self.grid_canvas;c.delete('all')
-        width=max(650,c.winfo_width());cols=max(4,width//139)
-        tilew=(width-12)/cols;tileh=149
+        width=max(650,c.winfo_width());cols=max(4,width//145)
+        tilew=(width-12)/cols;tileh=145
         rows=[(name,qty) for name,qty in self.journal.counts.most_common() if self.matches(name)]
         # Unknown OCR variants remain individual entries in the log, but share a tile.
         if self.category in ('All','Unread') and not self.filter.get():
@@ -270,7 +193,7 @@ class Window:
             x=(i%cols)*tilew;y=(i//cols)*tileh;cx=x+tilew/2;left=cx-49
             rare=name in ('Golden Fish','Clown Fish','Zebra Fish')
             border=GOLD if rare else '#737769' if name!='Unread names' else LINE
-            rounded(c,left,y+4,left+98,y+103,7,fill='#282d2d',outline='',width=0)
+            rounded(c,left,y+4,left+98,y+103,7,fill=PANEL,outline='',width=0)
             if name in self.art:
                 c.create_image(cx,y+54,image=self.art[name])
             elif name in FISH:
@@ -278,9 +201,9 @@ class Window:
             else:
                 c.create_text(cx,y+59,text='?',fill=MUTED,font=(FONT,30,'bold'))
             # Cover the complete old count badge in the recorded thumbnail.
-            rounded(c,left+37,y+12,left+95,y+45,12,fill='#f3f5f1',outline='')
-            c.create_text(left+66,y+28,text=f'x{qty}',fill='#24302b',font=(FONT,10,'bold'))
-            c.create_text(cx,y+116,text=name,fill=TEXT,font=(FONT,10,'bold'),width=tilew-10,anchor='n')
+            rounded(c,left+36,y+12,left+96,y+46,6,fill=PANEL,outline='')
+            c.create_text(left+66,y+29,text=f'×{qty}',fill=TEXT,font=(FONT,10,'bold'))
+            c.create_text(cx,y+116,text=name,fill=TEXT,font=(FONT,10),width=tilew-10,anchor='n')
             hit=c.create_rectangle(x,y,x+tilew-5,y+tileh-3,fill='',outline='')
             # Bind every primitive in the tile so art and labels are clickable.
             tag=f'item_{i}'
@@ -290,6 +213,17 @@ class Window:
             c.tag_bind(tag,'<Leave>',lambda e:c.configure(cursor=''))
         if not rows:c.create_text(width/2,80,text='No matching items',fill=MUTED,font=(FONT,13))
         c.configure(scrollregion=(0,0,width,max(1,(len(rows)+cols-1)//cols)*tileh))
+
+    def load_inventory_art(self):
+        path=RUN/'inventory-catalog.json'
+        if not path.exists():return
+        version=path.stat().st_mtime_ns
+        if version==self.art_version:return
+        for entry in read('inventory-catalog.json').get('items',[]):
+            file=RUN/'inventory-art'/entry['file']
+            if file.exists():self.art[entry['name']]=tk.PhotoImage(file=str(file))
+        self.art_version=version
+        self.draw_inventory()
 
     @staticmethod
     def draw_fish(c,x,y,name):
@@ -315,7 +249,7 @@ class Window:
             return
         for name,b in self.chips.items():
             count=sum(q for n,q in self.journal.counts.items() if name=='All' or self.category_for(n)==name)
-            b.configure(text=f'{name} ({count})',bg=TEXT if self.category==name else PANEL,fg='#151b1b' if self.category==name else TEXT)
+            b.configure(text=f'{name} ({count})',bg=PANEL if self.category==name else BG,fg=TEXT if self.category==name else MUTED)
         self.draw_inventory()
         at_bottom=self.log.yview()[1]>.98 if self.log.get_children() else True
         position=self.log.yview()[0] if self.log.get_children() else 0
@@ -343,28 +277,28 @@ class Window:
     def animate_status(self):
         live=self.data.get('running') and self.data.get('state') not in ('Waiting for Roblox','Stopping','Pausing')
         if self.reduced_motion or not live:color=GREEN if live else MUTED
-        else:color=mix('#385038',GREEN,(math.sin(time.monotonic()*3)+1)/2)
+        else:color=mix('#596e64',GREEN,(math.sin(time.monotonic()*3)+1)/2)
         self.pulse.itemconfigure(self.pulse_dot,fill=color)
         self.root.after(70,self.animate_status)
 
     def build_settings(self):
         config=load_config();self.setting_vars={}
         for key,label in [('account_username','Roblox username'),('rod_slot','Rod slot')]:
-            row=tk.Frame(self.settings_page,bg=BG);row.pack(fill='x',pady=(10,18))
+            row=tk.Frame(self.settings_page,bg=BG);row.pack(fill='x',pady=(6,12))
             tk.Label(row,text=label,bg=BG,fg=MUTED,font=(FONT,10),width=18,anchor='w').pack(side='left')
             var=tk.StringVar(value=str(config[key]));self.setting_vars[key]=var
             tk.Entry(row,textvariable=var,bg=PANEL,fg=TEXT,insertbackground=GOLD,relief='flat',highlightthickness=0,font=(FONT,11),width=25).pack(side='left',ipady=7)
-        for key,label in [('auto_rod','Auto equip rod'),('reduced_motion','Reduce motion')]:
+        for key,label in [('auto_rod','Auto equip rod'),('inventory_check','Identify unknown drops'),('reduced_motion','Reduce motion')]:
             var=tk.BooleanVar(value=config[key]);self.setting_vars[key]=var
-            tk.Checkbutton(self.settings_page,text=label,variable=var,bg=BG,fg=TEXT,selectcolor=PANEL,activebackground=BG,activeforeground=TEXT,highlightthickness=0,borderwidth=0,font=(FONT,11)).pack(anchor='w',pady=10)
-        self.button(self.settings_page,'Save',self.save_settings,GREEN,PANEL).pack(anchor='w',pady=24)
+            tk.Checkbutton(self.settings_page,text=label,variable=var,bg=BG,fg=TEXT,selectcolor=PANEL,activebackground=BG,activeforeground=TEXT,highlightthickness=0,borderwidth=0,font=(FONT,11)).pack(anchor='w',pady=7)
+        self.button(self.settings_page,'Save',self.save_settings,TEXT,PANEL).pack(anchor='w',pady=(16,8))
         self.button(self.settings_page,'Setup guide',lambda:os.startfile(str(ROOT/'README.md')),MUTED,BG,padx=0).pack(anchor='w')
 
     def save_settings(self):
         values={key:var.get() for key,var in self.setting_vars.items()}
         def save():
             account=resolve_account(values['account_username'])
-            save_config(dict(account,rod_slot=int(values['rod_slot']),auto_rod=values['auto_rod'],reduced_motion=values['reduced_motion']))
+            save_config(dict(account,rod_slot=int(values['rod_slot']),auto_rod=values['auto_rod'],reduced_motion=values['reduced_motion'],inventory_check=values['inventory_check']))
             return 'Settings saved'
         self.run_action(save)
 
@@ -404,6 +338,7 @@ class Window:
         try:
             while not self.jobs.empty():
                 ok,message=self.jobs.get();self.busy=False;self.message(message,'good' if ok else 'error')
+            self.load_inventory_art()
             self.data=snapshot(self.journal);d=self.data
             state=d['state'];live=d['running'] or d['starting'];stopping=d['stop_requested']
             self.badge.configure(text=state,fg=GREEN if live and not stopping and state!='Waiting for Roblox' else GOLD if d['paused'] else MUTED)
@@ -426,6 +361,8 @@ class Window:
             self.rate.configure(text=f'~{d["hooks_per_hour"]:.0f} / hour'+(f'  ·  ~{hours:.1f} hours left' if hours is not None else ''))
             self.presence.configure(text=d['presence'] if d['presence_fresh'] else '')
             self.note.configure(text=f'{d["logged_collections"]:,} collections  ·  {d["unread_items"]} items with partial/unread names')
+            self.pause_button.pack_forget();self.continue_button.pack_forget()
+            (self.pause_button if live and not stopping else self.continue_button).pack(side='left',before=self.stop_button)
             self.pause_button.configure(state='normal' if live and not stopping and not self.busy else 'disabled')
             self.continue_button.configure(state='disabled' if self.busy or (live and stopping) else 'normal')
             self.stop_button.configure(state='normal' if live or d['paused'] or self.busy else 'disabled')
@@ -439,7 +376,10 @@ def main():
     RUN.mkdir(parents=True,exist_ok=True)
     if actions.alive('controls-pid.json'):
         h=win32gui.FindWindow(None,TITLE)
-        if h:win32gui.ShowWindow(h,9);win32gui.SetForegroundWindow(h)
+        if h:
+            win32gui.ShowWindow(h,9)
+            try:win32gui.SetForegroundWindow(h)
+            except win32gui.error:pass
         return
     write('controls-pid.json',{'pid':os.getpid(),'created':psutil.Process().create_time()})
     window=Window();window.root.mainloop()

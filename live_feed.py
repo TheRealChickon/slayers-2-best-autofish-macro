@@ -13,6 +13,9 @@ def describe(row):
         pct = row.get('percent')
         return f'Hook {row.get("cycle", "")} · {str(pct)+"%" if pct is not None else "finished"}'
     if kind == 'reward_observed':return 'Collected ' + row.get('text', 'item')
+    if kind == 'inventory_resolved':return 'Identified ' + row.get('item','item') + ' from inventory'
+    if kind == 'inventory_recovered':return 'Confirmed ' + row.get('item','item') + ' from inventory · banner missed'
+    if kind == 'inventory_checked':return f'Inventory checked · {row.get("items",0)} item types'
     if kind == 'pickup_hold':return f'Collecting · attempt {row.get("attempt", 1)}'
     if kind == 'screen':return 'Recovery · ' + row.get('kind', 'checking').replace('_',' ')
     return row.get('message') or row.get('reason') or kind.replace('_', ' ').capitalize()
@@ -49,8 +52,8 @@ class LiveFeed:
                     if row.get('at', 0) < (started or 0):continue
                     kind = row.get('event', '')
                     if kind in ('tracking_reacquired',):continue
-                    group = 'catches' if kind == 'reward_observed' else 'recovery' if path.name=='recovery.jsonl' else 'fishing'
-                    level = 'warn' if any(term in kind for term in ('error','stopped','no_minigame','wrong_interaction','retry','exhausted')) else 'good' if kind in ('reward_observed','equipped_rod','rod_equipped') else 'normal'
+                    group = 'catches' if kind in ('reward_observed','inventory_resolved','inventory_recovered') else 'recovery' if path.name=='recovery.jsonl' else 'fishing'
+                    level = 'warn' if any(term in kind for term in ('error','stopped','no_minigame','wrong_interaction','retry','exhausted','unreadable','ambiguous')) else 'good' if kind in ('reward_observed','equipped_rod','rod_equipped','inventory_resolved','inventory_recovered') else 'normal'
                     self.rows.append({'at':row.get('at',0),'kind':kind,'group':group,'level':level,
                         'text':re.sub(r'[\x00-\x1f\x7f]', ' ', describe(row))})
                     changed = True

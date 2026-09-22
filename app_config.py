@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 CONFIG = ROOT / 'config.local.json'
 DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
-            'rod_slot': 5, 'auto_rod': True, 'reduced_motion': False,
+            'rod_slot': 5, 'auto_rod': True, 'reduced_motion': False, 'inventory_check': True,
             'place_id': 16205713724}
 
 
