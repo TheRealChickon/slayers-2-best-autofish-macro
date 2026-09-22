@@ -3,6 +3,23 @@ import cv2
 import numpy as np
 
 
+def outlined_targets(roi):
+    """Paired narrow side borders distinguish the UI from green scenery."""
+    b,g,_=cv2.split(roi.astype(np.float32));signal=g-b
+    left=signal[:,30:35].max(1)-np.maximum(np.median(signal[:,24:29],axis=1),np.median(signal[:,38:43],axis=1))
+    right=signal[:,105:111].max(1)-np.maximum(np.median(signal[:,114:119],axis=1),np.median(signal[:,97:102],axis=1))
+    raw=np.uint8((left>12)&(right>12))
+    raw[:31]=0;raw[549:]=0
+    joined=cv2.morphologyEx(raw[:,None],cv2.MORPH_CLOSE,np.ones((11,1),np.uint8))
+    targets=[]
+    for contour in cv2.findContours(joined,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[0]:
+        _,y,_,h=cv2.boundingRect(contour)
+        coverage=float(raw[y:y+h].mean())
+        if 18<=h<=174 and coverage>=.65:
+            targets.append((1+coverage,y+h/2,h+6))
+    return targets
+
+
 def detect(roi):
     if roi is None or roi.shape[:2] != (600, 140):
         return None
@@ -12,27 +29,15 @@ def detect(roi):
     # and rectangular outline survive, so red is deliberately not a veto.
     tint = np.uint8((g - b > 18) & (g > 48)) * 255
     tint = cv2.morphologyEx(tint, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-    targets = []
+    targets = outlined_targets(roi)
     hue=cv2.inRange(cv2.cvtColor(roi,cv2.COLOR_BGR2HSV),np.array([20,65,48]),np.array([100,255,255]))
-    for mask in (hue,tint):
+    for mask in (() if targets else (hue,tint)):
         for contour in cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]:
             x, y, w, h = cv2.boundingRect(contour)
             area = cv2.contourArea(contour)
-            if 54 <= w <= 95 and 22 <= h <= 130 and 12 <= x <= 50 and abs(x+w/2-70) < 15 and area > 450:
+            if 54 <= w <= 95 and 22 <= h <= 180 and 12 <= x <= 50 and abs(x+w/2-70) < 15 and area > 450:
                 candidate=(area/(w*h), y+h/2, h)
                 if not any(abs(candidate[1]-old[1])<5 for old in targets):targets.append(candidate)
-    if not targets:
-        # Brown/green scenery can connect the rectangle to the whole image.
-        # Isolate the known target width, then retain horizontal runs: scattered
-        # background pixels disappear without requiring an isolated contour.
-        bounded=tint.copy()
-        bounded[:,:31]=0;bounded[:,109:]=0
-        bounded=cv2.morphologyEx(bounded,cv2.MORPH_OPEN,np.ones((1,51),np.uint8))
-        for contour in cv2.findContours(bounded,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[0]:
-            x,y,w,h=cv2.boundingRect(contour)
-            area=cv2.contourArea(contour)
-            if 65<=w<=78 and 22<=h<=130 and y>=28 and y+h<=552 and area/(w*h)>.70:
-                targets.append((area/(w*h),y+h/2,h))
     if not targets:
         # A connected patch of scenery can swallow the color component. Look
         # for a closed rectangle with the same UI geometry, then require green
@@ -41,7 +46,7 @@ def detect(roi):
         edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
         for contour in cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]:
             x, y, w, h = cv2.boundingRect(contour)
-            if not (54 <= w <= 95 and 22 <= h <= 130 and 12 <= x <= 50 and abs(x+w/2-70) < 15):
+            if not (54 <= w <= 95 and 22 <= h <= 180 and 12 <= x <= 50 and abs(x+w/2-70) < 15):
                 continue
             top = tint[max(0,y-1):y+4, x+5:x+w-5]
             bottom = tint[y+h-4:min(600,y+h+1), x+5:x+w-5]
