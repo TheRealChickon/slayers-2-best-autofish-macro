@@ -1,4 +1,5 @@
 """Incremental, bounded activity stream shared by both frontends."""
+import hashlib
 import json
 import re
 import time
@@ -83,7 +84,8 @@ class LiveFeed:
                     if kind in ('tracking_reacquired','screen'):continue
                     group = 'catches' if kind in ('reward_observed','inventory_resolved','inventory_recovered') else 'recovery' if path.name=='recovery.jsonl' else 'fishing'
                     level = 'warn' if any(term in kind for term in ('error','stopped','no_minigame','wrong_interaction','retry','exhausted','unreadable','ambiguous')) else 'good' if kind in ('reward_observed','equipped_rod','rod_equipped','inventory_resolved','inventory_recovered') else 'normal'
-                    self.rows.append({'at':row.get('at',0),'kind':kind,'group':group,'level':level,
+                    event_id = hashlib.sha256(json.dumps([started, path.name, position, row], sort_keys=True).encode()).hexdigest()[:24]
+                    self.rows.append({'id':event_id,'at':row.get('at',0),'kind':kind,'group':group,'level':level,
                         'text':re.sub(r'[\x00-\x1f\x7f]', ' ', describe(row))})
                     changed = True
                 self.offsets[path] = stream.tell()
