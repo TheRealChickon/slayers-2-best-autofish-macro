@@ -91,6 +91,8 @@ def resume(mode=None):
     mode = mode or load_config().get('mode','full')
     if mode not in ('full','assist'):raise ValueError('Mode must be full or assist')
     with guard():
+        if alive('calibration-pid.json'):
+            return 'Reference setup is running. Stop cancels it.'
         live, pending = alive(), starting()
         if live or pending:
             if (RUN / 'PAUSE').exists() or (RUN / 'STOP').exists():

@@ -52,7 +52,7 @@ class AssistControls(unittest.TestCase):
 
     def test_mode_change_never_starts_parallel_controller_or_focuses(self):
         metrics.write('supervisor.json',{'mode':'full'})
-        with patch.object(control_actions,'alive',return_value=True),patch.object(control_actions,'starting',return_value=False),patch.object(control_actions,'focus_game') as focus,patch.object(control_actions.subprocess,'Popen') as spawn:
+        with patch.object(control_actions,'alive',side_effect=lambda name='supervisor-pid.json':name=='supervisor-pid.json'),patch.object(control_actions,'starting',return_value=False),patch.object(control_actions,'focus_game') as focus,patch.object(control_actions.subprocess,'Popen') as spawn:
             self.assertIn('Pause',control_actions.resume('assist'))
             focus.assert_not_called();spawn.assert_not_called()
 

@@ -9,6 +9,7 @@ from app_config import load_config
 from rod_detector import locate_rod
 from screen_space import ScreenSpace
 from inventory_watch import InventoryDriver, InventoryWatcher
+import landmarks
 from pickup_policy import classify as classify_pickup, PickupGate
 from faults import FishingFault, FaultRecorder, reason_code
 
@@ -149,6 +150,7 @@ def main():
     inp=Input(hwnd);started=time.monotonic();now=started;stage='casting';since=now;lastseen=now;ledger=Ledger();last_gui_scan=0;last_tracking_cast=None;last_game_activity=time.time()
     prev=None;velocity=0.;target_velocity=0.;cycles=0;casts=0;missing_casts=0;track_frames=0;inside_frames=0;laststate=0;lastimage=0;last_rod_check=0
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
+    last_reference_check=0;reference_matcher=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
     diagnostics=FaultRecorder(RUN,session);pickup_gate=PickupGate();last_pickup_evidence={};failure_code='';failure_details={}
     telemetry=open(RUN/f'tracking-{session}.csv','w',buffering=1);telemetry.write('time,cycle,ball,target,height,velocity,held,inside\n')
@@ -309,6 +311,15 @@ def main():
                         else:stage='pickup_wait';since=time.monotonic()
                 elif stage=='cooldown':
                     if now-since>1.0:
+                        if now-last_reference_check>180 and landmarks.profile():
+                            last_reference_check=now
+                            reference_matcher=reference_matcher or landmarks.load_matcher(landmarks.profile())
+                            measured=reference_matcher.measure(screen.capture(sct))
+                            if measured and measured['rms']>10:
+                                second=reference_matcher.measure(screen.capture(sct))
+                                if second and second['rms']>10:
+                                    screenshot('drift')
+                                    raise FishingFault('alignment_drift','Fishing reference drifted; local alignment required',error=round(second['rms'],2))
                         recovered=inventory.check_pending()
                         if recovered:
                             pickup_confirmed+=1;last_reward=f"{recovered['item']} X{recovered['quantity']} (inventory)"

@@ -55,7 +55,7 @@ class FaultRecorder:
 
 class RecoveryPolicy:
     """One local repair per two minutes; persistent trouble escalates to rejoin."""
-    LOCAL = {'pickup_other','pickup_timeout','no_minigame','tracking_lost','window'}
+    LOCAL = {'pickup_other','pickup_timeout','no_minigame','tracking_lost','window','alignment_drift'}
 
     def __init__(self): self.last_local = -float('inf')
 

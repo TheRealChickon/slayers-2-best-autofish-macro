@@ -3,6 +3,7 @@ import math
 import time
 from metrics import RUN, read
 from item_journal import Journal
+from performance import recent
 import control_actions as actions
 
 
@@ -52,6 +53,7 @@ def snapshot(journal=None):
         'presence': 'Not configured' if presence.get('disabled') else presence.get('state', 'Unknown') if fresh else
                     'Not polled while stopped' if not live else 'Checking',
         'presence_fresh': bool(fresh),
+        'recent': recent(journal), 'alignment': read('alignment.json'),
     }
 
 

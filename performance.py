@@ -26,7 +26,7 @@ class PerformanceRecorder:
         current = phase(stage,worker)
         if self.last is not None:
             # Never turn time between supervisor instances into fishing time.
-            self.phases[self.previous] += max(0,min(2,now-self.last))
+            self.phases[self.previous] += max(0,min(10,now-self.last))
         self.last, self.previous = now,current
         if now < self.next_write: return
         self.next_write = now+5
