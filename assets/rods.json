@@ -1,0 +1,10 @@
+[
+  {"name":"common","priority":1,"variants":[
+    {"image":"rod-icon.png","selected":true,"anchor":[30,19]},
+    {"image":"rod-unequipped.png","selected":false,"anchor":[30,19]}
+  ]},
+  {"name":"rare","priority":2,"variants":[
+    {"image":"rare-rod-equipped.png","selected":true,"anchor":[35.5,33.5]},
+    {"image":"rare-rod-unequipped.png","selected":false,"anchor":[35.5,33.5]}
+  ]}
+]

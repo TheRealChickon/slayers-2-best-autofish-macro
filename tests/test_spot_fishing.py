@@ -52,11 +52,32 @@ class TintedVision(unittest.TestCase):
         im=np.full((600,140,3),(50,75,80),np.uint8)
         cv2.rectangle(im,(35,30),(104,545),(24,32,36),-1)
         cv2.rectangle(im,(31,415),(108,467),(20,75,85),-1)
+        cv2.rectangle(im,(31,415),(108,467),(10,170,180),2)
         cv2.rectangle(im,(55,512),(85,542),(220,220,220),-1)
         result=detect(im)
         self.assertIsNotNone(result)
         self.assertAlmostEqual(result['target'],441.5,delta=2)
         self.assertAlmostEqual(result['ball'],527.5,delta=2)
+
+    def test_target_outline_wins_over_green_lily_pad(self):
+        im=np.full((600,140,3),(145,75,20),np.uint8)
+        cv2.rectangle(im,(35,30),(104,545),(85,42,18),-1)
+        cv2.ellipse(im,(67,190),(90,39),0,0,360,(40,125,35),-1)
+        cv2.rectangle(im,(31,102),(108,154),(100,120,70),-1)
+        cv2.rectangle(im,(31,102),(108,154),(60,190,170),2)
+        cv2.rectangle(im,(55,220),(85,250),(230,235,230),-1)
+        result=detect(im)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result['target'],128,delta=3)
+        self.assertAlmostEqual(result['ball'],235.5,delta=2)
+
+    def test_larger_control_bar_is_not_limited_to_common_rod_height(self):
+        im=self.fixture((20,20,170),(30,115,180))
+        cv2.rectangle(im,(31,160),(108,310),(30,115,180),-1)
+        cv2.rectangle(im,(31,160),(108,310),(15,210,190),2)
+        result=detect(im)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result['height'],153,delta=5)
 
     def test_dim_tinted_marker_uses_local_contrast(self):
         im=self.fixture((70,30,10),(45,115,60))

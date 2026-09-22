@@ -100,7 +100,11 @@ Move or reposition while paused, then return to continue. Restarting the control
 
 The detector combines color and target-outline checks so transparent green/yellow bars remain recognizable over red scenery. It still requires the fishing UI and white marker; obscured or ambiguous markers release input instead of guessing. A bounded set of missed-marker crops is retained locally for diagnosis.
 
-Connected brown/green scenery is separated from the target by its known width; dim tinted markers also use local contrast. These cases have offline regression coverage. Offline checks do not establish a guaranteed live catch rate.
+The detector follows the target's paired side borders, keeping green scenery such as lily pads from becoming a false target. Dim tinted markers also use local contrast. Control-bar height is measured each frame, including larger bars. These cases have offline regression coverage.
+
+Common and rare rods are recognized automatically in different hotbar positions, including their equipped and unequipped appearances. Selection uses the circular outline's contrast, so a scene tint or night lighting does not depend on a white-color threshold. Full farmer keeps an already selected rod; when neither is selected it prefers a confidently recognized rare rod. Fish here still waits for you to equip it. Additional rod references can be added to `assets/rods.json` with their image, selected state, center anchor and priority; unfamiliar icons are not guessed.
+
+All modes use the same adaptive reeling controller and aim for 60 checks per second. It estimates marker speed, brakes before overshoot, learns upward/downward response, and rejects impossible one-frame marker jumps. Focus return discards old velocity. Offline tests include captured target motion replayed with several simulated rod response rates; these results are not a guaranteed live catch rate.
 
 ### Minigame only
 
