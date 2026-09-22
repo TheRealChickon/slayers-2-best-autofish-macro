@@ -18,6 +18,8 @@ def query():
 def recovery_needed(presence,absent_since,supervisor,worker,now):
     return (presence.get('ok') and presence.get('type')!=2 and absent_since is not None
             and now-absent_since>=45 and supervisor.get('running') and supervisor.get('stage')=='fishing'
+            and not supervisor.get('manual_paused') and not worker.get('manual_paused')
+            and worker.get('stage') not in ('paused_manual','paused_focus')
             and not (worker.get('stage')=='inventory' and now-worker.get('updated',0)<20)
             and now-worker.get('last_game_activity',now)>75)
 
@@ -29,7 +31,7 @@ def watch(done):
             state=query();now=time.time()
             absent_since=None if not state.get('ok') or state.get('type')==2 else absent_since or now
             state['absent_since']=absent_since
-            if recovery_needed(state,absent_since,read('supervisor.json'),read('status.json'),now):
+            if not (RUN/'F8_PAUSE').exists() and recovery_needed(state,absent_since,read('supervisor.json'),read('status.json'),now):
                 (RUN/'RECOVER').write_text('Roblox presence remained outside game and fishing activity stopped')
                 state['recovery_requested']=True
             write('presence.json',state)

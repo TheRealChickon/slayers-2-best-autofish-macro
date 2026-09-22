@@ -21,6 +21,7 @@ def snapshot(journal=None):
     live = actions.alive()
     starting = actions.starting() and not live
     paused, stop = (RUN / 'PAUSE').exists(), (RUN / 'STOP').exists()
+    f8_paused = live and supervisor.get('mode','full')=='full' and (RUN/'F8_PAUSE').exists()
     stage = supervisor.get('stage', 'starting')
     if (live or starting) and stop:
         state = 'Pausing' if paused else 'Stopping'
@@ -37,7 +38,7 @@ def snapshot(journal=None):
                           'spot_blocked':'Waiting for fishing scene','spot_attention':'Check the spot, then press F8',
                           'waiting_marker':'Waiting for a clear marker','pickup_wait':'Checking pickup',
                           'cast_press':'Casting','equipping':'Equipping rod','equip_wait':'Equipping rod','cooldown':'Next cast'}
-        state = ('Waiting for Roblox' if stage=='paused_focus' else fishing_states.get(worker.get('stage'),'Fishing')
+        state = ('Paused — F8 to resume' if f8_paused or stage=='paused_manual' else 'Waiting for Roblox' if stage=='paused_focus' else fishing_states.get(worker.get('stage'),'Fishing')
                  if stage=='fishing' else stage.replace('_',' ').title())
     else:
         state = 'Paused' if paused else 'Stopped'
@@ -70,7 +71,7 @@ def snapshot(journal=None):
         'recent': recent(journal), 'alignment': read('alignment.json'),
         'spot_armed':worker.get('spot_armed',False),
         'spot_paused':worker.get('spot_paused',False),
-        'manual_paused':worker.get('manual_paused',False),
+        'manual_paused':f8_paused or worker.get('manual_paused',False),
     }
 
 
