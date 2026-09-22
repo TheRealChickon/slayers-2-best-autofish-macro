@@ -96,6 +96,14 @@ The Run tab shows current state, items, hooks, time, rejoins, game launch attemp
 
 Recovery actions are cyan, retries and warnings amber, failures red, and catches green. The Run tab's recent events use the same colors as Live log. Rapid screen/OCR observations stay in the raw logs rather than filling the live feed; individual menu actions and Join attempts remain visible.
 
+Fresh **Golden Fish, Clown Fish, and Zebra Fish** catches get a brief swimming fish and sparkle effect above the content. It clears after 4.8 seconds without moving the log or blocking controls. Opening a saved run does not replay its catches. **Motion → Reduced** uses a still banner. These are the app's highlighted catches, not a claim about official rarity tiers.
+
+<details><summary>A little terminal secret</summary>
+
+Type **blub** in the terminal dashboard, outside a text field, with less than two seconds between letters. A catfish visits for a few seconds. It is decorative and adds nothing to the item journal.
+
+</details>
+
 Scriptable commands remain available:
 
 ```powershell
@@ -109,6 +117,18 @@ Scriptable commands remain available:
 .\fishing.cmd stop
 .\fishing.cmd export
 ```
+
+## Future bot integration
+
+A local, versioned JSON interface is ready for another program to call:
+
+```powershell
+.\fishing.cmd api status
+.\fishing.cmd api events --limit 20
+.\fishing.cmd api pause --request-id example-123
+```
+
+It supports status, items, recent events, pause, resume, and stop. See [INTEGRATION.md](INTEGRATION.md) for the response contract and a subprocess example. This release does not connect to Discord or run a network listener; a remotely hosted bot will need an authenticated bridge to this Windows PC later.
 
 ## Items and bait
 
@@ -174,7 +194,7 @@ To remove the app, stop it first, close both views, delete its desktop shortcuts
 .\.venv\Scripts\python.exe health_check.py
 ```
 
-The current suite has 58 checks, including real 1080p inventory crops, input guards, duplicate prevention, inventory reconciliation, scan throttling, restart checkpoints, scan-budget cleanup, interruption while the cursor settles, recovery-log counting and colors, and animated menu targets, Join transitions, retry pacing, held-input cleanup, slower hover updates after loading, and primary/secondary monitor input mapping. A live 1080p test rejoined, equipped the rod, completed four hooks without a detected failed round, and confirmed four catches; one missed banner was recovered from inventory differences.
+The current suite has 66 checks, including real 1080p inventory crops, input guards, duplicate prevention, inventory reconciliation, scan throttling, restart checkpoints, scan-budget cleanup, interruption while the cursor settles, recovery-log counting and colors, animated menu targets, Join transitions, retry pacing, held-input cleanup, slower hover updates after loading, primary/secondary monitor input mapping, catch-effect deduplication, reduced motion, responsive controls, and the JSON integration boundary. A live 1080p test rejoined, equipped the rod, completed four hooks without a detected failed round, and confirmed four catches; one missed banner was recovered from inventory differences.
 
 Tests use isolated temporary state and mocked controls; they do not drive Roblox. Live game validation is still needed after changing vision or input logic. Python 3.12 on Windows x64 is the tested runtime.
 
