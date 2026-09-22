@@ -21,7 +21,7 @@ A Windows fishing assistant for the Project Slayers 2 / Ouwland fishing minigame
 | Operating system | Windows x64; not macOS, Linux, mobile, or Roblox console |
 | Game | This game's Ouwland fishing minigame; not arbitrary Roblox games |
 | Display | Automatic scaling for a 16:9 Roblox client area, with normal game UI scale. 1920 × 1080 and 2560 × 1440 tested live; see resolution notes below |
-| Position | Saved spawn at the fishing spot, with a usable camera after rejoin; the bot does not walk to the spot |
+| Position | Full farmer uses a saved spawn; Fish here repeats at a point you choose with F8. No travel across the map |
 | Focus | Roblox must stay visible and foreground; switching apps pauses input |
 
 Setup has been tested from a clean source checkout on Windows with Python 3.12. Portability removes hardcoded account and computer paths; it does not remove the screen-layout and in-game setup requirements.
@@ -47,7 +47,7 @@ If your PowerShell policy blocks scripts, use `Setup.cmd`. The launcher sets a p
 The account is configurable. Each account must own a fishing rod, have it in a visible hotbar slot, and have access to the private-server Join menu.
 
 - Use **one Roblox client**, with a **16:9 client area** and the game's normal UI scale. Fullscreen at **1920 × 1080** or **2560 × 1440** is the simplest setup. The bot measures the client area, scales screenshots for recognition, and maps clicks back to your window automatically.
-- Set the saved spawn at your fishing spot in Ouwland, facing the water. A rejoin must restore the same usable position and camera arrangement. The assistant does not navigate a character across the map or find a fishing spot.
+- Set the saved spawn at your fishing spot in Ouwland, facing the water. A rejoin must restore the same general spot. Optional fishing references can correct small differences; the assistant does not navigate across the map or find a fishing spot.
 - Keep the game visible and foreground. Opening another app releases input and waits; Continue returns focus to Roblox and recovery resumes. It cannot fish through a minimized window, lock screen, or sleeping PC. A second monitor is useful for viewing status.
 - The rod is located in the visible hotbar and selected only when its selection ring is absent. If it cannot be recognized during a rejoin, the configured slot is used. Moving the rod to another visible slot is supported; an unequipped rod in the backpack must first be placed in the hotbar.
 - Bait is optional. Equip it in-game if desired. There is no purchasing automation.
@@ -70,7 +70,29 @@ Opening or closing either view leaves the controller unchanged. **Pause** releas
 
 If you move the installation folder, run `Setup.cmd` again to refresh the shortcut paths.
 
-## Terminal app
+## Fishing modes
+
+| Mode | You control | Assistant handles |
+| --- | --- | --- |
+| **Full farmer** (`full`) | Saved spawn and initial setup | Rod, casts, minigame, collection, inventory checks, local repairs and reconnects |
+| **Minigame only** (`assist`) | Spot, rod, casts and pickups | Minigame mouse hold/release |
+| **Fish here** (`spot`) | Spot and camera; point at water and press F8 | Repeated casts, minigame and collection; visible rod auto-equip when enabled |
+
+### Fish here
+
+Choose **Settings → Mode → Fish here**, save and Continue. Or run:
+
+```powershell
+.\fishing.cmd spot
+```
+
+Bring Roblox forward, position your character and camera, hover the mouse over the water you want to cast at, and press **F8**. It checks the scene, then repeats fishing there and holds T only for a recognized Collect prompt. Bait is optional. Empty rounds continue normally. Confirmed reward banners are added to the item journal; this mode does not open inventory to identify unknown drops.
+
+**Alt-Tab pauses input immediately.** Return to Roblox with the pointer inside its window to continue automatically. It rechecks any current minigame or pickup before casting again. It never moves the character or camera, rejoins, or relaunches the game. A disconnect/menu waits for you to fix it. Three unsuccessful cast or pickup attempts wait for you to check the spot and press F8 again.
+
+Press F8 between rounds to choose a different point. Move your character/camera while paused, then select the new point. The point lasts for this controller session and adapts to a resized 16:9 client; restarting the controller or Roblox requires another F8 selection so an old coordinate cannot silently start fishing in a new location. F9/F12/Escape and the app's Pause/Stop remain available.
+
+The detector combines color and target-outline checks so transparent green/yellow bars remain recognizable over red scenery. It still requires the fishing UI and white marker; obscured or ambiguous markers release input instead of guessing. A bounded set of missed-marker crops is retained locally for diagnosis.
 
 ### Minigame only
 
@@ -85,6 +107,8 @@ Or start it directly:
 You choose the spot, position the camera, equip the rod, cast, and collect with T. The assistant only holds/releases the left mouse button while it recognizes the fishing minigame. It does not move the mouse or character, cast, equip, open inventory, collect, purchase, rejoin, or relaunch Roblox. It releases input when the UI disappears or focus is lost, and waits for Roblox to be foreground again. Q closes the view; P/S or F9/F12/Escape stop the controller as usual.
 
 Detected minigames add to the hook count. Manual pickups are not recorded in the item journal in this mode. Waiting for your next cast is normal and does not trigger recovery. Use `fishing.cmd continue --mode full` after pausing to return to the full farmer.
+
+## Terminal app
 
 Launch **Fishing CLI**, or run:
 
@@ -160,6 +184,32 @@ Set **Bait left** in terminal Setup after buying/equipping bait. This updates th
 
 ## Recovery and focus
 
+Pickup recognition covers a wider area and requires repeated Collect evidence before holding T. A quantity/NEW label must be next to an item name to count as a reward. Empty rounds continue without blind T holds. Wall Climb, vendor prompts, and conflicting prompts release T and request recovery.
+
+Known pickup, missed-cast, tracking, window and landmark faults first get one eligible local repair per two minutes. Persistent faults escalate to the menu rejoin, then client relaunch if recovery fails. A lost-focus pause waits for Roblox. Local repairs preserve the run and do not count as a server rejoin. Unknown failures retain a diagnostic report and use the existing rejoin path.
+
+### Saved fishing reference
+
+This is optional and separate from resolution scaling. At a working fishing spot, pause the farmer, finish any open minigame, then use **Settings → Save fishing view** or **CLI Setup → Save fishing reference**. Setup brings Roblox forward and makes small camera probes. Enable **Correct small position drift** / **Position correction** to include short movement probes. Stop/F9/F12/Escape cancels setup. Setup does not resume the farmer.
+
+```powershell
+.\fishing.cmd reference save --position
+.\fishing.cmd reference status
+.\fishing.cmd reference disable
+```
+
+The default reference uses two crate surfaces, with the building across the water as optional extra evidence. Both crate surfaces must match; distant scenery can be excluded when fog or shadows obscure it. For a different arrangement, `reference save --boxes '[[x,y,w,h],...]'` accepts at least two boxes in a **1280 × 720** reference image: put two separate textured surfaces near the character first, then optional distant static scenery. Avoid the avatar, HUD, water, moving wheels and foliage. Reference images and calibration belong to the configured account and place and stay in local data. Without a matching profile, normal recovery remains available.
+
+After recovery, a readable compass restores the saved heading using repeated observations and camera-only steps of at most 60 mouse pixels. This coarse pass is limited to 35 seconds and 1,100 total pixels; it never moves the character. The assistant then checks the crate reference and corrects the camera before position. Position corrections require the separate movement calibration. Each fine step is checked against the scene, with a separate 25-second budget, at most 160 camera pixels and 0.12 seconds of movement input per attempt. It tolerates small residual error because game movement is not pixel-exact. A correction that makes the measured view worse is reversed only while landmarks remain visible. Obscured scenery, excessive drift, a bad calibration or a new stop prevents further movement. If the initial view cannot be matched, fine alignment is skipped and the normal saved-spawn farmer continues; pickup and missed-cast safeguards still apply. Losing the reference after corrective input requests recovery, and repeated correction failure stops for adjustment. This handles nearby drift; it cannot prove a 3D position or recover arbitrary falls. Recapture or disable an unsuitable reference while paused.
+
+A lightweight drift check runs between rounds at most once every three minutes. It does not open inventory or interrupt minigame tracking. Changing camera zoom or mouse sensitivity can require saving a new reference.
+
+### Recent pace and diagnostics
+
+The window and CLI show recent hooks/minute and items/minute over up to 15 minutes of sampled wall time, including recovery. `status --json` also includes phase seconds for bites, minigames, collection, inventory, recovery and focus waits. Rates marked saved are stale. Existing lifetime totals and the active-time bait planner remain available.
+
+`fishing.cmd diagnostics` shows the last eight failure reports. Each includes a reason code, decision details and up to four local context frames; the diagnostic ring uses at most 32 JPEGs. Raw event logs retain the full history. Diagnostics do not add frame capture to the minigame tracking loop.
+
 The supervisor handles visible disconnect dialogs and a stalled fishing loop. Vendor purchase dialogs are cancelled before recovery. Recovery uses **M → Back to main menu → Play → Ouwland → held private Join**, then equips the rod. If necessary it opens `roblox://placeId=16205713724` or restarts the selected Roblox game process. Retry delays limit repeated restart attempts. Input is released on loss of focus, window changes, or stop requests.
 
 Menu actions wait for repeated observations of a stable target. Each action has its own retry delay, so a completed menu transition does not inherit a previous button's wait. The private Join button is checked again after the cursor settles; holding ends when its panel changes, with a 4.5-second limit. A short quiet period after Join lets the game transition before another attempt; repeated rejected joins back off. Recovery still requires three continuous seconds of the loaded world before equipping the rod and starting fishing.
@@ -208,7 +258,7 @@ To remove the app, stop it first, close both views, delete its desktop shortcuts
 .\.venv\Scripts\python.exe health_check.py
 ```
 
-The current suite has 66 checks, including real 1080p inventory crops, input guards, duplicate prevention, inventory reconciliation, scan throttling, restart checkpoints, scan-budget cleanup, interruption while the cursor settles, recovery-log counting and colors, animated menu targets, Join transitions, retry pacing, held-input cleanup, slower hover updates after loading, primary/secondary monitor input mapping, catch-effect deduplication, reduced motion, responsive controls, and the JSON integration boundary. A live 1080p test rejoined, equipped the rod, completed four hooks without a detected failed round, and confirmed four catches; one missed banner was recovered from inventory differences.
+The suite covers real 1080p inventory crops, input guards, duplicate prevention, inventory reconciliation and throttling, restart checkpoints, scan-budget cleanup, recovery-log counting and colors, menu and Join transitions, held-input cleanup, multi-monitor input, catch-effect deduplication, reduced motion, responsive controls and the JSON integration boundary. Additional checks cover minigame-only activation/release, spatial pickup evidence, local-repair limits, bounded diagnostic storage, landmark matching, correction limits and recent pace calculations. A prior live 1080p run confirmed four catches, including one recovered from inventory differences. The new minigame-only mode was checked with two manual casts; camera and small lateral corrections were also exercised live.
 
 Tests use isolated temporary state and mocked controls; they do not drive Roblox. Live game validation is still needed after changing vision or input logic. Python 3.12 on Windows x64 is the tested runtime.
 

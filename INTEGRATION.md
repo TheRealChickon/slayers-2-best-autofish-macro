@@ -27,6 +27,8 @@ Read commands never start, focus, or stop Roblox. Controls call the same seriali
 
 The interface uses `config.local.json` and `FISHING_DATA_DIR` exactly like the app. Keep the installation directory and intended Windows user/session fixed in a future adapter.
 
+`resume` uses the mode saved in Settings. In `assist` mode it starts only minigame tracking and never focuses, casts, collects or rejoins. Status includes `mode` (`full` or `assist`), `recent` (nullable recent rates and phase seconds) and `alignment` (the last local alignment result). Mode changes and reference calibration remain explicit local setup operations; there is no automatic remote calibration.
+
 ## Response contract
 
 Valid API invocations produce one JSON object on stdout, with no ANSI escapes or progress text:
@@ -95,3 +97,6 @@ def fishing(command, request_id):
 ```
 
 A remotely hosted Discord bot will need an authenticated bridge to this function on the gaming PC. Keep that future transport separate from Fishing's game controller. Authorize the intended Discord owner/server and allowlisted operations there; do not expose arbitrary shell commands or the state directory. The PC must still be awake, unlocked, and able to foreground Roblox. None of that bridge is installed or enabled by this release.
+## Fishing modes
+
+The saved `mode` is `full`, `assist`, or `spot`. Resume uses that selection. The `spot` mode waits for a local F8 selection, pauses when Roblox loses focus, and resumes without recovery or reconnect actions. `selected_point` in status is the session's normalized client coordinate, or null. External integrations should leave spot selection to the local player.

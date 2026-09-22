@@ -9,7 +9,7 @@ import threading
 import time
 
 import control_actions as actions
-from app_config import load_config, resolve_account, save_config
+from app_config import load_config, resolve_account, save_config, MODES
 from cli_effects import CatchEffects
 from item_journal import Journal
 from live_feed import LiveFeed, event_tone, state_tone
@@ -61,6 +61,8 @@ class Terminal:
         self.last_lines = []
         self.changed_at = time.monotonic()
         self.effects = CatchEffects()
+        import landmark_controls
+        self.reference_position=landmark_controls.status()['position_enabled']
 
     def refresh(self):
         while not self.jobs.empty():
@@ -132,11 +134,18 @@ class Terminal:
                 name = rows[self.selection][0]
                 self.switch(2); self.query = name; self.category = 1; self.follow = True
         elif self.page == 3:
-            key = ('Username', 'Rod slot', 'Auto rod', 'Motion', 'Bait left', 'Plan hours', 'Mode')[self.selection]
+            key = ('Username', 'Rod slot', 'Auto rod', 'Motion', 'Bait left', 'Plan hours', 'Mode', 'Position correction', 'Save reference', 'Disable reference')[self.selection]
+            if key=='Position correction':self.reference_position=not self.reference_position;return
+            if key in ('Save reference','Disable reference'):
+                import landmark_controls
+                position=self.reference_position
+                self.job((lambda:landmark_controls.setup(position)) if key=='Save reference' else landmark_controls.disable)
+                return
             if key == 'Mode':
                 if self.data.get('running') or self.data.get('starting'):
                     self.toast('Pause before switching modes.',False);return
-                save_config({'mode':'assist' if self.config.get('mode','full')=='full' else 'full'})
+                modes=list(MODES)
+                save_config({'mode':modes[(modes.index(self.config['mode'])+1)%len(modes)]})
                 self.config=load_config();return
             if key in ('Auto rod', 'Motion'):
                 option = 'auto_rod' if key == 'Auto rod' else 'reduced_motion'
@@ -178,7 +187,7 @@ class Terminal:
                 self.follow = key == 'END'
                 self.scroll = 0 if key == 'HOME' else limit if key == 'END' else max(0, min(limit, self.scroll+step))
             else:
-                count = 4 if self.page == 0 else 7 if self.page == 3 else len(self.item_rows())
+                count = 4 if self.page == 0 else 10 if self.page == 3 else len(self.item_rows())
                 self.selection = 0 if key == 'HOME' else max(0, count-1) if key == 'END' else max(0, min(count-1, self.selection+step))
 
     def body(self, available):
@@ -192,6 +201,9 @@ class Terminal:
                     tint(f"~{d['hooks_per_hour']:.0f} / hour   •   {self.hours:g}h plan: " + (f'~{amount:,} bait' if amount is not None else 'collecting a sample'), 'dim'), '']
             rows += [tint('› ' + label, 'selected') if self.selection == i else '  '+label
                      for i, label in enumerate(('Continue', 'Pause', 'Stop', 'Export log'))]
+            recent=d.get('recent')
+            if recent:
+                rows[4:4]=[tint(f"{recent['hooks_per_minute']:.2f} hooks/min   {recent['items_per_minute']:.2f} items/min   {recent['recovery_seconds']:.0f}s recovery / {recent['window_seconds']/60:.0f}m",'cyan')]
             rows += ['', tint('Recent', 'dim')]
             rows += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+tint(r['text'],event_tone(r)) for r in self.feed.rows[-max(0, available-len(rows)):]] if available > len(rows) else []
             return rows
@@ -216,7 +228,9 @@ class Terminal:
         settings = [('Username', self.config['account_username'] or 'Not set'), ('Rod slot', self.config['rod_slot']),
                     ('Auto equip rod', 'On' if self.config['auto_rod'] else 'Off'), ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On'),
                     ('Bait left', d['bait_remaining_estimate'] if d['bait_remaining_estimate'] is not None else 'Unknown'), ('Plan hours', f'{self.hours:g}'),
-                    ('Mode','Minigame only' if self.config.get('mode')=='assist' else 'Full farmer')]
+                    ('Mode',MODES[self.config['mode']]),
+                    ('Position correction','On' if self.reference_position else 'Off'),
+                    ('Save fishing reference','Enter while paused'),('Disable reference','Enter while paused')]
         return [tint(f"{'›' if i == self.selection else ' '}  {label:<23} {value}", 'selected' if i==self.selection else 'text') for i,(label,value) in enumerate(settings)]
 
     def render(self, width, height):
@@ -227,7 +241,7 @@ class Terminal:
         active = d['running'] and not d['stop_requested'] and d['state'] != 'Waiting for Roblox'
         spin = '●' if self.config['reduced_motion'] or not active else '◐◓◑◒'[int(time.monotonic()*5)%4]
         state = tint(spin+' '+d['state'],state_tone(d['state'],active))
-        mode = '  /  Minigame only' if d.get('mode')=='assist' else ''
+        mode = '  /  '+MODES.get(d.get('mode'),'Full farmer')
         lines = ['', '  '+tint('FISHING'+mode, 'gold')+'     '+state+'     '+tint(d['presence'], 'dim'), '',
                  '  '+'     '.join(tint(f'{i+1} {name}', 'gold' if i==self.page else 'dim') for i,name in enumerate(self.pages)), '',
                  '  '+tint('─'*min(width-4, 110), 'dim'), '']

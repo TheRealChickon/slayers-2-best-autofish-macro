@@ -12,6 +12,10 @@ from app_config import load_config
 from rod_detector import locate_rod
 from screen_space import ScreenSpace
 from recovery_pacing import MenuPacer, private_join_target
+from faults import FaultRecorder, FishingFault, RecoveryPolicy, reason_code
+from performance import PerformanceRecorder
+from metrics import read as read_metrics
+import landmarks
 
 LAUNCH_URL='roblox://placeId='+str(load_config()['place_id'])
 
@@ -22,6 +26,7 @@ class Recovery:
     def __init__(self):
         self.inp=Input();self.hwnd=None;self.rect=None;self.ocr=RapidOCR();self.sct=mss.MSS();self.shots=0
         self.stop=RUN/'STOP';self.log=RUN/'recovery.jsonl';self.last_action='';self.last_action_at=0;self.restarts=0;self.progress=lambda **kw:None
+        self.diagnostics=FaultRecorder(RUN,'recovery-'+time.strftime('%Y%m%d-%H%M%S'))
     def event(self,event,**kw):
         row={'at':time.time(),'event':event,**kw}
         with self.log.open('a') as f:f.write(json.dumps(row)+'\n')
@@ -69,6 +74,7 @@ class Recovery:
     def capture(self,tag=None):
         self.guard();im=self.screen.capture(self.sct)
         if tag:
+            self.diagnostics.observe(im,tag)
             self.shots+=1;cv2.imwrite(str(RUN/f'recovery-{self.shots%20:02d}-{tag}.jpg'),im,[cv2.IMWRITE_JPEG_QUALITY,87])
             cv2.imwrite(str(RUN/'recovery-latest.jpg'),im,[cv2.IMWRITE_JPEG_QUALITY,85])
         return im
@@ -76,7 +82,7 @@ class Recovery:
         if box:
             x,y,w,h=box;im=im[y:y+h,x:x+w];scale=1
         else:x=y=0;im=cv2.resize(im,(1280,720));scale=2
-        rows,_=self.ocr(im)
+        rows,_=self.ocr(im,use_cls=False)  # Game labels are upright; do not rotate short words.
         return [{'text':r[1],'center':(int(x+np.mean(np.array(r[0])[:,0])*scale),int(y+np.mean(np.array(r[0])[:,1])*scale)),'score':float(r[2])} for r in rows or [] if r[2]>.82]
     @staticmethod
     def world_visible(im):
@@ -122,7 +128,9 @@ class Recovery:
         # The friend-Join button animates into a larger private-Join button.
         # Revalidate after hover settles so an old center cannot dismiss it.
         x,y=target
-        self.move(x,y);self.sleep(.30);self.move(x+1,y);self.sleep(.15);self.move(x,y);self.sleep(.30)
+        # The game's rendered cursor can obscure JOIN and make OCR read Nior.
+        # Settle inside the blue button, away from its central label.
+        self.move(x+65,y+12);self.sleep(.30);self.move(x+66,y+12);self.sleep(.15);self.move(x+65,y+12);self.sleep(.30)
         rows=self.text(self.capture(),(820,1190,920,250))
         current=private_join_target(rows)
         self.guard()
@@ -168,7 +176,10 @@ class Recovery:
             elif 'back to main menu' in text:
                 kind='game_menu';target=next(r['center'] for r in rows if 'back to main menu' in r['text'].lower())
             elif ('privateserver' in re.sub(r'[^a-z]','',text) and 'join' in text):
-                kind='private_join';target=private_join_target(rows)
+                kind='private_join'
+                # Full-screen downsampling can turn JOIN into J0IN. Read the
+                # observed panel at native vision scale before deciding input.
+                target=private_join_target(self.text(im,(820,1190,920,250)))
             elif any('ouwlan' in r['text'].lower() for r in rows) and 'last played' in text:
                 kind='world_selection';target=(520,680)
             elif any(r['text'].strip().lower()=='play' for r in rows):
@@ -191,7 +202,11 @@ class Recovery:
                 elif pacer.ready('world_ready',now,stable_seconds=3):
                     self.equip_rod();self.capture('equipped');self.event('equipped_rod');self.restarts=0;return
             elif kind=='private_join' and pacer.ready(kind,now):
-                if target is None:raise RecoveryError('Private Join button is ambiguous')
+                if target is None:
+                    self.event('private_join_retry',reason='Waiting for an unambiguous private Join button')
+                    self.move(1630,1120)
+                    pacer.acted(kind,now,3)
+                    self.sleep(.25);continue
                 self.capture(kind)
                 if self.hold_private_join(target):
                     join_attempts+=1;pacer.joined(time.monotonic(),join_attempts);force_menu=False
@@ -225,6 +240,7 @@ def main():
         new_run()
         write_metrics('bait.json',{'starting_stock':a.bait_stock if a.bait_stock>=0 else None,'bait_per_hook':1,'note':'One bait per hook. Fishing continues without bait.'})
     driver=Recovery();deadline=time.monotonic()+a.seconds if a.seconds>0 else float('inf');recoveries=0;last_error='';child=None;exit_code=0;started=time.time()
+    policy=RecoveryPolicy();performance=PerformanceRecorder(read_metrics('totals.json').get('started'))
     # Temporary: restored when this process exits. No persistent Windows setting is changed.
     ctypes.windll.kernel32.SetThreadExecutionState(0x80000003)
     def emergency_key(key):
@@ -232,7 +248,8 @@ def main():
     listener=Listener(on_press=emergency_key);listener.start()
     presence_stop=presence_watch.start()
     def status(stage,**kw):
-        write_metrics('supervisor.json',{'running':True,'pid':os.getpid(),'updated':time.time(),'started':started,'stage':stage,'recoveries':max(0,recoveries-1),'last_error':last_error,'runs_until_stopped':a.seconds<=0,**kw})
+        performance.tick(stage,read_metrics('status.json'),read_metrics('totals.json'))
+        write_metrics('supervisor.json',{'running':True,'pid':os.getpid(),'updated':time.time(),'started':started,'stage':stage,'mode':'full','recoveries':max(0,recoveries-1),'last_error':last_error,'runs_until_stopped':a.seconds<=0,**kw})
     driver.progress=lambda **kw:status('recovering',**kw)
     try:
         try:driver.select(focus=a.focus)
@@ -241,8 +258,10 @@ def main():
         force=a.rejoin
         while time.monotonic()<deadline:
             status('recovering')
-            try:driver.recover(force_menu=force)
-            except RecoveryError as ex:
+            try:
+                driver.recover(force_menu=force)
+                landmarks.align(driver)
+            except (RecoveryError,FishingFault) as ex:
                 driver.inp.release();last_error=str(ex);driver.event('recovery_retry',reason=last_error)
                 if 'lost focus' in last_error and driver.hwnd and win32gui.IsWindow(driver.hwnd):
                     while win32gui.GetForegroundWindow()!=driver.hwnd and time.monotonic()<deadline:
@@ -256,6 +275,13 @@ def main():
                     driver.select()
                     continue
                 if 'window needs' in last_error:raise
+                code=getattr(ex,'code',reason_code(last_error))
+                driver.diagnostics.save(code,last_error,**getattr(ex,'details',{}))
+                if code=='alignment':
+                    # A local reference must never make the bot wander or enter
+                    # a relaunch storm. Rejoin once, then wait for adjustment.
+                    if force:raise
+                    force=True;continue
                 status('restarting')
                 try:driver.launch(restart=bool(driver.hwnd and win32gui.IsWindow(driver.hwnd)))
                 except (RuntimeError,RecoveryError) as restart_error:
@@ -277,13 +303,25 @@ def main():
             if reason=='session_limit':break
             if reason.startswith('Pickup prompt still present'):
                 driver.event('pickup_exhausted_rejoining',reason=reason)
-            if 'lost focus' in reason and win32gui.IsWindow(driver.hwnd):
+            code=child_status.get('failure_code') or reason_code(reason)
+            action=policy.choose(code,time.monotonic(),landmarks.profile() is not None)
+            driver.event('recovery_decision',code=code,action=action)
+            if action=='local':
+                force=False;driver.event('local_repair',reason=reason)
+            elif action=='wait_focus' and win32gui.IsWindow(driver.hwnd):
                 driver.event('paused_focus')
                 while win32gui.GetForegroundWindow()!=driver.hwnd and time.monotonic()<deadline:
                     driver.check_stop();status('paused_focus');time.sleep(.3)
+                force=False
             driver.sleep(1,focus=False)
     except BaseException as ex:
         last_error=str(ex);exit_code=0 if isinstance(ex,UserStop) else 1;driver.event('supervisor_stopped',reason=last_error)
+        if not isinstance(ex,UserStop):
+            try:
+                try:driver.capture('failure')
+                except (RuntimeError,RecoveryError,UserStop):pass
+                driver.diagnostics.save(getattr(ex,'code',reason_code(last_error)),last_error,**getattr(ex,'details',{}))
+            except Exception as diagnostic_error:driver.event('diagnostic_error',message=str(diagnostic_error))
     finally:
         if child and child.poll() is None:
             try:
