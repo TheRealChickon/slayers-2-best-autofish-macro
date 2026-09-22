@@ -126,6 +126,8 @@ Set **Bait left** in terminal Setup after buying/equipping bait. This updates th
 
 The supervisor handles visible disconnect dialogs and a stalled fishing loop. Vendor purchase dialogs are cancelled before recovery. Recovery uses **M → Back to main menu → Play → Ouwland → held private Join**, then equips the rod. If necessary it opens `roblox://placeId=16205713724` or restarts the selected Roblox game process. Retry delays limit repeated restart attempts. Input is released on loss of focus, window changes, or stop requests.
 
+Cast and rod clicks allow a brief cursor settle before pressing, with stop and focus checks throughout. This gives Roblox time to update its hover target after a menu or hotbar interaction; the minigame tracking loop is unchanged.
+
 When a username is configured, [Roblox's public user lookup](https://create.roblox.com/docs/cloud/reference/features/users) resolves it to an ID and the [presence API](https://create.roblox.com/docs/cloud/reference/domains/presence) is polled every 45 seconds. Persistent absence **and** no fishing activity can request recovery. An API error alone does not mean a disconnect. No Roblox password, cookie, or API key is used or stored.
 
 Rejoin and relaunch are distinct counters. Rejoins count completed joins after the first one in the run; game launches count launch attempts. Known recovery paths are implemented, but a game update or an unfamiliar menu can require recalibration.
@@ -166,7 +168,7 @@ To remove the app, stop it first, close both views, delete its desktop shortcuts
 .\.venv\Scripts\python.exe health_check.py
 ```
 
-The current suite has 38 checks, including real 1080p inventory crops, input guards, duplicate prevention, inventory reconciliation, scan throttling, restart checkpoints, and scan-budget cleanup. A live 1080p test rejoined, equipped the rod, completed four hooks without a detected failed round, and confirmed four catches; one missed banner was recovered from inventory differences.
+The current suite has 40 checks, including real 1080p inventory crops, input guards, duplicate prevention, inventory reconciliation, scan throttling, restart checkpoints, scan-budget cleanup, and interruption while the cursor settles. A live 1080p test rejoined, equipped the rod, completed four hooks without a detected failed round, and confirmed four catches; one missed banner was recovered from inventory differences.
 
 Tests use isolated temporary state and mocked controls; they do not drive Roblox. Live game validation is still needed after changing vision or input logic. Python 3.12 on Windows x64 is the tested runtime.
 
