@@ -112,7 +112,11 @@ Scriptable commands remain available:
 
 The item journal records confirmed quantity/NEW reward banners, original OCR text, quantity, and time. A round without a reward is normal. Unread or partial names are retained instead of silently discarded. OCR can misread text; the original observation remains in the log.
 
-**Identify unknown drops** is enabled by default in Settings. Before casting, the bot opens the inventory and saves a baseline. After a confirmed drop with an unreadable name, it compares a fresh inventory snapshot, subtracts known catches, and corrects the original journal entry only when one remaining increase matches its quantity. Cached local thumbnails make later scans faster and supply game artwork to the window. A visible Collect prompt with a missed banner can also be recovered when the inventory shows one unambiguous new item. Empty rounds without a Collect prompt do not create entries. CSV exports include the evidence source.
+**Identify unknown drops** is enabled by default in Settings. On the first use, the bot attempts a baseline inventory scan. After that, inventory opens only for unresolved catches, between fishing rounds, with **at least ten minutes between attempts**. There are no timer-only scans, and empty rounds without a Collect prompt do not request a scan or create an item entry. Each attempt has a **20-second scanning budget**, followed by closing the menu; a native OCR call already in progress may finish first. Unreadable scans back off for 20, 40, then at most 60 minutes. Fishing continues during the wait. Cached thumbnails make later scans faster and supply artwork to the window.
+
+The comparison subtracts known catches and corrects an unreadable journal entry only when one unexplained increase matches its quantity. A visible Collect prompt with a missed banner can also be recovered this way. Several unknown catches during the wait are kept as originally observed rather than assigning a combined inventory increase to the wrong catch; that scan establishes a fresh baseline. CSV exports include the evidence source.
+
+Reconnects reuse a recent, complete checkpoint for the same account and supervisor without opening inventory again. An interrupted round, a new supervisor, an account change, or a stale checkpoint invalidates its item comparison but retains the scan cooldown. Fishing resumes immediately, and the next eligible unresolved catch can establish a fresh baseline. This prevents unlogged loot from an interrupted round being attributed to a later catch. Turning identification off in Settings disables these checks entirely.
 
 Leave the in-game inventory search empty; the scanner does not send typing or movement shortcuts to clear it. The scanner currently requires the complete inventory to fit the visible 10-column grid (at most 100 occupied slots). Unreadable counts, ambiguous changes, or incomplete scans preserve the unknown label and log the reason. It closes the menu before fishing resumes. It cannot reliably repair older unknown entries without a before-catch baseline. Inventory use or trade changes during a comparison can also prevent identification.
 
@@ -162,7 +166,7 @@ To remove the app, stop it first, close both views, delete its desktop shortcuts
 .\.venv\Scripts\python.exe health_check.py
 ```
 
-The current suite has 25 checks, including real 1080p inventory crops, input guards, duplicate prevention, and inventory reconciliation. A live 1080p test rejoined, equipped the rod, completed four hooks without a detected failed round, and confirmed four catches; one missed banner was recovered from inventory differences.
+The current suite has 38 checks, including real 1080p inventory crops, input guards, duplicate prevention, inventory reconciliation, scan throttling, restart checkpoints, and scan-budget cleanup. A live 1080p test rejoined, equipped the rod, completed four hooks without a detected failed round, and confirmed four catches; one missed banner was recovered from inventory differences.
 
 Tests use isolated temporary state and mocked controls; they do not drive Roblox. Live game validation is still needed after changing vision or input logic. Python 3.12 on Windows x64 is the tested runtime.
 

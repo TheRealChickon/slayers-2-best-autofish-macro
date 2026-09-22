@@ -23,7 +23,8 @@ import presence_watch
 class InventoryReconciliation(unittest.TestCase):
     def test_prompt_without_banner_is_confirmed_by_inventory_once(self):
         watcher=object.__new__(InventoryWatcher)
-        watcher.enabled=True;watcher.pending=None;watcher.baseline={'Coral':3,'Worm':10}
+        watcher.enabled=True;watcher.pending=[];watcher.baseline={'Coral':3,'Worm':10}
+        watcher.overflow=False;watcher.next_check_at=0;watcher.clock=lambda:100;watcher.checkpoint=Mock()
         watcher.known={'Coral':1};watcher.snapshot=lambda reason:{'Coral':4,'Worm':8,'Zebra Fish':1}
         events=[];watcher.event=lambda kind,**kw:events.append((kind,kw))
         watcher.observe_unconfirmed('Zebra Fish T Collect','session:4:inventory')
