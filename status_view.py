@@ -41,6 +41,11 @@ def snapshot(journal=None):
                  if stage=='fishing' else stage.replace('_',' ').title())
     else:
         state = 'Paused' if paused else 'Stopped'
+    reason = worker.get('wait_reason', '') if live else worker.get('reason', '') or supervisor.get('reason', '')
+    if stop or paused:
+        try:reason = (RUN / ('PAUSE' if paused else 'STOP')).read_text(encoding='utf-8').strip() or reason
+        except OSError:pass
+    if starting and not stop:reason = ''
     rounds, seconds = totals.get('rounds', 0), totals.get('active_seconds', 0)
     rate = rounds * 3600 / seconds if seconds > 0 else 0
     stock = bait.get('starting_stock')
@@ -51,6 +56,7 @@ def snapshot(journal=None):
     return {
         'state': state, 'mode': supervisor.get('mode','full') if live else load_config()['mode'], 'running': live, 'starting': starting, 'stop_requested': stop,
         'paused': paused, 'started': totals.get('started'), 'updated': totals.get('updated'),
+        'reason': reason,
         'collections': totals.get('rewards', 0), 'items': sum(journal.counts.values()),
         'logged_collections': len(journal.items), 'unread_items': unknown,
         'hooks': rounds, 'casts': totals.get('casts', 0), 'failed_rounds': totals.get('failed', 0),

@@ -66,7 +66,7 @@ The same coordinate mapping is tested with 720p and 4K image fixtures, but those
 | Fishing CLI | Opens the keyboard terminal app |
 | Start Fishing | Continues the saved run, rejoins if needed, and equips the rod |
 
-Opening or closing either view leaves the controller unchanged. **Pause** releases input and saves counters. **Continue** resumes the saved run. **Stop**, **F9**, **F12**, or **Escape** stops input. Automatic recovery never clears a manual stop; an explicit Continue does.
+Opening or closing either view leaves the controller unchanged. **Pause** releases input and saves counters. **Continue** resumes the saved run. **Stop** stops input. In Minigame only and Fish here, **F9/F12 stop only while Roblox is foreground**; Escape never stops these modes. Full farmer retains its global F9/F12/Escape stop keys. Automatic recovery never clears a manual stop; an explicit Continue does. The CLI shows the stop or waiting reason, including the exact stop key for manual modes.
 
 If you move the installation folder, run `Setup.cmd` again to refresh the shortcut paths.
 
@@ -96,7 +96,7 @@ This mode never moves the mouse or character, adjusts the camera, changes shift 
 
 Casting requires three consecutive checks of the selected rod plus a fresh check immediately before the click. Keep your pointer clear of the hotbar and other HUD controls. Temporary loss of the rod icon does not permit an early recast. After a round, the pickup scan covers a wider area at full resolution and requires six seconds of consistently empty observations before skipping an unconfirmed reward. While waiting for a bite, only the fast minigame detector runs.
 
-Move or reposition while paused, then return to continue. Restarting the controller or Roblox requires F8 again. No pointer coordinate is saved or restored. F9/F12/Escape and the app's Pause/Stop remain available.
+Move or reposition while paused, then return to continue. Restarting the controller or Roblox requires F8 again. No pointer coordinate is saved or restored. F9/F12 in Roblox and the app's Pause/Stop remain available.
 
 The detector combines color and target-outline checks so transparent green/yellow bars remain recognizable over red scenery. It still requires the fishing UI and white marker; obscured or ambiguous markers release input instead of guessing. A bounded set of missed-marker crops is retained locally for diagnosis.
 
@@ -108,7 +108,7 @@ All modes use the same adaptive reeling controller and aim for 60 checks per sec
 
 ### Minigame only
 
-For semi-automatic fishing, select **Settings → Mode → Minigame only**, save, and Continue. In terminal Setup, select **Mode** and press Enter, then C. Pause first when switching from a running mode.
+For semi-automatic fishing, select **Settings → Mode → Minigame only**, save, and Continue. In the CLI, select **Run → Minigame only** and press Enter. Pause first when switching from a running mode.
 
 Or start it directly:
 
@@ -116,7 +116,7 @@ Or start it directly:
 .\fishing.cmd assist
 ```
 
-You choose the spot, position the camera, equip the rod, cast, and collect with T. The assistant only holds/releases the left mouse button while it recognizes the fishing minigame. It does not move the mouse or character, cast, equip, open inventory, collect, purchase, rejoin, or relaunch Roblox. It releases input when the UI disappears or focus is lost, and waits for Roblox to be foreground again. Q closes the view; P/S or F9/F12/Escape stop the controller as usual.
+You choose the spot, position the camera, equip the rod, cast, and collect with T. The assistant only holds/releases the left mouse button while it recognizes the fishing minigame. It does not move the mouse or character, cast, equip, open inventory, collect, purchase, rejoin, or relaunch Roblox. It releases input when the UI disappears or focus is lost, and waits for Roblox to be foreground again. Q closes the CLI view; P/S pause/stop from the CLI. F9/F12 stop while Roblox is foreground; Escape and keys in other apps do not stop this mode.
 
 **F8 pauses/resumes Minigame only as well as Fish here.** Minigame only starts enabled; focus loss pauses it automatically, and focus return resumes it unless you paused with F8. On return it waits for your Alt/Tab/Windows keys to be released, reacquires current marker positions, and resends a mouse-button release inside the recognized minigame before reeling. It never presses those navigation keys or changes focus. Manual F8 pause remains separate from automatic focus pause.
 
@@ -142,7 +142,9 @@ Launch **Fishing CLI**, or run:
 | Q or Ctrl+C | Close the view; fishing stays as it was |
 | Enter / Ctrl+G while editing | Save / cancel |
 
-Do not use Escape to cancel an edit: it is a global stop key while fishing. In Setup, **Motion** toggles animations. Use a terminal at least 65 columns × 22 rows; 100 × 32 or larger is more comfortable.
+The **Run** tab has direct **Minigame only**, **Fish here**, and **Full farmer** choices: select with ↑/↓ and press Enter to start. Pause the current mode before switching to another. **C** continues the saved mode. The command equivalents are `fishing.cmd assist`, `fishing.cmd spot`, and `fishing.cmd continue --mode full`.
+
+Use Ctrl+G to cancel an edit; Escape remains a global stop key in Full farmer. In Setup, **Motion** toggles animations. Use a terminal at least 65 columns × 22 rows; 100 × 32 or larger is more comfortable.
 
 The Run tab shows current state, items, hooks, time, rejoins, game launch attempts, recent events, and a bait plan. Items can be opened directly into a filtered live log. Live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
 

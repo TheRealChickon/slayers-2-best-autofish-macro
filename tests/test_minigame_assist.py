@@ -94,6 +94,59 @@ class FocusInput(unittest.TestCase):
         self.user.mouse_event.assert_not_called();self.user.keybd_event.assert_not_called()
 
 
+class ManualStopKeys(unittest.TestCase):
+    def setUp(self):
+        temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
+        self.root=Path(temporary.name)
+        for target, name, value in ((assist,'RUN',self.root),(assist,'USER',Mock())):
+            p=patch.object(target,name,value);p.start();self.addCleanup(p.stop)
+        self.keys=set()
+        assist.USER.GetAsyncKeyState.side_effect=lambda key:0x8000 if key in self.keys else 0
+
+    def test_escape_never_stops_manual_modes(self):
+        self.keys={27}
+        with patch.object(assist,'window_foreground',return_value=True):
+            self.assertIsNone(assist.request_hotkey_stop(123))
+        self.assertFalse((self.root/'STOP').exists())
+
+    def test_other_app_function_keys_do_not_stop_but_roblox_key_records_name(self):
+        for key,name in ((120,'F9'),(123,'F12')):
+            self.keys={key}
+            with patch.object(assist,'window_foreground',return_value=False):
+                self.assertIsNone(assist.request_hotkey_stop(123))
+            self.assertFalse((self.root/'STOP').exists())
+            with patch.object(assist,'window_foreground',return_value=True):
+                self.assertEqual(assist.request_hotkey_stop(123),f'Stopped by {name} in Roblox')
+            self.assertEqual(assist.stop_reason(),f'Stopped by {name} in Roblox')
+            (self.root/'STOP').unlink()
+
+    def test_hotkey_does_not_overwrite_an_existing_user_stop_or_pause(self):
+        self.keys={120}
+        (self.root/'STOP').write_text('Stopped by user')
+        with patch.object(assist,'window_foreground',return_value=True):
+            assist.request_hotkey_stop(123)
+        self.assertEqual(assist.stop_reason(),'Stopped by user')
+        (self.root/'PAUSE').write_text('Paused by user')
+        self.assertEqual(assist.stop_reason(),'Paused by user')
+
+    def test_focus_watcher_ignores_escape_then_stops_on_named_game_key(self):
+        inp=Mock(hwnd=123,toggle_enabled=True);done=Mock()
+        states=iter([({120},False),({27},True),({123},True)])
+        current={'foreground':False}
+        def wait(_):
+            try:self.keys,current['foreground']=next(states)
+            except StopIteration:return True
+            if self.keys=={123}:self.assertFalse((self.root/'STOP').exists())
+            return False
+        done.wait.side_effect=wait
+        with patch.object(assist,'window_foreground',side_effect=lambda h:current['foreground']), \
+             patch.object(assist,'foreground',side_effect=lambda h:current['foreground']):
+            assist.watch_focus(inp,done)
+        self.assertEqual(assist.stop_reason(),'Stopped by F12 in Roblox')
+        inp.suspend_input.assert_called()
+        inp.toggle_requested.set.assert_not_called()
+
+
 class AssistControls(unittest.TestCase):
     def setUp(self):
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
