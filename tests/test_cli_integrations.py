@@ -140,11 +140,22 @@ class IsolatedClients(unittest.TestCase):
              patch.object(terminal_app.sys.stdout, 'flush'), \
              patch.object(terminal_app.time, 'sleep') as sleep:
             app.transition('opening')
-            self.assertEqual(write.call_count, 3)
-            self.assertEqual(sleep.call_count, 3)
+            self.assertEqual(write.call_count, 14)  # dashboard, 12 cast frames, restore header
+            self.assertEqual(sleep.call_count, 12)
+            self.assertNotIn('\x1b[2J', ''.join(call.args[0] for call in write.call_args_list))
             app.config['reduced_motion'] = True
             app.transition('closing')
-            self.assertEqual(write.call_count, 3)
+            self.assertEqual(write.call_count, 14)
+
+    def test_rod_cast_and_reel_frames_move_the_float(self):
+        def float_position(phase, progress):
+            return terminal_app.ANSI.sub('', terminal_app.rod_scene_frame(80, progress, phase)[1]).index('●')
+        self.assertLess(float_position('opening', 0), float_position('opening', 1))
+        self.assertGreater(float_position('closing', 0), float_position('closing', 1))
+        frame = ''.join(terminal_app.ANSI.sub('', line) for line in terminal_app.rod_scene_frame(80, 1, 'opening'))
+        self.assertIn('╱', frame)
+        self.assertIn('≈', frame)
+        self.assertIn('✦', frame)
 
     def test_console_restores_if_closing_animation_fails(self):
         app = terminal_app.Terminal()

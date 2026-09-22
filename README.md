@@ -14,7 +14,7 @@ autofish start
 
 Choose the game, then **Minigame only**, **Fish here**, or **Full farmer**, with arrows and Enter. The dashboard opens after starting. Only Project Slayers 2 / Ouwland is supported currently; future supported games can appear in the same picker.
 
-The CLI dashboard opens with a short reveal and plays a brief closing animation when you press **Q**. **Setup → Motion → Reduced** skips both animations.
+The CLI dashboard casts a small animated rod across its header when it opens and reels the float back when you press **Q**. **Setup → Motion → Reduced** skips both animations.
 Ore pickups have their own short mineral-glint animation in the dashboard; it does not interrupt fishing or alter the item log.
 
 Already set up? Double-click **Install-CLI.cmd** once to add the command without reinstalling dependencies. No administrator access is needed. If a terminal was open during installation, close and reopen it to pick up the updated PATH.
