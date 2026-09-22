@@ -11,6 +11,7 @@ import psutil
 import win32gui
 from metrics import RUN
 from fishing_assistant import ROOT, find_window
+from app_config import load_config, save_config
 
 _mutex = threading.RLock()
 _starting = None
@@ -85,8 +86,10 @@ def focus_game():
     win32gui.SetForegroundWindow(h)
 
 
-def resume():
+def resume(mode=None):
     global _starting
+    mode = mode or load_config().get('mode','full')
+    if mode not in ('full','assist'):raise ValueError('Mode must be full or assist')
     with guard():
         live, pending = alive(), starting()
         if live or pending:
@@ -94,14 +97,20 @@ def resume():
                 return 'Pause/stop is still finishing. Try Continue in a moment.'
             if not live:
                 return 'Starting; waiting for the fishing supervisor.'
+            try:current_mode=json.loads((RUN/'supervisor.json').read_text()).get('mode','full')
+            except (OSError,ValueError):current_mode='full'
+            if current_mode!=mode:return 'Pause the current mode before switching modes.'
+            if mode=='assist':return 'Minigame only is active. Bring Roblox forward and cast manually.'
             focus_game()
             event('continue', 'Returned focus to Roblox.')
             return 'Roblox is focused. Fishing will resume automatically.'
         # Only an explicit Continue command may release a manual stop.
+        save_config({'mode':mode})
         (RUN / 'PAUSE').unlink(missing_ok=True)
         (RUN / 'STOP').unlink(missing_ok=True)
-        args = [sys.executable, str(ROOT / 'recovery.py'), '--seconds', '0', '--rejoin',
-                '--focus', '--resume-counters', '--respect-stop']
+        args = ([sys.executable,str(ROOT/'minigame_assist.py'),'--respect-stop'] if mode=='assist' else
+                [sys.executable, str(ROOT / 'recovery.py'), '--seconds', '0', '--rejoin',
+                 '--focus', '--resume-counters', '--respect-stop'])
         try:
             with (RUN / 'supervisor-stdout.log').open('a') as out, (RUN / 'supervisor-stderr.log').open('a') as err:
                 _starting = subprocess.Popen(args, stdout=out, stderr=err, creationflags=subprocess.CREATE_NO_WINDOW)
@@ -110,5 +119,7 @@ def resume():
         except Exception:
             (RUN / 'STOP').write_text('Continue failed; input stopped')
             raise
-        event('continue', 'Continuing saved run; rejoining and equipping the rod.')
-        return 'Continuing the saved run. Rejoining and equipping the rod...'
+        message = ('Minigame only is active. Bring Roblox forward and cast manually.' if mode=='assist' else
+                   'Continuing the saved run. Rejoining and equipping the rod...')
+        event('continue',message)
+        return message

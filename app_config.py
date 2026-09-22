@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 CONFIG = ROOT / 'config.local.json'
 DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             'rod_slot': 5, 'auto_rod': True, 'reduced_motion': False, 'inventory_check': True,
-            'place_id': 16205713724}
+            'place_id': 16205713724, 'mode': 'full'}
 
 
 def load_config():
@@ -19,6 +19,8 @@ def load_config():
     if not 1 <= int(values['rod_slot']) <= 9:
         raise ValueError('Rod slot must be between 1 and 9')
     values['rod_slot'] = int(values['rod_slot'])
+    if values['mode'] not in ('full', 'assist'):
+        raise ValueError('Mode must be full or assist')
     if values['user_id'] is not None:
         values['user_id'] = int(values['user_id'])
         if values['user_id'] <= 0:raise ValueError('User ID must be positive')
@@ -34,6 +36,8 @@ def data_directory():
 def save_config(changes):
     values = load_config()
     values.update(changes)
+    if values['mode'] not in ('full', 'assist'):
+        raise ValueError('Mode must be full or assist')
     if not 1 <= int(values['rod_slot']) <= 9:raise ValueError('Rod slot must be between 1 and 9')
     temporary = CONFIG.with_suffix('.tmp')
     temporary.write_text(json.dumps(values, indent=2), encoding='utf-8')
