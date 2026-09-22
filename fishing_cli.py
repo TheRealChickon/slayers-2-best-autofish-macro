@@ -8,9 +8,10 @@ import sys
 import time
 from item_journal import Journal
 from status_view import snapshot, duration, estimate
+from live_feed import event_tone, state_tone
 import control_actions as actions
 
-COLORS = {'gold': 33, 'green': 32, 'red': 31, 'gray': 90, 'white': 97}
+COLORS = {'gold': 33, 'green': 32, 'red': 31, 'cyan': 36, 'gray': 90, 'white': 97, 'text': 97}
 
 
 def color(text, tone='white', enabled=True):
@@ -34,7 +35,7 @@ def enable_color(force=False):
 
 def status_lines(data, colors=False):
     c = lambda text, tone='white': color(text, tone, colors)
-    tone = 'green' if data['running'] and not data['stop_requested'] else 'gold'
+    tone = state_tone(data['state'],data['running'] and not data['stop_requested'])
     remain = data['bait_remaining_estimate']
     hours = data['bait_hours_remaining_estimate']
     return [
@@ -90,10 +91,10 @@ def log_line(row, activity=False, colors=False):
     stamp = time.strftime('%m-%d %H:%M:%S', time.localtime(row['at']))
     if activity:
         text = f"{stamp}  {row['kind']:<23} {row['message']}"
-        tone = 'gold' if any(word in row['kind'] for word in ('error', 'stop', 'recovery')) else 'white'
+        tone = event_tone(row)
     else:
         text = f"{stamp}  x{row['quantity']:<3} {row['item']:<26} {row['raw']}"
-        tone = 'gold' if any(word in row['item'] for word in ('Golden', 'Clown', 'Zebra')) else 'white'
+        tone = 'gold' if any(word in row['item'] for word in ('Golden', 'Clown', 'Zebra')) else 'green'
     return color(text, tone, colors)
 
 

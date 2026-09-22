@@ -5,6 +5,29 @@ import time
 from metrics import RUN
 
 
+def state_tone(state, active=True):
+    if not active or state in ('Waiting for Roblox','Paused','Stopped','Pausing','Stopping','Retry Wait'):
+        return 'gold'
+    return 'cyan' if state in ('Recovering','Restarting','Starting') else 'green'
+
+
+def event_tone(row):
+    """Shared semantic colors for the navigable and streaming CLI views."""
+    kind=row.get('kind',row.get('event',''))
+    message=row.get('message') or row.get('reason') or row.get('text','')
+    if kind in ('stopped','worker_exit','supervisor_stopped'):
+        return 'gold' if message.lower().startswith(('stopped by','paused by','session_limit')) else 'red'
+    if kind in ('wrong_interaction','disconnect_gui','disconnect_observed') or 'error' in kind:
+        return 'red'
+    if row.get('level')=='warn' or any(word in kind for word in ('retry','backoff','no_minigame','unreadable','ambiguous','exhausted')):
+        return 'gold'
+    if row.get('level')=='good' or kind in ('reward_observed','inventory_resolved','inventory_recovered','equipped_rod','rod_equipped','rod_already_equipped'):
+        return 'green'
+    if kind=='state':return state_tone(message)
+    if row.get('group')=='recovery':return 'cyan'
+    return 'text'
+
+
 def describe(row):
     kind = row.get('event', '')
     if kind == 'cast':return f'Cast {row.get("cast", "")}'
@@ -18,6 +41,8 @@ def describe(row):
     if kind == 'inventory_checked':return f'Inventory checked · {row.get("items",0)} item types'
     if kind == 'inventory_unreadable' and row.get('retry_minutes'):
         return f'{row.get("message", "Inventory unreadable")} · next eligible check in {row["retry_minutes"]} min'
+    if kind == 'recovery_started':return 'Rejoin started' if row.get('force_menu') else 'Checking game and rod'
+    if kind == 'equipped_rod':return 'Game ready · rod equipped'
     if kind == 'pickup_hold':return f'Collecting · attempt {row.get("attempt", 1)}'
     if kind == 'screen':return 'Recovery · ' + row.get('kind', 'checking').replace('_',' ')
     return row.get('message') or row.get('reason') or kind.replace('_', ' ').capitalize()
@@ -53,7 +78,9 @@ class LiveFeed:
                     except ValueError:continue
                     if row.get('at', 0) < (started or 0):continue
                     kind = row.get('event', '')
-                    if kind in ('tracking_reacquired',):continue
+                    # Screen/OCR transitions are diagnostics, not new recoveries.
+                    # Keep them in raw logs; show actual actions and outcomes here.
+                    if kind in ('tracking_reacquired','screen'):continue
                     group = 'catches' if kind in ('reward_observed','inventory_resolved','inventory_recovered') else 'recovery' if path.name=='recovery.jsonl' else 'fishing'
                     level = 'warn' if any(term in kind for term in ('error','stopped','no_minigame','wrong_interaction','retry','exhausted','unreadable','ambiguous')) else 'good' if kind in ('reward_observed','equipped_rod','rod_equipped','inventory_resolved','inventory_recovered') else 'normal'
                     self.rows.append({'at':row.get('at',0),'kind':kind,'group':group,'level':level,
