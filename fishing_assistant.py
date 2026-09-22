@@ -7,6 +7,7 @@ from rapidocr_onnxruntime import RapidOCR
 from metrics import Ledger, write as write_metrics, RUN
 from app_config import load_config
 from rod_detector import locate_rod
+from fishing_vision import detect, ui_visible
 from screen_space import ScreenSpace
 from inventory_watch import InventoryDriver, InventoryWatcher
 import landmarks
@@ -94,25 +95,6 @@ class Input:
                     raise RuntimeError('Stopped by Escape/F9/F12')
                 time.sleep(.01)
 
-def detect(roi):
-    hsv=cv2.cvtColor(roi,cv2.COLOR_BGR2HSV)
-    green=cv2.inRange(hsv,np.array([20,65,48]),np.array([100,255,255]))
-    targets=[]
-    for c in cv2.findContours(green,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[0]:
-        x,y,w,h=cv2.boundingRect(c)
-        if 54<=w<=95 and 22<=h<=130 and 12<=x<=50 and cv2.contourArea(c)>500:
-            targets.append((cv2.contourArea(c),y+h/2,h))
-    white=cv2.inRange(roi,np.array([178]*3),np.array([255]*3))
-    balls=[]
-    for c in cv2.findContours(white,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[0]:
-        x,y,w,h=cv2.boundingRect(c)
-        if 14<=w<=45 and 14<=h<=48 and 42<=x<=87 and cv2.contourArea(c)>150:
-            balls.append((cv2.contourArea(c),y+h/2,h))
-    if not targets or not balls:return None
-    _,target,height=max(targets)
-    _,ball,bheight=max(balls)
-    return {'target':target,'height':height,'ball':ball,'ball_height':bheight,'inside':abs(ball-target)<(height-bheight)/2+3}
-
 def is_pickup_prompt(text):
     # The moving prompt can be partially occluded by the character.
     return not is_other_interaction(text) and bool(re.search(r'collect|ollect|llect|\blect\b',text,re.I))
@@ -196,7 +178,7 @@ def main():
         return evidence,stable
     def ui_active():
         im=screen.capture(sct,(1190,1360,180,70))
-        return float(cv2.minMaxLoc(cv2.matchTemplate(im,exit_template,cv2.TM_CCOEFF_NORMED))[1])>.84
+        return ui_visible(im,exit_template)
     event('started',pid=os.getpid(),session=session)
     try:
         with mss.MSS() as sct:
@@ -212,6 +194,7 @@ def main():
                 if rectangle(hwnd)!=rect:raise RuntimeError('Roblox moved or resized; reacquiring the client area')
                 roi=screen.capture(sct,(1850,400,140,600))
                 d=detect(roi)
+                if d is not None and not ui_active():d=None
                 if d is None and stage!='tracking' and now-last_gui_scan>5:
                     gui=screen.capture(sct,(760,410,1040,580))
                     raw_gui=read_text(cv2.resize(gui,None,fx=.75,fy=.75)).lower();last_gui_scan=time.monotonic()

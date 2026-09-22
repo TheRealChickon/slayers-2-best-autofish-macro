@@ -1,17 +1,81 @@
-"""Minigame-only assistant. Never casts, collects, equips, moves, or reconnects."""
+"""Foreground-only manual assist and repeat-at-a-point fishing controllers."""
 import argparse
 import json
 import os
 import time
+import threading
 
 import cv2
 import mss
 import psutil
 import win32gui
+import numpy as np
 
 from fishing_assistant import ROOT, USER, Input, detect, find_window, rectangle
 from metrics import RUN, Ledger, read, write
 from screen_space import ScreenSpace
+from fishing_vision import ui_visible
+from app_config import load_config
+from pickup_policy import classify, PickupGate, Pickup
+from spot_fishing import SpotCycle
+from rod_detector import locate_rod
+from performance import PerformanceRecorder
+
+
+class ForegroundInput(Input):
+    """The watcher may release held input even while OCR is running."""
+    def __init__(self):
+        super().__init__()
+        self.lock = threading.RLock()
+        self.interrupted = threading.Event()
+
+    def guard_press(self, down):
+        super().guard_press(down)
+        if down and (self.interrupted.is_set() or (RUN/'STOP').exists() or (RUN/'PAUSE').exists()):
+            raise RuntimeError('Input suspended')
+
+    def hold(self, down):
+        with self.lock:
+            super().hold(down)
+
+    def grab(self, down):
+        with self.lock:
+            super().grab(down)
+
+
+def foreground(hwnd):
+    return (hwnd is not None and win32gui.IsWindow(hwnd) and not win32gui.IsIconic(hwnd)
+            and win32gui.GetForegroundWindow()==hwnd
+            and win32gui.GetAncestor(win32gui.WindowFromPoint(win32gui.GetCursorPos()),2)==hwnd)
+
+
+def watch_focus(inp, done):
+    while not done.wait(.015):
+        try:
+            hotkey = any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123))
+            if hotkey and not (RUN/'STOP').exists():
+                (RUN/'STOP').write_text('Stopped by physical hotkey')
+            if hotkey or (RUN/'STOP').exists() or (RUN/'PAUSE').exists() or not foreground(inp.hwnd):
+                inp.interrupted.set()
+                inp.release()
+        except (RuntimeError, win32gui.error):
+            inp.interrupted.set()
+            inp.release()
+
+
+def read_scene(frame, ocr):
+    x,y,w,h = 400,150,1800,1120
+    scale=.75
+    result,_=ocr(cv2.resize(frame[y:y+h,x:x+w],None,fx=scale,fy=scale),use_cls=False)
+    rows=[{'text':r[1],'score':float(r[2]),
+           'center':(x+float(np.mean(np.array(r[0])[:,0]))/scale,
+                     y+float(np.mean(np.array(r[0])[:,1]))/scale)} for r in result or []]
+    text=' '.join(r['text'].lower() for r in rows if r['score']>=.75)
+    blocked=any(word in text for word in ('disconnected','reconnect','connection lost','error code',
+        'same account','main menu','private server','inventory','settings','leave game','reset character',
+        'resume experience','would you like','purchase','fisherman'))
+    rod=locate_rod(frame)
+    return classify(rows),bool(rod) and not blocked,rod
 
 
 class TrackingAssist:
@@ -64,6 +128,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--seconds', type=float, default=0)
     parser.add_argument('--respect-stop', action='store_true')
+    parser.add_argument('--mode', choices=('assist','spot'), default='assist')
     args = parser.parse_args(argv)
     template=cv2.imread(str(ROOT/'assets/exit.png'))
     if template is None: raise RuntimeError('Missing fishing UI reference')
@@ -76,58 +141,141 @@ def main(argv=None):
             raise RuntimeError('Stop is set; use an explicit Continue')
         record = {'pid':os.getpid(),'created':psutil.Process().create_time()}
         write('supervisor-pid.json',record);write('pid.json',record)
-    started = time.time();monotonic_started=time.monotonic();session=time.strftime('%Y%m%d-%H%M%S')
-    ledger=Ledger();tracker=TrackingAssist();inp=Input();next_state=0;hwnd=None;screen=None;last_activity=0
-    reason='session_limit';stage='assist_waiting';last_count=0
+    started = time.time();monotonic_started=time.monotonic();session=time.strftime('%Y%m%d-%H%M%S')+'-'+str(os.getpid())
+    ledger=Ledger();tracker=TrackingAssist();inp=ForegroundInput();next_state=0;hwnd=None;screen=None;last_activity=0
+    reason='session_limit';stage='assist_waiting';last_count=0;wait_reason=''
     log=(RUN/f'events-{session}.jsonl').open('a',buffering=1)
-    def event(kind,**kw):log.write(json.dumps({'at':time.time(),'event':kind,'mode':'assist',**kw})+'\n')
+    def event(kind,**kw):
+        if 'reward_id' in kw:kw['reward_id']=session+':'+kw['reward_id']
+        log.write(json.dumps({'at':time.time(),'event':kind,'mode':args.mode,**kw})+'\n')
+    spot=SpotCycle(event) if args.mode=='spot' else None
+    ocr=None
+    if spot:
+        from rapidocr_onnxruntime import RapidOCR
+        ocr=RapidOCR()
+    gate=PickupGate();evidence=Pickup('empty');stable=False;world=False;rod=None
+    active_time=0.;last_tick=time.monotonic();last_scan=-10.;resuming=True;f8_down=False
+    missing_since=None;last_capture=0.;capture_index=0;equip_attempts=0
+    done=threading.Event()
+    watcher=threading.Thread(target=watch_focus,args=(inp,done),daemon=True);watcher.start()
+    performance=PerformanceRecorder(ledger.base.get('started'))
     def status(running=True):
         now=time.time()
         write('supervisor.json',{'running':running,'pid':os.getpid(),'updated':now,'started':started,
               'stage':('paused_focus' if stage=='paused_focus' else 'fishing') if running else 'stopped',
-              'mode':'assist','worker_pid':os.getpid(),'recoveries':0,'reason':reason if not running else '',
+              'mode':args.mode,'worker_pid':os.getpid(),'recoveries':0,'reason':reason if not running else '',
               'runs_until_stopped':args.seconds<=0})
-        write('status.json',{'running':running,'pid':os.getpid(),'updated':now,'session':session,'mode':'assist',
-              'stage':stage,'cycles':tracker.count,'casts':0,'reward_banners_observed':0,'failed_rounds':0,
-              'held_mouse':inp.mouse,'held_t':False,'last_game_activity':last_activity,
+        write('status.json',{'running':running,'pid':os.getpid(),'updated':now,'session':session,'mode':args.mode,
+              'stage':stage,'cycles':tracker.count,'casts':spot.casts if spot else 0,
+              'reward_banners_observed':spot.rewards if spot else 0,'failed_rounds':0,
+              'held_mouse':inp.mouse,'held_t':inp.t,'last_game_activity':last_activity,
+              'selected_point':spot.point if spot else None,'active_seconds':round(active_time,1),
+              'wait_reason':wait_reason,
               'reason':reason if not running else '', 'elapsed':round(time.monotonic()-monotonic_started,1)})
         # These hooks are observed minigames; manual pickups stay outside the journal.
-        ledger.update(time.monotonic()-monotonic_started,0,tracker.count,0,0,'')
+        ledger.update(active_time,spot.casts if spot else 0,tracker.count,spot.rewards if spot else 0,0,spot.last_reward if spot else '')
+        if running:performance.tick('paused_focus' if stage=='paused_focus' else 'fishing',{'stage':stage},read('totals.json'))
     try:
-        event('assist_started',message='Minigame only: waiting for a manual cast');status()
+        event('assist_started',message='Point at water and press F8 to repeat fishing here.' if spot else 'Minigame only: waiting for a manual cast');status()
         with mss.MSS() as sct:
             while args.seconds<=0 or time.monotonic()-monotonic_started<args.seconds:
                 tick=time.monotonic()
-                if (RUN/'STOP').exists():reason='Stopped by stop file';break
+                delta=min(2,tick-last_tick);last_tick=tick
+                if (RUN/'STOP').exists() or (RUN/'PAUSE').exists():reason='Stopped by stop file';break
                 if any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):
                     (RUN/'STOP').write_text('Stopped by physical hotkey');reason='Stopped by physical hotkey';break
                 try:
                     selected=find_window()
-                    if win32gui.IsIconic(selected) or win32gui.GetForegroundWindow()!=selected:
+                    if not foreground(selected):
                         raise RuntimeError('Waiting for Roblox')
-                    if win32gui.GetAncestor(win32gui.WindowFromPoint(win32gui.GetCursorPos()),2)!=selected:
-                        raise RuntimeError('Waiting for the pointer to return to Roblox')
                     rect=rectangle(selected)
                     if selected!=hwnd or screen is None or screen.rect!=rect:
+                        if hwnd is not None and hwnd!=selected and spot:
+                            spot.point=None  # A new Roblox process may be at another spawn.
                         inp.release();tracker.suspend();screen=ScreenSpace(rect);hwnd=selected;inp.hwnd=hwnd
-                    detection=detect(screen.capture(sct,(1850,400,140,600)))
+                        resuming=True
+                    if inp.interrupted.is_set():resuming=True
+                    if resuming:
+                        inp.release();inp.interrupted.clear();tracker.suspend()
+                        if spot:spot.resume(active_time)
+                        gate=PickupGate();last_scan=-10.;stable=False;world=False
+                        resuming=False;event('focus_resumed',message='Roblox foreground; checking the current scene.')
+                    else:active_time+=delta
+                    wait_reason=''
+                    roi=screen.capture(sct,(1850,400,140,600))
+                    detection=detect(roi)
                     ui=screen.capture(sct,(1190,1360,180,70))
-                    visible=cv2.minMaxLoc(cv2.matchTemplate(ui,template,cv2.TM_CCOEFF_NORMED))[1]>.84
+                    visible=ui_visible(ui,template)
                     down=tracker.step(detection,visible,tick)
-                    inp.hold(down)
                     stage='tracking' if tracker.active and visible else 'assist_waiting'
                     if detection is not None and visible:last_activity=time.time()
                     if tracker.count!=last_count:
                         last_count=tracker.count;event('minigame',cycle=tracker.count)
-                except (RuntimeError, ValueError, win32gui.error):
+                    if visible:
+                        inp.grab(False);inp.hold(down)
+                        if spot:spot.tracking(active_time)
+                        if detection is None:
+                            missing_since=missing_since or tick
+                            if tick-last_capture>.5:
+                                cv2.imwrite(str(RUN/f'vision-missing-{capture_index%12:02d}.png'),roi)
+                                capture_index+=1;last_capture=tick
+                        else:missing_since=None
+                        if tick-last_capture>1:
+                            cv2.imwrite(str(RUN/'vision-latest.png'),roi);last_capture=tick
+                        # Persistent missing visual data never authorizes a
+                        # blind cast or collection while the minigame is open.
+                        if missing_since and tick-missing_since>2:stage='waiting_marker'
+                    elif spot:
+                        if spot.stage=='tracking':
+                            inp.release()
+                            if tracker.clear_since is not None and tick-tracker.clear_since>.55:
+                                spot.ended(active_time);last_scan=-10.
+                        else:
+                            f8=bool(USER.GetAsyncKeyState(119)&0x8000)
+                            if f8 and not f8_down:
+                                x,y=win32gui.GetCursorPos()
+                                point=((x-rect[0])/screen.sx,(y-rect[1])/screen.sy)
+                                if spot.select(point,active_time):
+                                    gate=PickupGate();last_scan=-10.;equip_attempts=0
+                            f8_down=f8
+                            if spot.point and tick-last_scan>.35 and spot.stage not in ('cast_press','equipping','equip_wait'):
+                                frame=screen.capture(sct)
+                                evidence,world,rod=read_scene(frame,ocr)
+                                stable=gate.observe(evidence,time.monotonic());last_scan=time.monotonic()
+                                if inp.interrupted.is_set() or not foreground(hwnd):raise RuntimeError('Focus changed during observation')
+                            action=spot.step(active_time,evidence,stable,world,bool(rod and rod['equipped']))
+                            if action in ('cast','equip'):
+                                inp.release()
+                                if action=='equip':
+                                    equip_attempts+=1
+                                    if not load_config()['auto_rod'] or not rod or equip_attempts>3:
+                                        spot.stage='spot_attention'
+                                        event('rod_unreadable',message='Equip your rod, then point at water and press F8.')
+                                        continue
+                                    point=(rod['x'],rod['y'])
+                                else:point=spot.point;equip_attempts=0
+                                inp.aim(*screen.point(*point));inp.hold(True)
+                                spot.since=active_time+time.monotonic()-tick
+                            elif action=='hold':inp.grab(False);inp.hold(True)
+                            elif action=='collect':
+                                inp.hold(False)
+                                if not inp.t:spot.since=active_time+time.monotonic()-tick
+                                inp.grab(True)
+                            else:inp.release()
+                            stage=spot.stage
+                    else:
+                        inp.release()
+                except (RuntimeError, ValueError, win32gui.error) as error:
                     # No focus stealing, menu input, or relaunch in this mode.
-                    inp.release();tracker.suspend();stage='paused_focus'
+                    inp.release();tracker.suspend();stage='paused_focus';resuming=True
+                    if wait_reason!=str(error):event('assistant_waiting',message=str(error))
+                    wait_reason=str(error)
                 if tick>=next_state:status();next_state=tick+1
                 time.sleep(max(.01, .03-(time.monotonic()-tick)))
     except BaseException as error:
         reason=str(error);raise
     finally:
-        inp.release();event('stopped',reason=reason);status(False);log.close()
+        done.set();watcher.join(timeout=1);inp.release();event('stopped',reason=reason);status(False);log.close()
     return 0
 
 

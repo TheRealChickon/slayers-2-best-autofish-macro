@@ -21,13 +21,13 @@ issues=[]
 if not result['stop_requested']:
     if not result['supervisor_alive'] or not supervisor.get('running'):issues.append('Supervisor stopped')
     elif supervisor.get('stage')=='fishing' and (not result['worker_alive'] or now-worker.get('updated',0)>15):issues.append('Fishing worker missing or stale')
-    elif supervisor.get('stage')=='paused_focus' and supervisor.get('mode')!='assist':issues.append('Paused because Roblox is not foreground')
+    elif supervisor.get('stage')=='paused_focus' and supervisor.get('mode','full')=='full':issues.append('Paused because Roblox is not foreground')
     elif supervisor.get('stage')=='recovering' and now-supervisor.get('updated',0)>200:issues.append('Recovery stalled')
-    if supervisor.get('running') and supervisor.get('mode')!='assist' and worker.get('elapsed',0)>300 and not result['recent_5min']['reward_banners']:issues.append('No confirmed collected reward in five minutes')
+    if supervisor.get('running') and supervisor.get('mode','full')=='full' and worker.get('elapsed',0)>300 and not result['recent_5min']['reward_banners']:issues.append('No confirmed collected reward in five minutes')
 result['totals']=read('totals.json')
 result['presence']=read('presence.json')
 presence=result['presence']
-if supervisor.get('running') and supervisor.get('mode')!='assist' and not result['stop_requested'] and presence.get('ok') and now-presence.get('checked_at',0)<180 and presence.get('type')!=2:
+if supervisor.get('running') and supervisor.get('mode','full')=='full' and not result['stop_requested'] and presence.get('ok') and now-presence.get('checked_at',0)<180 and presence.get('type')!=2:
     if now-worker.get('last_game_activity',now)>75 and not (worker.get('stage')=='inventory' and now-worker.get('updated',0)<20):issues.append('Roblox presence reports account outside a game and fishing activity has stopped')
 result['issues']=issues
 print(json.dumps(result,indent=2))

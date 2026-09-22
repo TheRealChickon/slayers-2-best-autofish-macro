@@ -21,7 +21,7 @@ A Windows fishing assistant for the Project Slayers 2 / Ouwland fishing minigame
 | Operating system | Windows x64; not macOS, Linux, mobile, or Roblox console |
 | Game | This game's Ouwland fishing minigame; not arbitrary Roblox games |
 | Display | Automatic scaling for a 16:9 Roblox client area, with normal game UI scale. 1920 × 1080 and 2560 × 1440 tested live; see resolution notes below |
-| Position | Saved spawn at the fishing spot; optional local reference corrects small camera and position drift. No travel across the map |
+| Position | Full farmer uses a saved spawn; Fish here repeats at a point you choose with F8. No travel across the map |
 | Focus | Roblox must stay visible and foreground; switching apps pauses input |
 
 Setup has been tested from a clean source checkout on Windows with Python 3.12. Portability removes hardcoded account and computer paths; it does not remove the screen-layout and in-game setup requirements.
@@ -70,7 +70,29 @@ Opening or closing either view leaves the controller unchanged. **Pause** releas
 
 If you move the installation folder, run `Setup.cmd` again to refresh the shortcut paths.
 
-## Terminal app
+## Fishing modes
+
+| Mode | You control | Assistant handles |
+| --- | --- | --- |
+| **Full farmer** (`full`) | Saved spawn and initial setup | Rod, casts, minigame, collection, inventory checks, local repairs and reconnects |
+| **Minigame only** (`assist`) | Spot, rod, casts and pickups | Minigame mouse hold/release |
+| **Fish here** (`spot`) | Spot and camera; point at water and press F8 | Repeated casts, minigame and collection; visible rod auto-equip when enabled |
+
+### Fish here
+
+Choose **Settings → Mode → Fish here**, save and Continue. Or run:
+
+```powershell
+.\fishing.cmd spot
+```
+
+Bring Roblox forward, position your character and camera, hover the mouse over the water you want to cast at, and press **F8**. It checks the scene, then repeats fishing there and holds T only for a recognized Collect prompt. Bait is optional. Empty rounds continue normally. Confirmed reward banners are added to the item journal; this mode does not open inventory to identify unknown drops.
+
+**Alt-Tab pauses input immediately.** Return to Roblox with the pointer inside its window to continue automatically. It rechecks any current minigame or pickup before casting again. It never moves the character or camera, rejoins, or relaunches the game. A disconnect/menu waits for you to fix it. Three unsuccessful cast or pickup attempts wait for you to check the spot and press F8 again.
+
+Press F8 between rounds to choose a different point. Move your character/camera while paused, then select the new point. The point lasts for this controller session and adapts to a resized 16:9 client; restarting the controller or Roblox requires another F8 selection so an old coordinate cannot silently start fishing in a new location. F9/F12/Escape and the app's Pause/Stop remain available.
+
+The detector combines color and target-outline checks so transparent green/yellow bars remain recognizable over red scenery. It still requires the fishing UI and white marker; obscured or ambiguous markers release input instead of guessing. A bounded set of missed-marker crops is retained locally for diagnosis.
 
 ### Minigame only
 
@@ -85,6 +107,8 @@ Or start it directly:
 You choose the spot, position the camera, equip the rod, cast, and collect with T. The assistant only holds/releases the left mouse button while it recognizes the fishing minigame. It does not move the mouse or character, cast, equip, open inventory, collect, purchase, rejoin, or relaunch Roblox. It releases input when the UI disappears or focus is lost, and waits for Roblox to be foreground again. Q closes the view; P/S or F9/F12/Escape stop the controller as usual.
 
 Detected minigames add to the hook count. Manual pickups are not recorded in the item journal in this mode. Waiting for your next cast is normal and does not trigger recovery. Use `fishing.cmd continue --mode full` after pausing to return to the full farmer.
+
+## Terminal app
 
 Launch **Fishing CLI**, or run:
 

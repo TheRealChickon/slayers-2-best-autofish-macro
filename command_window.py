@@ -18,7 +18,7 @@ from fishing_assistant import ROOT, find_window, rectangle
 from item_journal import Journal
 from status_view import snapshot, duration
 import control_actions as actions
-from app_config import load_config, save_config, resolve_account
+from app_config import load_config, save_config, resolve_account, MODES
 from live_feed import LiveFeed
 from ui_motion import SoftButton, tween, mix
 
@@ -289,8 +289,9 @@ class Window:
         options=tk.Frame(self.settings_page,bg=BG);options.pack(side='left',anchor='n',fill='x',expand=True)
         mode_row=tk.Frame(form,bg=BG);mode_row.pack(fill='x',pady=(6,12))
         tk.Label(mode_row,text='Mode',bg=BG,fg=MUTED,font=(FONT,10),width=18,anchor='w').pack(side='left')
-        self.mode_var=tk.StringVar(value='Minigame only' if config.get('mode')=='assist' else 'Full farmer')
-        ttk.Combobox(mode_row,textvariable=self.mode_var,values=('Full farmer','Minigame only'),state='readonly',width=23).pack(side='left',ipady=5)
+        self.mode_var=tk.StringVar(value=MODES[config['mode']])
+        ttk.Combobox(mode_row,textvariable=self.mode_var,values=tuple(MODES.values()),state='readonly',width=23).pack(side='left',ipady=5)
+        tk.Label(form,text='Fish here: point at water, then F8.\nAlt-Tab pauses; returning resumes.',bg=BG,fg=MUTED,font=(FONT,9),justify='left').pack(anchor='w',pady=(0,8))
         for key,label in [('account_username','Roblox username'),('rod_slot','Rod slot')]:
             row=tk.Frame(form,bg=BG);row.pack(fill='x',pady=(6,12))
             tk.Label(row,text=label,bg=BG,fg=MUTED,font=(FONT,10),width=18,anchor='w').pack(side='left')
@@ -314,7 +315,7 @@ class Window:
 
     def save_settings(self):
         values={key:var.get() for key,var in self.setting_vars.items()}
-        mode='assist' if self.mode_var.get()=='Minigame only' else 'full'
+        mode=next(key for key,label in MODES.items() if label==self.mode_var.get())
         def save():
             if mode!=load_config().get('mode','full') and (actions.alive() or actions.starting()):
                 raise ValueError('Pause before switching modes.')
