@@ -1,0 +1,170 @@
+"""Client events and control boundaries, with no game input or real run writes."""
+import io
+import json
+import sys
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import app_config
+import control_actions
+import control_api
+import fishing_cli
+import item_journal
+import live_feed
+import metrics
+import status_view
+import terminal_app
+from cli_effects import CatchEffects
+
+
+def catch(at=100, name='Golden Fish', reward_id='drop-1'):
+    return {'at': at, 'item': name, 'quantity': 1, 'session': 'test',
+            'reward_id': reward_id, 'raw': name+' X1'}
+
+
+class CatchLifecycle(unittest.TestCase):
+    def test_history_duplicates_corrections_and_expiry(self):
+        fx = CatchEffects()
+        old = catch(99, reward_id='old')
+        fx.observe([old], 1, 100, 10)
+        self.assertIsNone(fx.active)
+        new = catch()
+        fx.observe([old, new], 1, 101, 11)
+        self.assertIn('Golden Fish', fx.active.title)
+        fx.observe([old, new], 1, 102, 12)
+        self.assertEqual(fx.active.started, 11)
+        self.assertIsNone(fx.rows(80, 16))
+        unknown = catch(102, 'Unidentified item', 'unknown')
+        fx.observe([old, new, unknown], 1, 102, 17)
+        unknown['item'] = 'Zebra Fish'
+        fx.observe([old, new, unknown], 1, 103, 18)
+        self.assertIsNone(fx.active)
+        fx.observe([catch(80, reward_id='delayed')], 1, 104, 19)
+        self.assertIsNone(fx.active)
+        fx.observe([catch(105)], 2, 105, 20)
+        self.assertIsNone(fx.active)
+
+    def test_bursts_are_bounded_and_reduced_motion_is_still(self):
+        fx = CatchEffects()
+        fx.observe([], 1, 100, 10)
+        fx.observe([catch(101, reward_id='one'), catch(102, 'Clown Fish', 'two')], 1, 103, 11)
+        self.assertIn('Clown Fish', fx.active.title)
+        self.assertEqual(fx.rows(61, 12, True), fx.rows(61, 14, True))
+        self.assertIsNone(fx.rows(61, 16, True))
+
+    def test_secret_timeout_and_unrelated_keys_reset_sequence(self):
+        fx = CatchEffects()
+        for key in 'blu': fx.key(key, 10)
+        fx.key('b', 13)
+        self.assertIsNone(fx.active)
+        fx.key('s', 13)
+        for key in 'lub': fx.key(key, 13)
+        self.assertIsNone(fx.active)
+        for key in 'blub': fx.key(key, 14)
+        self.assertEqual(fx.active.kind, 'egg')
+        self.assertIsNone(fx.rows(61, 20))
+
+
+class IsolatedClients(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        for module in (metrics, item_journal, live_feed, control_actions, status_view):
+            p = patch.object(module, 'RUN', self.root)
+            p.start(); self.addCleanup(p.stop)
+        for target, value in ((app_config, 'CONFIG'),):
+            p = patch.object(target, value, self.root/'config.local.json')
+            p.start(); self.addCleanup(p.stop)
+        for name in ('alive', 'starting'):
+            p = patch.object(control_actions, name, return_value=False)
+            p.start(); self.addCleanup(p.stop)
+        metrics.write('totals.json', {'started': 1})
+
+    def append(self, rows):
+        with (self.root/'events-test.jsonl').open('a', encoding='utf-8') as stream:
+            for row in rows: stream.write(json.dumps(row)+'\n')
+
+    def test_refresh_new_reward_animates_without_changing_journal(self):
+        app = terminal_app.Terminal()
+        with patch('time.time', return_value=100):
+            app.refresh()
+            self.append([{'at': 100, 'event': 'reward_observed', 'text': 'Golden Fish X1', 'reward_id': 'one'}])
+            app.refresh()
+            self.assertIn('Golden Fish', app.effects.active.title)
+            app.refresh()
+        self.assertEqual(app.journal.counts, {'Golden Fish': 1})
+        self.assertEqual(len(app.journal.items), 1)
+
+    def test_effects_preserve_controls_log_layout_and_editing(self):
+        app = terminal_app.Terminal(); app.refresh(); app.switch(2)
+        app.changed_at -= 1
+        before = app.render(100, 32)
+        for key in 'blub': app.key(key)
+        after = app.render(100, 32)
+        self.assertEqual(before[7:], after[7:])
+        for width, height in ((65, 22), (100, 32), (150, 50)):
+            lines = app.render(width, height)
+            self.assertTrue(any('S stop' in line for line in lines))
+            self.assertLessEqual(len(lines), height-1)
+            self.assertTrue(all(len(terminal_app.ANSI.sub('', line)) < width for line in lines))
+        app.effects.active = None
+        app.edit('Search')
+        for key in 'blub': app.key(key)
+        self.assertEqual(app.buffer, 'blub')
+        self.assertIsNone(app.effects.active)
+        app.key('CANCEL'); app.busy = True
+        for key in 'blub': app.key(key)
+        with patch.object(control_actions, 'stop', return_value='Stopped') as stop:
+            app.key('s'); stop.assert_called_once()
+        app.key('q'); self.assertFalse(app.alive)
+
+    def test_api_read_commands_are_json_and_do_not_control_game(self):
+        with patch.object(control_actions, 'resume') as resume, patch.object(control_actions, 'pause') as pause, patch.object(control_actions, 'stop') as stop:
+            for operation in ('status', 'items', 'events'):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    code = fishing_cli.main(['api', operation, '--request-id', 'discord-later'])
+                envelope = json.loads(output.getvalue())
+                self.assertEqual(code, 0)
+                self.assertTrue(envelope['ok'])
+                self.assertEqual(envelope['api_version'], 1)
+                self.assertEqual(envelope['request_id'], 'discord-later')
+                self.assertNotIn('\x1b', output.getvalue())
+            resume.assert_not_called(); pause.assert_not_called(); stop.assert_not_called()
+        self.assertFalse((self.root/'STOP').exists())
+
+    def test_api_event_ids_survive_polls_appends_and_equal_events(self):
+        row = {'at': 100, 'event': 'reward_observed', 'text': 'Golden Fish X1'}
+        self.append([row, row])
+        first = control_api.dispatch('events')[0]['data']['events']
+        self.assertEqual(len(first), 2)
+        self.assertNotEqual(first[0]['id'], first[1]['id'])
+        self.append([dict(row, at=101)])
+        second = control_api.dispatch('events')[0]['data']['events']
+        self.assertEqual(second[:2], first)
+        self.assertFalse(any(row['kind'] == 'state' for row in second))
+
+    def test_api_controls_delegate_and_errors_are_structured(self):
+        for command in ('pause', 'resume', 'stop'):
+            with patch.object(control_actions, command, return_value='Requested') as action:
+                response, code = control_api.dispatch(command)
+                action.assert_called_once_with()
+                self.assertEqual(code, 0)
+                self.assertIn('status', response['data'])
+        with patch.object(control_actions, 'resume', side_effect=RuntimeError('Busy')):
+            response, code = control_api.dispatch('resume', 'r1')
+            self.assertEqual(code, 1)
+            self.assertEqual(response['error'], {'code': 'command_failed', 'message': 'Busy'})
+            self.assertEqual(response['request_id'], 'r1')
+        with patch.object(control_actions, 'stop') as stop:
+            self.assertEqual(control_api.dispatch('stop', limit=0)[1], 2)
+            self.assertEqual(control_api.dispatch('shell')[1], 2)
+            stop.assert_not_called()
+
+
+if __name__ == '__main__': unittest.main()

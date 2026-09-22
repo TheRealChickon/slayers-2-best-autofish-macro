@@ -10,6 +10,7 @@ import time
 
 import control_actions as actions
 from app_config import load_config, resolve_account, save_config
+from cli_effects import CatchEffects
 from item_journal import Journal
 from live_feed import LiveFeed, event_tone, state_tone
 from metrics import read, write
@@ -59,6 +60,7 @@ class Terminal:
         self.height = 30
         self.last_lines = []
         self.changed_at = time.monotonic()
+        self.effects = CatchEffects()
 
     def refresh(self):
         while not self.jobs.empty():
@@ -67,6 +69,7 @@ class Terminal:
             self.toast(text, ok)
         self.data = snapshot(self.journal)
         self.config = load_config()
+        self.effects.observe(self.journal.items, self.data['started'], time.time(), time.monotonic())
         self.feed.update(self.data['started'], self.data['state'])
         if self.page == 1:
             self.selection = min(self.selection, max(0, len(self.item_rows())-1))
@@ -140,11 +143,13 @@ class Terminal:
 
     def key(self, key):
         if self.editing:
+            self.effects.secret = ''
             if key == 'ENTER': self.finish_edit()
             elif key == 'CANCEL': self.editing = None
             elif key == 'BACKSPACE': self.buffer = self.buffer[:-1]
             elif len(key) == 1 and key.isprintable(): self.buffer += key
             return
+        self.effects.key(key, time.monotonic())
         if key.lower() == 'q': self.alive = False
         elif key in ('RIGHT', 'TAB'): self.switch(self.page+1)
         elif key in ('LEFT', 'BACKTAB'): self.switch(self.page-1)
@@ -219,6 +224,9 @@ class Terminal:
         lines = ['', '  '+tint('FISHING', 'gold')+'     '+state+'     '+tint(d['presence'], 'dim'), '',
                  '  '+'     '.join(tint(f'{i+1} {name}', 'gold' if i==self.page else 'dim') for i,name in enumerate(self.pages)), '',
                  '  '+tint('─'*min(width-4, 110), 'dim'), '']
+        effect_rows = self.effects.rows(width-4, time.monotonic(), self.config['reduced_motion'])
+        if effect_rows:
+            lines[4:7] = ['  '+''.join(tint(text, tone) for text, tone in row) for row in effect_rows]
         available = height-12
         offset = 0 if self.config['reduced_motion'] else round(3*max(0, 1-(time.monotonic()-self.changed_at)/.18))
         lines += ['  '+' '*offset+line for line in self.body(available)[:available]]
