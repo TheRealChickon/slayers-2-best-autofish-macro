@@ -69,7 +69,11 @@ class Recovery:
                 until+=time.monotonic()-paused_at
             self.guard() if focus else self.check_stop();time.sleep(.025)
     def move(self,x,y):
-        self.guard();move_pointer(*self.screen.point(x,y))
+        self.guard()
+        try:move_pointer(*self.screen.point(x,y))
+        except RuntimeError as error:
+            if reason_code(str(error))!='focus':raise
+            self.inp.gate.interrupted.set();raise InputPaused('paused_focus') from error
     def click(self,x,y,hold=.18):
         self.move(x,y);self.sleep(.30);self.move(x+1,y);self.sleep(.15);self.move(x,y);self.sleep(.30)
         self.inp.hold(True)
@@ -290,6 +294,7 @@ def main():
                 if 'lost focus' in last_error and driver.hwnd and win32gui.IsWindow(driver.hwnd):
                     while win32gui.GetForegroundWindow()!=driver.hwnd and time.monotonic()<deadline:
                         driver.check_stop();status('paused_focus');time.sleep(.3)
+                    force=False
                     continue
                 if 'window changed' in last_error:
                     # Reconnect can move the same full-screen client to another monitor.

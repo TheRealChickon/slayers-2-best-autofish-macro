@@ -10,6 +10,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import full_pause
 import fishing_assistant as fishing
 import presence_watch
+import recovery
 from full_pause import F8Toggle, InputGate, InputPaused, resumed_stage
 
 
@@ -82,6 +83,14 @@ class FullPauseTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'window closed'):self.gate.check()
         (self.root/'F8_PAUSE').write_text('Paused')
         with self.assertRaises(InputPaused):self.gate.check()
+
+    def test_focus_change_during_recovery_mouse_move_is_a_pause(self):
+        driver=object.__new__(recovery.Recovery)
+        driver.inp=self.inp;driver.guard=Mock();driver.screen=Mock()
+        driver.screen.point.return_value=(1600,800)
+        with patch.object(recovery,'move_pointer',side_effect=RuntimeError('Pointer did not reach the intended game position')):
+            with self.assertRaises(InputPaused):driver.move(1600,800)
+        self.assertTrue(self.gate.interrupted.is_set())
 
     def test_paused_worker_cannot_trigger_presence_recovery(self):
         present={'ok':True,'type':0};sup={'running':True,'stage':'fishing'}
