@@ -16,6 +16,8 @@ def describe(row):
     if kind == 'inventory_resolved':return 'Identified ' + row.get('item','item') + ' from inventory'
     if kind == 'inventory_recovered':return 'Confirmed ' + row.get('item','item') + ' from inventory · banner missed'
     if kind == 'inventory_checked':return f'Inventory checked · {row.get("items",0)} item types'
+    if kind == 'inventory_unreadable' and row.get('retry_minutes'):
+        return f'{row.get("message", "Inventory unreadable")} · next eligible check in {row["retry_minutes"]} min'
     if kind == 'pickup_hold':return f'Collecting · attempt {row.get("attempt", 1)}'
     if kind == 'screen':return 'Recovery · ' + row.get('kind', 'checking').replace('_',' ')
     return row.get('message') or row.get('reason') or kind.replace('_', ' ').capitalize()

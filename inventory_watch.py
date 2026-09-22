@@ -13,6 +13,11 @@ from item_names import item_name, inventory_name
 from metrics import RUN, read, write
 
 GRID_X, GRID_Y, STEP = 943, 157, 99.2
+CHECK_INTERVAL = 10 * 60
+SCAN_BUDGET = 20
+MAX_BACKOFF = 60 * 60
+MAX_PENDING = 32
+CACHE_MAX_AGE = 30 * 60
 
 
 def unknown(name):
@@ -40,6 +45,7 @@ def reconcile(before, after, known, pending_quantity):
 class InventoryDriver:
     def __init__(self, hwnd, screen, sct, inp, ocr, user, move):
         self.hwnd,self.screen,self.sct,self.inp,self.ocr,self.user,self.move_pointer = hwnd,screen,sct,inp,ocr,user,move
+        self.deadline = None
 
     def guard(self):
         if any(self.user.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):
@@ -51,6 +57,8 @@ class InventoryDriver:
         l,t,r,b=win32gui.GetClientRect(self.hwnd);x,y=win32gui.ClientToScreen(self.hwnd,(0,0))
         if (x,y,x+r-l,y+b-t)!=self.screen.rect:
             raise RuntimeError('Roblox window changed during inventory check')
+        if self.deadline is not None and time.monotonic() >= self.deadline:
+            raise ValueError('Inventory scan time budget reached; continuing fishing')
 
     def sleep(self,seconds):
         until=time.monotonic()+seconds
@@ -80,6 +88,7 @@ class InventoryDriver:
     def text(self,frame,min_confidence=.80):
         # Inventory text is always upright. Angle classification can turn x9 into 6x.
         self.guard();rows,_=self.ocr(frame,use_cls=False)
+        self.guard()
         return [r for r in rows or [] if r[2]>min_confidence]
 
 
@@ -194,8 +203,10 @@ class InventoryScanner:
             readings.append(int(match[1]) if match and int(match[1])>0 else None)
         return readings[0] if readings[0] is not None and readings[0]==readings[1] else None
 
-    def scan(self):
+    def scan(self,max_seconds=SCAN_BUDGET):
         d=self.driver
+        previous_deadline=d.deadline
+        d.deadline=time.monotonic()+max_seconds
         try:
             self.progress(done=0,total=0)
             frame=self.open();total=self.inventory_count(frame)
@@ -231,6 +242,9 @@ class InventoryScanner:
             write('inventory-slots.json',{'at':time.time(),'items':read_items})
             return dict(result)
         finally:
+            # Closing the menu still runs when the scanning budget expires.
+            # The focus, window and manual-stop guards remain in force.
+            d.deadline=previous_deadline
             frame=d.capture()
             labels=' '.join(r[1] for r in d.text(frame[340:470,10:340])).lower()
             if self.inventory_count(frame) is not None or 'inventory' in labels:
@@ -241,50 +255,123 @@ class InventoryScanner:
 
 
 class InventoryWatcher:
-    def __init__(self,driver,event,progress=lambda **kw:None):
+    def __init__(self,driver,event,progress=lambda **kw:None,clock=None):
         self.driver,self.event=driver,event
         self.scanner=InventoryScanner(driver,event,progress)
-        self.baseline=None;self.known=collections.Counter();self.pending=None
-        self.enabled=load_config().get('inventory_check',True)
+        self.clock=clock or time.time
+        config=load_config()
+        self.enabled=config.get('inventory_check',True)
+        self.scope={'supervisor':read('supervisor.json').get('started'),
+                    'account':[config.get('user_id'),config.get('account_username','').lower()],
+                    'place':config.get('place_id')}
+        self.baseline=None;self.known=collections.Counter();self.pending=[]
+        self.overflow=False;self.round_active=False;self.failures=0;self.next_check_at=0
+        saved=read('inventory-watch.json')
+        legacy=read('inventory-baseline.json')
+        self.had_checkpoint=bool(saved or legacy)
+        now=self.clock()
+        if saved.get('schema')==1:
+            # Keep the throttle even after a crash, account change or manual pause.
+            self.next_check_at=min(now+MAX_BACKOFF,max(0,saved.get('next_check_at',0)))
+            self.failures=min(3,max(0,saved.get('failures',0)))
+            if (self.scope['supervisor'] is not None and saved.get('scope')==self.scope
+                    and not saved.get('round_active',True)
+                    and 0<=now-saved.get('updated_at',0)<CACHE_MAX_AGE):
+                self.baseline=saved.get('baseline')
+                self.known=collections.Counter(saved.get('known',{}))
+                pending=saved.get('pending',[])
+                self.pending=pending[:MAX_PENDING]
+                self.overflow=saved.get('overflow',False) or len(pending)>MAX_PENDING
+        elif legacy:
+            # Old baselines lack known-catch accounting; never guess from them.
+            self.next_check_at=min(now+CHECK_INTERVAL,legacy.get('at',0)+CHECK_INTERVAL)
+
+    def checkpoint(self):
+        if not self.enabled:return
+        write('inventory-watch.json',{'schema':1,'scope':self.scope,'updated_at':self.clock(),
+            'baseline':self.baseline,'known':dict(self.known),'pending':self.pending,
+            'overflow':self.overflow,'round_active':self.round_active,
+            'failures':self.failures,'next_check_at':self.next_check_at})
+
+    def begin_round(self):
+        if not self.enabled or self.round_active:return
+        # Persist BEFORE a cast. An interrupted round may contain unlogged loot,
+        # so a later worker must discard its baseline rather than misname a drop.
+        self.round_active=True;self.checkpoint()
+
+    def end_round(self):
+        if not self.enabled:return
+        self.round_active=False;self.checkpoint()
 
     def snapshot(self,reason):
+        started=self.clock()
+        # Reserve the next slot before opening the menu, including crash paths.
+        self.next_check_at=started+min(MAX_BACKOFF,CHECK_INTERVAL*2**self.failures)
+        self.checkpoint()
         try:
-            result=self.scanner.scan()
-            self.event('inventory_checked',reason=reason,items=len(result))
+            result=self.scanner.scan(max_seconds=SCAN_BUDGET)
+            self.failures=0
+            self.event('inventory_checked',reason=reason,items=len(result),seconds=round(self.clock()-started,1))
             return result
         except ValueError as error:
-            self.event('inventory_unreadable',message=str(error))
-            write('inventory-progress.json',{'at':time.time(),'stage':'unreadable','message':str(error)})
+            self.failures=min(3,self.failures+1)
+            self.event('inventory_unreadable',message=str(error),retry_minutes=min(MAX_BACKOFF,CHECK_INTERVAL*2**self.failures)//60)
+            write('inventory-progress.json',{'at':self.clock(),'stage':'unreadable','message':str(error)})
             return None
+        finally:
+            # Cooldown starts after the attempt, not while its menu is open.
+            self.next_check_at=self.clock()+min(MAX_BACKOFF,CHECK_INTERVAL*2**self.failures)
+            self.checkpoint()
 
     def start(self):
         if not self.enabled:return
-        self.baseline=self.snapshot('baseline')
-        if self.baseline is not None:write('inventory-baseline.json',{'at':time.time(),'counts':self.baseline})
+        if self.had_checkpoint:
+            self.event('inventory_cached',message=('Inventory baseline reused; fishing continues' if self.baseline is not None
+                else 'Inventory comparison deferred until an unknown catch; fishing continues'))
+        else:
+            self.baseline=self.snapshot('baseline')
+            if self.baseline is not None:write('inventory-baseline.json',{'at':self.clock(),'counts':self.baseline})
+        self.checkpoint()
+
+    def queue(self,pending):
+        if any(row['reward_id']==pending['reward_id'] for row in self.pending):return
+        if len(self.pending)<MAX_PENDING:self.pending.append(pending)
+        else:self.overflow=True
+        self.checkpoint()
 
     def observe(self,raw,prompt,reward_id):
         if not self.enabled:return
         name=item_name(raw,prompt);amount=quantity(raw)
-        if unknown(name):self.pending={'reward_id':reward_id,'quantity':amount}
-        else:self.known[name]+=amount
+        if unknown(name):self.queue({'reward_id':reward_id,'quantity':amount})
+        else:
+            self.known[name]+=amount
+            self.checkpoint()
 
     def observe_unconfirmed(self,prompt,reward_id):
         if self.enabled and prompt:
-            self.pending={'reward_id':reward_id,'quantity':1,'unconfirmed':True,'raw':prompt}
+            self.queue({'reward_id':reward_id,'quantity':1,'unconfirmed':True,'raw':prompt})
 
     def check_pending(self):
-        if not self.pending:return
-        pending=self.pending;self.pending=None
-        after=self.snapshot('unknown drop')
+        if not self.enabled or not self.pending or self.clock()<self.next_check_at:return
+        pending=self.pending
+        # No periodic scans: only unresolved loot can make a check eligible.
+        after=self.snapshot('unknown drop' if len(pending)==1 else 'unknown drops')
         if after is None:
             # Losing the baseline prevents a later scan from attributing stale gains.
-            self.baseline=None;self.known.clear();return
-        resolved=reconcile(self.baseline,after,self.known,pending['quantity']) if self.baseline is not None else None
+            self.baseline=None;self.known.clear();self.pending=[];self.overflow=False
+            self.checkpoint();return
+        # Several unknown catches can be different items or missed pickups.
+        # Keep their original evidence instead of allocating an aggregate delta.
+        candidate=pending[0]
+        resolved=(reconcile(self.baseline,after,self.known,candidate['quantity'])
+                  if self.baseline is not None and len(pending)==1 and not self.overflow else None)
         if resolved:
-            self.event('inventory_recovered' if pending.get('unconfirmed') else 'inventory_resolved',
-                reward_id=pending['reward_id'],item=resolved,quantity=pending['quantity'],raw=pending.get('raw',''),source='inventory difference')
+            self.event('inventory_recovered' if candidate.get('unconfirmed') else 'inventory_resolved',
+                reward_id=candidate['reward_id'],item=resolved,quantity=candidate['quantity'],raw=candidate.get('raw',''),source='inventory difference')
         else:
-            self.event('inventory_ambiguous',reward_id=pending['reward_id'],message='Inventory comparison was inconclusive; original drop retained')
-        self.baseline=after;self.known.clear()
-        write('inventory-baseline.json',{'at':time.time(),'counts':after})
-        if resolved and pending.get('unconfirmed'):return {'item':resolved,'quantity':pending['quantity']}
+            self.event('inventory_ambiguous',pending=len(pending),overflow=self.overflow,
+                message='Inventory comparison was inconclusive; original drops retained')
+        self.baseline=after;self.known.clear();self.pending=[];self.overflow=False
+        write('inventory-baseline.json',{'at':self.clock(),'counts':after})
+        self.checkpoint()
+        if resolved and candidate.get('unconfirmed'):return {'item':resolved,'quantity':candidate['quantity']}
