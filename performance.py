@@ -7,7 +7,8 @@ from metrics import read, write
 def phase(supervisor, worker):
     if supervisor == 'paused_focus': return 'focus_wait'
     if supervisor != 'fishing': return 'recovery'
-    return {'tracking':'minigame','waiting':'bite_wait','casting':'casting','equipping':'casting',
+    return {'tracking':'minigame','waiting_marker':'minigame','waiting':'bite_wait','casting':'casting','cast_press':'casting','equipping':'casting','equip_wait':'casting',
+            'assist_waiting':'manual_wait','select_spot':'manual_wait','spot_blocked':'manual_wait','spot_attention':'manual_wait','checking_spot':'pickup',
             'pickup_wait':'pickup','pickup':'pickup','pickup_retry_wait':'pickup','inventory':'inventory',
             'cooldown':'cooldown'}.get(worker.get('stage'), 'starting')
 

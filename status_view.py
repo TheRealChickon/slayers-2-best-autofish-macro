@@ -4,6 +4,7 @@ import time
 from metrics import RUN, read
 from item_journal import Journal
 from performance import recent
+from app_config import load_config
 import control_actions as actions
 
 
@@ -28,7 +29,11 @@ def snapshot(journal=None):
     elif live:
         fishing_states = {'tracking':'Assisting minigame' if supervisor.get('mode')=='assist' else 'Fishing',
                           'pickup':'Collecting','waiting':'Waiting for a bite','casting':'Casting',
-                          'inventory':'Reading inventory','assist_waiting':'Waiting for your cast'}
+                          'inventory':'Reading inventory','assist_waiting':'Waiting for your cast',
+                          'select_spot':'Point at water and press F8','checking_spot':'Checking fishing spot',
+                          'spot_blocked':'Waiting for fishing scene','spot_attention':'Check the spot, then press F8',
+                          'waiting_marker':'Waiting for a clear marker','pickup_wait':'Checking pickup',
+                          'cast_press':'Casting','equipping':'Equipping rod','equip_wait':'Equipping rod','cooldown':'Next cast'}
         state = ('Waiting for Roblox' if stage=='paused_focus' else fishing_states.get(worker.get('stage'),'Fishing')
                  if stage=='fishing' else stage.replace('_',' ').title())
     else:
@@ -41,7 +46,7 @@ def snapshot(journal=None):
     unknown = sum(qty for name, qty in journal.counts.items()
                   if name == 'Unidentified item' or name.endswith('(partial)'))
     return {
-        'state': state, 'mode': supervisor.get('mode','full'), 'running': live, 'starting': starting, 'stop_requested': stop,
+        'state': state, 'mode': supervisor.get('mode','full') if live else load_config()['mode'], 'running': live, 'starting': starting, 'stop_requested': stop,
         'paused': paused, 'started': totals.get('started'), 'updated': totals.get('updated'),
         'collections': totals.get('rewards', 0), 'items': sum(journal.counts.values()),
         'logged_collections': len(journal.items), 'unread_items': unknown,
@@ -54,6 +59,7 @@ def snapshot(journal=None):
                     'Not polled while stopped' if not live else 'Checking',
         'presence_fresh': bool(fresh),
         'recent': recent(journal), 'alignment': read('alignment.json'),
+        'selected_point':worker.get('selected_point'),
     }
 
 
