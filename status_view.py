@@ -32,6 +32,7 @@ def snapshot(journal=None):
                           'inventory':'Reading inventory','assist_waiting':'Waiting for your cast',
                           'select_spot':'Equip rod, aim, then F8','checking_spot':'Checking fishing spot',
                           'spot_paused':'Paused — F8 to resume',
+                          'assist_paused':'Paused — F8 to resume',
                           'waiting_rod':'Waiting for equipped rod',
                           'spot_blocked':'Waiting for fishing scene','spot_attention':'Check the spot, then press F8',
                           'waiting_marker':'Waiting for a clear marker','pickup_wait':'Checking pickup',
@@ -63,6 +64,7 @@ def snapshot(journal=None):
         'recent': recent(journal), 'alignment': read('alignment.json'),
         'spot_armed':worker.get('spot_armed',False),
         'spot_paused':worker.get('spot_paused',False),
+        'manual_paused':worker.get('manual_paused',False),
     }
 
 

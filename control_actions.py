@@ -102,7 +102,7 @@ def resume(mode=None):
             try:current_mode=json.loads((RUN/'supervisor.json').read_text()).get('mode','full')
             except (OSError,ValueError):current_mode='full'
             if current_mode!=mode:return 'Pause the current mode before switching modes.'
-            if mode=='assist':return 'Minigame only is active. Bring Roblox forward and cast manually.'
+            if mode=='assist':return 'Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.'
             if mode=='spot':return 'Fish here is active. Equip your rod, position the mouse, then press F8.'
             focus_game()
             event('continue', 'Returned focus to Roblox.')
@@ -122,7 +122,7 @@ def resume(mode=None):
         except Exception:
             (RUN / 'STOP').write_text('Continue failed; input stopped')
             raise
-        message = ('Minigame only is active. Bring Roblox forward and cast manually.' if mode=='assist' else
+        message = ('Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.' if mode=='assist' else
                    'Fish here is active. Equip your rod, position the mouse, then press F8; losing focus pauses input.' if mode=='spot' else
                    'Continuing the saved run. Rejoining and equipping the rod...')
         event('continue',message)
