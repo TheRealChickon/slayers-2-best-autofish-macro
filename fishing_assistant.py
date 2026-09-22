@@ -66,6 +66,22 @@ class Input:
             USER.keybd_event(ord('T'),scan,0 if down else 2,0); self.t=down
     def release(self): self.hold(False); self.grab(False)
 
+    def aim(self,x,y):
+        # Roblox can process its hotbar hover one frame behind the OS cursor.
+        # Let the same small hover movement used by recovery settle before a
+        # cast or rod click, rather than clicking the previous hotbar target.
+        for point,delay in (((x,y),.10),((x+1,y),.06),((x,y),.10)):
+            self.guard_press(True)
+            if (RUN/'STOP').exists():raise RuntimeError('Stopped by stop file')
+            move_pointer(*point)
+            until=time.monotonic()+delay
+            while time.monotonic()<until:
+                self.guard_press(True)
+                if (RUN/'STOP').exists():raise RuntimeError('Stopped by stop file')
+                if any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):
+                    raise RuntimeError('Stopped by Escape/F9/F12')
+                time.sleep(.01)
+
 def detect(roi):
     hsv=cv2.cvtColor(roi,cv2.COLOR_BGR2HSV)
     green=cv2.inRange(hsv,np.array([20,65,48]),np.array([100,255,255]))
@@ -212,7 +228,7 @@ def main():
                         frame=screen.capture(sct)
                         rod=locate_rod(frame);last_rod_check=now
                         if rod and not rod['equipped']:
-                            inp.release();move_pointer(*screen.point(rod['x'],rod['y']))
+                            inp.release();inp.aim(*screen.point(rod['x'],rod['y']))
                             # Recheck focus immediately before each injected button action.
                             if win32gui.GetForegroundWindow()!=hwnd:raise RuntimeError('Roblox lost focus; all inputs released')
                             inp.hold(True);time.sleep(.15);inp.hold(False)
@@ -221,7 +237,7 @@ def main():
                     # OCR and rod detection can delay this iteration substantially.
                     if not inp.mouse:
                         inventory.begin_round()
-                        move_pointer(*screen.point(1650,800))
+                        inp.aim(*screen.point(1650,800))
                         inp.hold(True);cast_press_started=time.monotonic()
                     elif cast_press_started is not None and time.monotonic()-cast_press_started>=.16:
                         inp.hold(False);cast_press_started=None;casts+=1;event('cast',cast=casts);stage='waiting';since=time.monotonic()
