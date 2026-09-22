@@ -106,7 +106,7 @@ def main():
     exit_template=cv2.imread(str(ROOT/'assets'/'exit.png'))
     inp=Input(hwnd);started=time.monotonic();now=started;stage='casting';since=now;lastseen=now;ledger=Ledger();last_gui_scan=0;last_tracking_cast=None;last_game_activity=time.time()
     prev=None;velocity=0.;target_velocity=0.;cycles=0;casts=0;missing_casts=0;track_frames=0;inside_frames=0;laststate=0;lastimage=0;last_rod_check=0
-    completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_reason='';last_reward='';end_percent=None;consecutive_failed=0
+    completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_reason='';last_reward='';end_percent=None;consecutive_failed=0;cast_press_started=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
     telemetry=open(RUN/f'tracking-{session}.csv','w',buffering=1);telemetry.write('time,cycle,ball,target,height,velocity,held,inside\n')
     def event(kind,**kw):log.write(json.dumps({'at':time.time(),'event':kind,**kw})+'\n');print(json.dumps({'event':kind,**kw}),flush=True)
@@ -188,10 +188,13 @@ def main():
                             if win32gui.GetForegroundWindow()!=hwnd:raise RuntimeError('Roblox lost focus; all inputs released')
                             inp.hold(True);time.sleep(.15);inp.hold(False)
                             event('rod_equipped',method='visible hotbar');stage='equipping';since=time.monotonic();continue
-                    if casts==0 or now-since<.06:
-                        inp.hold(True)
-                    if now-since>=.14:
-                        inp.hold(False);casts+=1;event('cast',cast=casts);stage='waiting';since=now
+                    # Time the actual press, not entry into the casting state:
+                    # OCR and rod detection can delay this iteration substantially.
+                    if not inp.mouse:
+                        move_pointer(rect[0]+1650,rect[1]+800)
+                        inp.hold(True);cast_press_started=time.monotonic()
+                    elif cast_press_started is not None and time.monotonic()-cast_press_started>=.16:
+                        inp.hold(False);cast_press_started=None;casts+=1;event('cast',cast=casts);stage='waiting';since=time.monotonic()
                 elif stage=='equipping':
                     if now-since>.65:
                         move_pointer(rect[0]+1650,rect[1]+800);stage='casting';since=now
