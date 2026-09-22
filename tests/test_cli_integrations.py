@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import app_config
 import control_actions
 import control_api
+import cli_scene
 import fishing_cli
 import item_journal
 import live_feed
@@ -140,22 +141,31 @@ class IsolatedClients(unittest.TestCase):
              patch.object(terminal_app.sys.stdout, 'flush'), \
              patch.object(terminal_app.time, 'sleep') as sleep:
             app.transition('opening')
-            self.assertEqual(write.call_count, 14)  # dashboard, 12 cast frames, restore header
-            self.assertEqual(sleep.call_count, 12)
-            self.assertNotIn('\x1b[2J', ''.join(call.args[0] for call in write.call_args_list))
+            self.assertEqual(write.call_count, 19)  # 18 full-screen frames, then dashboard
+            self.assertEqual(sleep.call_count, 18)
+            self.assertIn('\x1b[2J', write.call_args_list[0].args[0])
             app.config['reduced_motion'] = True
             app.transition('closing')
-            self.assertEqual(write.call_count, 14)
+            self.assertEqual(write.call_count, 19)
 
     def test_rod_cast_and_reel_frames_move_the_float(self):
         def float_position(phase, progress):
-            return terminal_app.ANSI.sub('', terminal_app.rod_scene_frame(80, progress, phase)[1]).index('●')
+            rows = [terminal_app.ANSI.sub('', line) for line in cli_scene.scene_frame(80, 24, progress, phase)]
+            return next((row.index('●'), y) for y, row in enumerate(rows) if '●' in row)
         self.assertLess(float_position('opening', 0), float_position('opening', 1))
         self.assertGreater(float_position('closing', 0), float_position('closing', 1))
-        frame = ''.join(terminal_app.ANSI.sub('', line) for line in terminal_app.rod_scene_frame(80, 1, 'opening'))
+        rows = [terminal_app.ANSI.sub('', line) for line in cli_scene.scene_frame(80, 24, 1, 'opening')]
+        frame = ''.join(rows)
+        self.assertEqual(len(rows), 23)
+        self.assertTrue(all(len(row) == 79 for row in rows))
+        for columns, lines in ((65, 22), (120, 40)):
+            sized = [terminal_app.ANSI.sub('', line) for line in cli_scene.scene_frame(columns, lines, .5, 'closing')]
+            self.assertEqual(len(sized), lines-1)
+            self.assertTrue(all(len(row) == columns-1 for row in sized))
         self.assertIn('╱', frame)
         self.assertIn('≈', frame)
         self.assertIn('✦', frame)
+        self.assertIn('><(((o>', frame)
 
     def test_console_restores_if_closing_animation_fails(self):
         app = terminal_app.Terminal()

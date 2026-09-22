@@ -12,6 +12,7 @@ import control_actions as actions
 from app_config import load_config, resolve_account, save_config, MODES
 from cast_point import capture_pointer, validate as validate_cast_point
 from cli_effects import CatchEffects
+from cli_scene import scene_frame
 from item_journal import Journal
 from live_feed import LiveFeed, event_tone, state_tone
 from metrics import read, write
@@ -38,54 +39,6 @@ def clip(line, width):
         elif count < width:
             pieces.append(piece[:width-count]); count += min(len(piece), width-count)
     return ''.join(pieces) + RESET
-
-
-def rod_scene_frame(width, progress, phase):
-    """Three header rows: a cast on open, a reel-in on close."""
-    width = max(1, min(width-1, 110))
-    cells = [[(' ', 'dim') for _ in range(width)] for _ in range(3)]
-
-    def put(row, column, symbol, tone):
-        if 0 <= row < 3 and 0 <= column < width:
-            cells[row][column] = (symbol, tone)
-
-    for offset, letter in enumerate('FISHING'):
-        put(1, 2+offset, letter, 'gold')
-    base = min(29, max(20, width//3))
-    tip = base+9+round(2*math.sin(math.pi*progress))
-    for row, column in ((2, base), (1, base+4), (0, tip-2)):
-        put(row, column, '╱', 'gold')
-        put(row, column+1, '╱', 'gold')
-    put(2, base-3, '━', 'gold')
-    put(2, base-2, '◉', 'gold')
-    put(2, base-1, '╱', 'gold')
-    for column in range(tip+5, width-1, 2):
-        put(2, column, '≈', 'cyan')
-
-    travel = progress if phase == 'opening' else 1-progress
-    travel = travel*travel*(3-2*travel)
-    float_x = round(tip+3 + (width-7-tip-3)*travel)
-    for column in range(tip, float_x):
-        put(0, column, '─', 'dim')
-    put(0, float_x, '╎', 'dim')
-    put(1, float_x, '●', 'red')
-    if phase == 'opening' and progress > .72:
-        put(1, float_x-2, '✦', 'cyan')
-        put(1, float_x+2, '✦', 'cyan')
-    elif phase == 'closing' and progress < .28:
-        put(1, float_x-2, '·', 'cyan')
-        put(1, float_x+2, '·', 'cyan')
-
-    result = []
-    for row in cells:
-        runs = []
-        for character, tone in row:
-            if runs and runs[-1][1] == tone:
-                runs[-1] = (runs[-1][0]+character, tone)
-            else:
-                runs.append((character, tone))
-        result.append(''.join(tint(text, tone) for text, tone in runs))
-    return result
 
 
 class Terminal:
@@ -388,26 +341,23 @@ class Terminal:
         return 0
 
     def transition(self, phase):
-        """Animate the rod in the dashboard header, without a loading screen."""
+        """Cast or reel across the whole terminal, then restore the dashboard."""
         if self.config['reduced_motion']:
             return
         size = shutil.get_terminal_size((100, 32))
         if size.columns < 65 or size.lines < 22:
             return
+        frames = 18 if phase == 'opening' else 14
+        for index in range(frames):
+            art = scene_frame(size.columns, size.lines, index/(frames-1), phase)
+            sys.stdout.write((ESC+'2J' if index == 0 else '') +
+                             ''.join(f'{ESC}{row+1};1H'+line
+                                     for row, line in enumerate(art)))
+            sys.stdout.flush()
+            time.sleep(.045)
         if phase == 'opening':
             self.refresh()
             self.last_lines = self.render(size.columns, size.lines)
-            sys.stdout.write(''.join(f'{ESC}{i+1};1H{ESC}2K'+line
-                                     for i, line in enumerate(self.last_lines)))
-            sys.stdout.flush()
-        frames = 12 if phase == 'opening' else 9
-        for index in range(frames):
-            art = rod_scene_frame(size.columns, index/(frames-1), phase)
-            sys.stdout.write(''.join(f'{ESC}{row+1};1H{ESC}2K'+line
-                                     for row, line in enumerate(art)))
-            sys.stdout.flush()
-            time.sleep(.05)
-        if phase == 'opening':
-            sys.stdout.write(''.join(f'{ESC}{row+1};1H{ESC}2K'+self.last_lines[row]
-                                     for row in range(min(3, len(self.last_lines)))))
+            sys.stdout.write(ESC+'2J'+''.join(f'{ESC}{row+1};1H'+line
+                                             for row, line in enumerate(self.last_lines)))
             sys.stdout.flush()
