@@ -9,6 +9,8 @@ from app_config import load_config
 from rod_detector import locate_rod
 from screen_space import ScreenSpace
 from inventory_watch import InventoryDriver, InventoryWatcher
+from pickup_policy import classify as classify_pickup, PickupGate
+from faults import FishingFault, FaultRecorder, reason_code
 
 ROOT = Path(__file__).resolve().parent
 USER = ctypes.windll.user32
@@ -148,6 +150,7 @@ def main():
     prev=None;velocity=0.;target_velocity=0.;cycles=0;casts=0;missing_casts=0;track_frames=0;inside_frames=0;laststate=0;lastimage=0;last_rod_check=0
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
+    diagnostics=FaultRecorder(RUN,session);pickup_gate=PickupGate();last_pickup_evidence={};failure_code='';failure_details={}
     telemetry=open(RUN/f'tracking-{session}.csv','w',buffering=1);telemetry.write('time,cycle,ball,target,height,velocity,held,inside\n')
     def event(kind,**kw):log.write(json.dumps({'at':time.time(),'event':kind,**kw})+'\n');print(json.dumps({'event':kind,**kw}),flush=True)
     def inventory_progress(**kw):
@@ -162,6 +165,7 @@ def main():
         inventory.observe(raw,last_prompt,reward_id)
     def screenshot(tag):
         im=screen.capture(sct)
+        diagnostics.observe(im,tag)
         cv2.imwrite(str(RUN/f'{session}-{cycles%12:03d}-{tag}.jpg'),im,[cv2.IMWRITE_JPEG_QUALITY,88])
         cv2.imwrite(str(RUN/'latest.jpg'),im,[cv2.IMWRITE_JPEG_QUALITY,80])
         return im
@@ -169,13 +173,25 @@ def main():
         result,_=ocr(im)
         return ' '.join(r[1] for r in result or [] if r[2]>.8)
     def pickup_text():
-        # Cover dropped loot and nearby interaction prompts across camera positions.
-        im=screen.capture(sct,(550,480,1500,850))
-        return read_text(im)
-    def check_pickup_position(raw):
-        if is_other_interaction(raw):
-            inp.release();event('wrong_interaction',text=raw);screenshot('wrong-interaction')
-            raise RuntimeError('Non-fishing interaction replaced pickup; rejoin to restore fishing position')
+        nonlocal last_pickup_evidence
+        # Prompt height changes with the camera. The previous crop missed
+        # Collect above y=480, causing blind T holds on otherwise empty rounds.
+        x,y,w,h=480,150,1630,1110
+        im=screen.capture(sct,(x,y,w,h))
+        scale=1 if now-since>2 else .75
+        results,_=ocr(cv2.resize(im,None,fx=scale,fy=scale))
+        rows=[{'text':r[1],'score':float(r[2]),
+               'center':(x+float(np.mean(np.array(r[0])[:,0]))/scale,
+                         y+float(np.mean(np.array(r[0])[:,1]))/scale)} for r in results or []]
+        evidence=classify_pickup(rows)
+        stable=pickup_gate.observe(evidence,time.monotonic())
+        last_pickup_evidence={'kind':evidence.kind,'text':evidence.text,'center':evidence.center,'stable':stable}
+        if evidence.kind in ('other','ambiguous'):
+            inp.grab(False)
+            if stable:
+                event('wrong_interaction',**last_pickup_evidence);screenshot('wrong-interaction')
+                raise FishingFault('pickup_other','Non-fishing interaction replaced pickup; local alignment required',evidence=last_pickup_evidence)
+        return evidence,stable
     def ui_active():
         im=screen.capture(sct,(1190,1360,180,70))
         return float(cv2.minMaxLoc(cv2.matchTemplate(im,exit_template,cv2.TM_CCOEFF_NORMED))[1])>.84
@@ -260,27 +276,37 @@ def main():
                         stage='pickup_wait';since=now
                 elif stage=='pickup_wait':
                     if now-since>.4 and now-last_pickup_scan>.35:
-                        raw=pickup_text();check_pickup_position(raw);last_pickup_scan=time.monotonic();prompt_seen=is_pickup_prompt(raw)
-                        if prompt_seen or now-since>3:
-                            if prompt_seen:last_prompt=raw
-                            inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;screenshot('pickup');event('pickup_hold',attempt=pickup_tries,prompt_seen=prompt_seen,text=raw)
+                        evidence,stable=pickup_text();last_pickup_scan=time.monotonic();prompt_seen=evidence.kind=='collect' and stable
+                        if evidence.kind=='reward' and stable:
+                            record_reward(evidence.text);screenshot('collected');stage='cooldown';since=time.monotonic()
+                        elif prompt_seen:
+                            last_prompt=evidence.text
+                            inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;screenshot('pickup');event('pickup_hold',attempt=pickup_tries,prompt_seen=True,text=evidence.text)
+                        elif now-since>4 and evidence.kind=='empty':
+                            event('empty_round',cycle=cycles,message='No pickup prompt after repeated wide scans; continuing without holding T')
+                            stage='cooldown';since=time.monotonic()
+                        elif now-since>7:
+                            raise FishingFault('pickup_timeout','Pickup prompt remained ambiguous after wide scans',evidence=last_pickup_evidence)
                 elif stage=='pickup':
                     if now-since>.3 and now-last_pickup_scan>.3:
-                        raw=pickup_text();check_pickup_position(raw);last_pickup_scan=time.monotonic()
-                        if now-since>1.8 and is_reward_banner(raw):
-                            record_reward(raw);screenshot('collected');stage='cooldown';since=time.monotonic();continue
+                        evidence,stable=pickup_text();last_pickup_scan=time.monotonic()
+                        if now-since>1.8 and evidence.kind=='reward' and stable:
+                            record_reward(evidence.text);screenshot('collected');stage='cooldown';since=time.monotonic();continue
                     if now-since>4.0:
-                        inp.grab(False);raw=pickup_text();check_pickup_position(raw);screenshot('after-pickup')
-                        if is_pickup_prompt(raw) or (not raw and pickup_tries<2):stage='pickup_retry_wait'
+                        inp.grab(False);evidence,stable=pickup_text();screenshot('after-pickup')
+                        if evidence.kind=='collect':stage='pickup_retry_wait'
                         else:
-                            if is_reward_banner(raw):record_reward(raw)
+                            if evidence.kind=='reward' and stable:record_reward(evidence.text)
                             elif prompt_seen:inventory.observe_unconfirmed(last_prompt,f'{session}:{cycles}:inventory')
                             stage='cooldown';event('pickup_attempted',cycle=cycles,attempts=pickup_tries)
                         since=time.monotonic()
                 elif stage=='pickup_retry_wait':
                     if now-since>.5:
                         if pickup_tries>=3:raise RuntimeError('Pickup prompt still present after three held-T attempts')
-                        inp.grab(True);stage='pickup';since=now;pickup_tries+=1
+                        evidence,stable=pickup_text()
+                        if evidence.kind=='collect' and stable:
+                            inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1
+                        else:stage='pickup_wait';since=time.monotonic()
                 elif stage=='cooldown':
                     if now-since>1.0:
                         recovered=inventory.check_pending()
@@ -296,12 +322,16 @@ def main():
                 time.sleep(max(0,.02-(time.monotonic()-tick)))
         last_reason='session_limit';event('session_limit')
     except BaseException as ex:
-        last_reason=str(ex);event('stopped',reason=str(ex));raise
+        last_reason=str(ex);failure_code=getattr(ex,'code',reason_code(last_reason));failure_details=getattr(ex,'details',{})
+        if failure_code not in ('manual_stop','session_limit','focus'):
+            try:diagnostics.save(failure_code,last_reason,pickup=last_pickup_evidence,**failure_details)
+            except Exception as diagnostic_error:event('diagnostic_error',message=str(diagnostic_error))
+        event('stopped',reason=str(ex),code=failure_code);raise
     finally:
         inp.release()
         ledger.update(time.monotonic()-started,casts,cycles,pickup_confirmed,failed,last_reward)
         prior=json.loads((RUN/'status.json').read_text()) if (RUN/'status.json').exists() else {}
-        prior.update(running=False,updated=time.time(),ended=time.time(),reason=last_reason,held_mouse=False,held_t=False,casts=casts,cycles=cycles,reward_banners_observed=pickup_confirmed,failed_rounds=failed,last_reward=last_reward);(RUN/'status.json').write_text(json.dumps(prior,indent=2))
+        prior.update(running=False,updated=time.time(),ended=time.time(),reason=last_reason,failure_code=failure_code,held_mouse=False,held_t=False,casts=casts,cycles=cycles,reward_banners_observed=pickup_confirmed,failed_rounds=failed,last_reward=last_reward);(RUN/'status.json').write_text(json.dumps(prior,indent=2))
         log.close();telemetry.close()
 
 if __name__=='__main__':main()
