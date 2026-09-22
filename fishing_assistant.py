@@ -132,7 +132,6 @@ def main():
     hwnd=find_window();rect=rectangle(hwnd)
     screen=ScreenSpace(rect)
     if a.focus:win32gui.SetForegroundWindow(hwnd);time.sleep(.3)
-    if win32gui.GetForegroundWindow()!=hwnd:raise RuntimeError('Bring Roblox to the foreground before starting')
     ocr=RapidOCR()
     exit_template=cv2.imread(str(ROOT/'assets'/'exit.png'))
     inp=Input(hwnd);started=time.monotonic();now=started;stage='casting';since=now;lastseen=now;ledger=Ledger();last_gui_scan=0;last_tracking_cast=None;last_game_activity=time.time()
@@ -140,7 +139,7 @@ def main():
     prev=None;velocity=0.;target_velocity=0.;cycles=0;casts=0;missing_casts=0;track_frames=0;inside_frames=0;laststate=0;lastimage=0;last_rod_check=0
     motion=ReelMotion()
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
-    last_reference_check=0;reference_matcher=None
+    last_reference_check=0;reference_matcher=None;paused_at=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
     diagnostics=FaultRecorder(RUN,session);pickup_gate=PickupGate();last_pickup_evidence={};failure_code='';failure_details={}
     telemetry=open(RUN/f'tracking-{session}.csv','w',buffering=1);telemetry.write('time,cycle,ball,target,height,velocity,held,inside\n')
@@ -209,6 +208,7 @@ def main():
                             'last_reward':last_reward,'last_game_activity':last_game_activity,'held_mouse':False,'held_t':False}
                         write_metrics('status.json',state);time.sleep(.1)
                     pause_seconds=time.monotonic()-paused_at;started+=pause_seconds;since+=pause_seconds;lastseen+=pause_seconds
+                    paused_at=None
                     previous_stage=stage;stage=resumed_stage(stage,cast_press_started is not None)
                     if previous_stage=='casting' and cast_press_started is not None:
                         casts+=1;event('cast',cast=casts,interrupted=True)
@@ -372,7 +372,7 @@ def main():
         event('stopped',reason=str(ex),code=failure_code);raise
     finally:
         inp.gate.close()
-        ledger.update(time.monotonic()-started,casts,cycles,pickup_confirmed,failed,last_reward)
+        ledger.update((paused_at if paused_at is not None else time.monotonic())-started,casts,cycles,pickup_confirmed,failed,last_reward)
         prior=json.loads((RUN/'status.json').read_text()) if (RUN/'status.json').exists() else {}
         prior.update(running=False,updated=time.time(),ended=time.time(),reason=last_reason,failure_code=failure_code,held_mouse=False,held_t=False,casts=casts,cycles=cycles,reward_banners_observed=pickup_confirmed,failed_rounds=failed,last_reward=last_reward);(RUN/'status.json').write_text(json.dumps(prior,indent=2))
         log.close();telemetry.close()
