@@ -6,6 +6,29 @@ A Windows fishing assistant for the Project Slayers 2 / Ouwland fishing minigame
 
 **First time:** extract the repository, install Python 3.12 x64, and double-click **Setup.cmd**. Then open **Fishing** on the desktop, set your Roblox username and rod slot in Settings, prepare the game as described below, and click **Continue**.
 
+Setup installs the **`autofish`** command for your Windows account. Open a new terminal anywhere and run:
+
+```powershell
+autofish start
+```
+
+Choose the game, then **Minigame only**, **Fish here**, or **Full farmer**, with arrows and Enter. The dashboard opens after starting. Only Project Slayers 2 / Ouwland is supported currently; future supported games can appear in the same picker.
+
+Already set up? Double-click **Install-CLI.cmd** once to add the command without reinstalling dependencies. No administrator access is needed. If a terminal was open during installation, close and reopen it to pick up the updated PATH.
+
+```powershell
+autofish                  # Dashboard; does not start fishing
+autofish games            # Supported games and IDs
+autofish start --game project-slayers-2 --mode assist --no-ui
+autofish status
+autofish pause
+autofish continue
+autofish stop
+autofish logs --activity --follow
+```
+
+The command points to this application folder and preserves its settings and saved run. Keep the folder in place; if you move it, rerun Install-CLI.cmd from the new location. To remove only the global command, run `Install-CLI.cmd -Uninstall`; the app and fishing data remain. `Setup.ps1 -NoCLI` skips command installation.
+
 **After setup:**
 
 - **Fishing** on the desktop opens the window. Continue starts/resumes; Pause and Stop release game input.
