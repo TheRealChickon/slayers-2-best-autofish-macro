@@ -14,6 +14,9 @@ autofish start
 
 Choose the game, then **Minigame only**, **Fish here**, or **Full farmer**, with arrows and Enter. The dashboard opens after starting. Only Project Slayers 2 / Ouwland is supported currently; future supported games can appear in the same picker.
 
+The CLI dashboard opens with a short reveal and plays a brief closing animation when you press **Q**. **Setup → Motion → Reduced** skips both animations.
+Ore pickups have their own short mineral-glint animation in the dashboard; it does not interrupt fishing or alter the item log.
+
 Already set up? Double-click **Install-CLI.cmd** once to add the command without reinstalling dependencies. No administrator access is needed. If a terminal was open during installation, close and reopen it to pick up the updated PATH.
 
 ```powershell
@@ -73,6 +76,7 @@ The account is configurable. Each account must own a fishing rod, have it in a v
 - Set the saved spawn at your fishing spot in Ouwland, facing the water. A rejoin must restore the same general spot. Optional fishing references can correct small differences; the assistant does not navigate across the map or find a fishing spot.
 - Keep the game visible and foreground. Opening another app releases input and waits; Continue returns focus to Roblox and recovery resumes. It cannot fish through a minimized window, lock screen, or sleeping PC. A second monitor is useful for viewing status.
 - The rod is located in the visible hotbar and selected only when its selection ring is absent. If it cannot be recognized during a rejoin, the configured slot is used. Moving the rod to another visible slot is supported; an unequipped rod in the backpack must first be placed in the hotbar.
+- In CLI **Setup → Cast point**, enter an X, Y target in the 2560 × 1440 reference view for Full farmer. The default is `1650, 800`. **Capture pointer** gives you four seconds to place the mouse over the Roblox game world, then saves its position without clicking or changing focus. This target scales with the Roblox window. Fish here continues to use the pointer position you choose in-game; Minigame only never casts.
 - Bait is optional. Equip it in-game if desired. There is no purchasing automation.
 
 ## Resolution notes

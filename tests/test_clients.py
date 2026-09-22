@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import app_config
+import cast_point
 import control_actions
 import fishing_assistant
 import item_journal
@@ -67,6 +68,30 @@ class IsolatedState(unittest.TestCase):
         self.assertEqual(app_config.load_config()['data_dir'],'saved-run')
         self.assertEqual(app_config.load_config()['rod_slot'],7)
         with self.assertRaises(ValueError): app_config.save_config({'rod_slot':0})
+
+    def test_cast_point_setup_saves_manual_and_captured_coordinates(self):
+        app=terminal_app.Terminal();app.switch(3)
+        self.assertEqual(app.config['cast_point'],[1650,800])
+        app.selection=app.settings_keys.index('Cast point');app.activate()
+        app.buffer='1200, 650';app.finish_edit()
+        self.assertEqual(app_config.load_config()['cast_point'],[1200,650])
+        app.edit('Cast point','40, 20');app.finish_edit()
+        self.assertEqual(app_config.load_config()['cast_point'],[1200,650])
+        app.selection=app.settings_keys.index('Capture pointer')
+        with patch.object(app,'job',side_effect=lambda fn:fn()), \
+             patch.object(terminal_app,'capture_pointer',return_value=[1300,700]), \
+             patch.object(terminal_app.time,'sleep'):
+            app.activate()
+        self.assertEqual(app_config.load_config()['cast_point'],[1300,700])
+
+    def test_pointer_capture_scales_from_roblox_client_without_input(self):
+        # A 1920 x 1080 Roblox client at a nonzero desktop origin.
+        with patch.object(fishing_assistant,'find_window',return_value=14), \
+             patch.object(fishing_assistant,'rectangle',return_value=(100,50,2020,1130)), \
+             patch('win32gui.GetCursorPos',return_value=(1075,575)), \
+             patch('win32gui.WindowFromPoint',return_value=18), \
+             patch('win32gui.GetAncestor',return_value=14):
+            self.assertEqual(cast_point.capture_pointer(),[1300,700])
 
     def test_metrics_handles_transient_windows_reader(self):
         original = metrics.os.replace
@@ -128,6 +153,8 @@ class IsolatedState(unittest.TestCase):
         app=terminal_app.Terminal();app.data=data
         normal='\n'.join(app.render(100,32))
         for text in ('Minigame only','Fish here','Full farmer','Stopped by F12 in Roblox'):
+            self.assertIn(text,normal)
+        for text in ('You cast + collect', 'You pick the spot', 'Saved spawn'):
             self.assertIn(text,normal)
         for index,label in enumerate(('Minigame only','Fish here','Full farmer','Pause','Stop','Export log')):
             app.selection=index
