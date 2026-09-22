@@ -45,6 +45,9 @@ def describe(row):
     if kind == 'recovery_started':return 'Rejoin started' if row.get('force_menu') else 'Checking game and rod'
     if kind == 'equipped_rod':return 'Game ready · rod equipped'
     if kind == 'pickup_hold':return f'Collecting · attempt {row.get("attempt", 1)}'
+    if kind == 'alignment_result':return f"Fishing view aligned · {row.get('steps',0)} corrections"
+    if kind == 'alignment_step':return 'Adjusting fishing view' + (' and position' if any(row.get('movement_seconds',[])) else '')
+    if kind == 'recovery_decision':return f"Recovery · {row.get('code','unknown').replace('_',' ')} → {row.get('action','rejoin').replace('_',' ')}"
     if kind == 'screen':return 'Recovery · ' + row.get('kind', 'checking').replace('_',' ')
     return row.get('message') or row.get('reason') or kind.replace('_', ' ').capitalize()
 
@@ -81,7 +84,7 @@ class LiveFeed:
                     kind = row.get('event', '')
                     # Screen/OCR transitions are diagnostics, not new recoveries.
                     # Keep them in raw logs; show actual actions and outcomes here.
-                    if kind in ('tracking_reacquired','screen'):continue
+                    if kind in ('tracking_reacquired','screen','alignment_check'):continue
                     group = 'catches' if kind in ('reward_observed','inventory_resolved','inventory_recovered') else 'recovery' if path.name=='recovery.jsonl' else 'fishing'
                     level = 'warn' if any(term in kind for term in ('error','stopped','no_minigame','wrong_interaction','retry','exhausted','unreadable','ambiguous')) else 'good' if kind in ('reward_observed','equipped_rod','rod_equipped','inventory_resolved','inventory_recovered') else 'normal'
                     event_id = hashlib.sha256(json.dumps([started, path.name, position, row], sort_keys=True).encode()).hexdigest()[:24]

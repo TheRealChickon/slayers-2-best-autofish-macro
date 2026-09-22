@@ -38,6 +38,9 @@ def status_lines(data, colors=False):
     tone = state_tone(data['state'],data['running'] and not data['stop_requested'])
     remain = data['bait_remaining_estimate']
     hours = data['bait_hours_remaining_estimate']
+    recent=data.get('recent')
+    rates=(f"  Recent pace     {recent['hooks_per_minute']:.2f} hooks/min · {recent['items_per_minute']:.2f} items/min"
+           + f" · {recent['window_seconds']/60:.0f}m window" + ('' if recent['fresh'] else ' (saved)')) if recent else '  Recent pace     Collecting a sample'
     return [
         c('FISHING', 'gold') + '  /  ' + c(data['state'].upper(), tone),
         '',
@@ -47,6 +50,8 @@ def status_lines(data, colors=False):
         f"  Server rejoins  {data['server_rejoins']} completed after the first join",
         f"  Game launches   {data['game_launches']} attempts",
         f"  Last item       {data['last_item'] or '-'}",
+        rates,
+        ('  Phase time      '+', '.join(f'{key.replace("_"," ")} {value:.0f}s' for key,value in recent['phase_seconds'].items())) if recent else '',
         '',
         f"  Bait estimate   {'~' + format(remain, ',') + ' left' if remain is not None else 'Starting stock unknown'}",
         f"  Consumption     ~{data['hooks_per_hour']:.0f} bait/hour" + (f' / ~{hours:.1f} hours left' if hours is not None else ''),
@@ -81,6 +86,11 @@ def parser():
     resume=sub.add_parser('continue', aliases=['resume'], help='Explicitly start the selected mode')
     resume.add_argument('--mode',choices=('full','assist'),help='Full farmer or minigame only')
     sub.add_parser('assist',help='Start minigame only; you cast and collect manually')
+    reference=sub.add_parser('reference',help='Save a local fishing view while paused')
+    reference.add_argument('operation',choices=('status','save','disable'),nargs='?',default='status')
+    reference.add_argument('--position',action='store_true',help='Calibrate small position corrections as well as camera movement')
+    reference.add_argument('--boxes',help='JSON list of x,y,width,height boxes in a 1280x720 screenshot; two near surfaces first, then optional distant scenery')
+    sub.add_parser('diagnostics',help='Show the last eight failure reports and local screenshot paths')
     sub.add_parser('stop', help='Stop game input and retain counters')
     sub.add_parser('export', help='Save the complete item log and totals as CSV')
     tui=sub.add_parser('tui', help='Keyboard interface with live logs and settings')
@@ -133,6 +143,18 @@ def stream_logs(args, journal, colors):
 
 def execute(args, colors=False):
     command = args.command or 'status'
+    if command=='reference':
+        import landmark_controls as references
+        if args.operation=='save':print(references.setup(args.position,json.loads(args.boxes) if args.boxes else None))
+        elif args.operation=='disable':print(references.disable())
+        else:print(json.dumps(references.status(),indent=2))
+        return 0
+    if command=='diagnostics':
+        from metrics import RUN
+        path=RUN/'diagnostics/index.json'
+        print(path)
+        print(path.read_text() if path.exists() else 'No failure reports saved')
+        return 0
     if command == 'api':
         from control_api import dispatch
         response, code = dispatch(args.operation, args.request_id, args.limit)

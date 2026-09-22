@@ -98,7 +98,7 @@ class IsolatedState(unittest.TestCase):
 
     def test_pause_in_flight_prevents_duplicate_controller(self):
         (self.root/'STOP').write_text('Paused by user')
-        with patch.object(control_actions,'alive',return_value=True), patch.object(control_actions,'starting',return_value=False), patch.object(control_actions.subprocess,'Popen') as spawn:
+        with patch.object(control_actions,'alive',side_effect=lambda name='supervisor-pid.json':name=='supervisor-pid.json'), patch.object(control_actions,'starting',return_value=False), patch.object(control_actions.subprocess,'Popen') as spawn:
             result=control_actions.resume()
         self.assertIn('still finishing',result)
         spawn.assert_not_called()

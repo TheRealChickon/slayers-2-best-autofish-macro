@@ -27,6 +27,8 @@ Read commands never start, focus, or stop Roblox. Controls call the same seriali
 
 The interface uses `config.local.json` and `FISHING_DATA_DIR` exactly like the app. Keep the installation directory and intended Windows user/session fixed in a future adapter.
 
+`resume` uses the mode saved in Settings. In `assist` mode it starts only minigame tracking and never focuses, casts, collects or rejoins. Status includes `mode` (`full` or `assist`), `recent` (nullable recent rates and phase seconds) and `alignment` (the last local alignment result). Mode changes and reference calibration remain explicit local setup operations; there is no automatic remote calibration.
+
 ## Response contract
 
 Valid API invocations produce one JSON object on stdout, with no ANSI escapes or progress text:
