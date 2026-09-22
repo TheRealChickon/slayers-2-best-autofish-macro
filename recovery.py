@@ -11,6 +11,7 @@ import presence_watch
 from app_config import load_config
 from rod_detector import locate_rod
 from screen_space import ScreenSpace
+from recovery_pacing import MenuPacer, private_join_target
 
 LAUNCH_URL='roblox://placeId='+str(load_config()['place_id'])
 
@@ -56,7 +57,7 @@ class Recovery:
     def move(self,x,y):
         self.guard();move_pointer(*self.screen.point(x,y))
     def click(self,x,y,hold=.18):
-        self.move(x,y);self.sleep(.18);self.move(x+1,y);self.sleep(.08);self.move(x,y);self.sleep(.16)
+        self.move(x,y);self.sleep(.30);self.move(x+1,y);self.sleep(.15);self.move(x,y);self.sleep(.30)
         self.inp.hold(True)
         try:self.sleep(hold)
         finally:self.inp.hold(False)
@@ -112,65 +113,97 @@ class Recovery:
         else:
             self.key(str(config['rod_slot']));self.sleep(.6)
             self.event('rod_equipped',method='configured slot',slot=config['rod_slot'])
-        self.move(1650,800);self.sleep(.35)
+        # Refresh Roblox's hover target after leaving the hotbar. The OS cursor
+        # can arrive before the game's hit test; otherwise the first cast may
+        # toggle the rod off and spend a full bite timeout waiting for nothing.
+        for point,delay in (((1650,800),.30),((1651,800),.15),((1650,800),.30)):
+            self.move(*point);self.sleep(delay)
+    def hold_private_join(self,target):
+        # The friend-Join button animates into a larger private-Join button.
+        # Revalidate after hover settles so an old center cannot dismiss it.
+        x,y=target
+        self.move(x,y);self.sleep(.30);self.move(x+1,y);self.sleep(.15);self.move(x,y);self.sleep(.30)
+        rows=self.text(self.capture(),(820,1190,920,250))
+        current=private_join_target(rows)
+        self.guard()
+        if current is None or np.linalg.norm(np.array(current)-target)>10:
+            self.event('private_join_retry',reason='Join button moved; waiting for a stable target')
+            return False
+        self.event('hold_private_join',target=list(current));started=time.monotonic();reason='hold limit'
+        until=started+4.5
+        self.inp.hold(True)
+        try:
+            while time.monotonic()<until:
+                self.sleep(min(.2,until-time.monotonic()))
+                if time.monotonic()>=until:break
+                rows=self.text(self.capture(),(820,1190,920,250))
+                self.guard()
+                current=private_join_target(rows)
+                if current is None:
+                    reason='Join panel changed';break
+                if np.linalg.norm(np.array(current)-target)>12:
+                    reason='Join button moved';break
+        finally:self.inp.hold(False)
+        self.event('private_join_released',seconds=round(time.monotonic()-started,2),reason=reason)
+        return True
     def recover(self,force_menu=False):
         self.inp.release();self.event('recovery_started',force_menu=force_menu)
         try:self.select()
         except RuntimeError:self.launch()
-        deadline=time.monotonic()+180;next_action=0;world_since=None;menu_sent=False;join_started=False;last_class=''
+        deadline=time.monotonic()+180;pacer=MenuPacer();join_attempts=0;last_class=''
         while time.monotonic()<deadline:
-            self.guard();self.progress(detail=last_class or 'inspecting');im=self.capture();now=time.monotonic()
+            self.guard();self.progress(detail=last_class or 'inspecting');im=self.capture()
             rows=self.text(im);text=' '.join(r['text'].lower() for r in rows)
+            self.guard();now=time.monotonic();target=None
             skip=[r for r in rows if re.sub(r'[^a-z]','',r['text'].lower())=='skiploading']
-            if skip and now>=next_action:
-                self.click(*skip[0]['center']);self.event('skip_optional_loading')
-                next_action=time.monotonic()+8;self.sleep(.4);continue
-            if any(term in text for term in ['disconnected','connection lost','connection error','failed to connect','same account launched','error code:']):
-                self.capture('disconnect');self.event('disconnect_observed',text=text[:600])
-                reconnect=[r for r in rows if re.fullmatch(r'(reconnect|rejoin|retry)',r['text'].strip(),re.I)]
-                if reconnect and now>=next_action:
-                    self.click(*reconnect[0]['center']);next_action=now+18;self.sleep(2);continue
-                if now>=next_action:self.launch(restart=True);next_action=time.monotonic()+12;deadline=time.monotonic()+180
-                self.sleep(1);continue
             cancel=[r for r in rows if r['text'].strip().lower()=='cancel']
-            if 'purchase' in text and len(cancel)==1:
-                kind='vendor_dialog'
-                if now>=next_action:
-                    self.click(*cancel[0]['center']);self.event('closed_vendor_dialog');force_menu=True;next_action=now+1
+            if any(term in text for term in ['disconnected','connection lost','connection error','failed to connect','same account launched','error code:']):
+                kind='disconnect'
+                reconnect=[r for r in rows if re.fullmatch(r'(reconnect|rejoin|retry)',r['text'].strip(),re.I)]
+                target=reconnect[0]['center'] if len(reconnect)==1 else None
+            elif skip:kind='skip_loading';target=skip[0]['center']
+            elif 'purchase' in text and len(cancel)==1:kind='vendor_dialog';target=cancel[0]['center']
             elif 'go back to the main menu' in text:
-                kind='confirm_menu'
-                if now>=next_action:self.capture(kind);self.click(1208,797);next_action=now+4;self.event(kind);force_menu=False;world_since=None
+                kind='confirm_menu';target=(1208,797)
             elif 'back to main menu' in text:
-                kind='game_menu'
-                if now>=next_action:
-                    target=next(r for r in rows if 'back to main menu' in r['text'].lower());self.capture(kind);self.click(*target['center']);next_action=now+1;self.event('back_to_main_menu')
-            elif ('private server' in text and 'join' in text):
-                kind='private_join'
-                if now>=next_action:
-                    joins=[r for r in rows if r['text'].strip().lower()=='join']
-                    if len(joins)!=1:raise RecoveryError('Private Join button is ambiguous')
-                    self.capture(kind);self.event('hold_private_join');self.click(*joins[0]['center'],hold=3.2);next_action=time.monotonic()+15;join_started=True;force_menu=False;world_since=None
+                kind='game_menu';target=next(r['center'] for r in rows if 'back to main menu' in r['text'].lower())
+            elif ('privateserver' in re.sub(r'[^a-z]','',text) and 'join' in text):
+                kind='private_join';target=private_join_target(rows)
             elif any('ouwlan' in r['text'].lower() for r in rows) and 'last played' in text:
-                kind='world_selection'
-                if now>=next_action:
-                    self.capture(kind);self.click(520,680);next_action=now+1;self.event('select_ouwland')
+                kind='world_selection';target=(520,680)
             elif any(r['text'].strip().lower()=='play' for r in rows):
-                kind='main_menu'
-                if now>=next_action:
-                    target=next(r for r in rows if r['text'].strip().lower()=='play');self.capture(kind);self.click(*target['center']);next_action=now+1;self.event('play');world_since=None;force_menu=False
+                kind='main_menu';target=next(r['center'] for r in rows if r['text'].strip().lower()=='play')
             elif self.world_visible(im) and ('mistfall' in text.replace(' ','') or re.search(r'lv\.?\s*\d+',text)):
                 kind='world'
-                if force_menu:
-                    if now>=next_action:
-                        self.capture('before-menu');self.key('M');menu_sent=True;next_action=now+2;self.event('open_menu')
-                else:
-                    if world_since is None:world_since=now
-                    if now-world_since>3:
-                        self.equip_rod();self.capture('equipped');self.event('equipped_rod');self.restarts=0;return
-            else:
-                kind='loading';world_since=None
+            else:kind='loading'
+            pacer.observe(kind,target,now)
             if kind!=last_class:self.event('screen',kind=kind);last_class=kind
-            self.sleep(.4)
+            if kind=='disconnect' and pacer.ready(kind,now):
+                self.capture(kind);self.event('disconnect_observed',text=text[:600])
+                if target:
+                    self.click(*target);pacer.acted(kind,time.monotonic(),18)
+                else:
+                    self.launch(restart=True);pacer.acted(kind,time.monotonic(),12);deadline=time.monotonic()+180
+            elif kind=='world':
+                if force_menu:
+                    if pacer.ready('open_menu',now):
+                        self.capture('before-menu');self.key('M');pacer.acted('open_menu',time.monotonic(),2);self.event('open_menu')
+                elif pacer.ready('world_ready',now,stable_seconds=3):
+                    self.equip_rod();self.capture('equipped');self.event('equipped_rod');self.restarts=0;return
+            elif kind=='private_join' and pacer.ready(kind,now):
+                if target is None:raise RecoveryError('Private Join button is ambiguous')
+                self.capture(kind)
+                if self.hold_private_join(target):
+                    join_attempts+=1;pacer.joined(time.monotonic(),join_attempts);force_menu=False
+            elif target is not None and kind!='disconnect' and pacer.ready(kind,now):
+                self.capture(kind);self.click(*target)
+                action,delay={'skip_loading':('skip_optional_loading',8),'vendor_dialog':('closed_vendor_dialog',1),
+                    'confirm_menu':('confirm_menu',4),'game_menu':('back_to_main_menu',1),
+                    'world_selection':('select_ouwland',1),'main_menu':('play',1)}[kind]
+                self.event(action);pacer.acted(kind,time.monotonic(),delay)
+                if kind=='vendor_dialog':force_menu=True
+                elif kind in ('confirm_menu','main_menu'):force_menu=False
+            self.sleep(.25)
         self.capture('timeout');raise RecoveryError('Rejoin did not reach the game within three minutes')
 
 def main():
@@ -253,7 +286,9 @@ def main():
         last_error=str(ex);exit_code=0 if isinstance(ex,UserStop) else 1;driver.event('supervisor_stopped',reason=last_error)
     finally:
         if child and child.poll() is None:
-            stop.write_text('Supervisor stopped')
+            try:
+                with stop.open('x') as stream:stream.write('Supervisor stopped')
+            except FileExistsError:pass  # A user or maintenance stop keeps its reason.
             try:child.wait(5)
             except subprocess.TimeoutExpired:
                 # The venv launcher may have a real Python worker beneath it.
