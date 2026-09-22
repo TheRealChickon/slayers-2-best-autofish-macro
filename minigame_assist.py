@@ -4,6 +4,7 @@ import json
 import os
 import time
 import threading
+from collections import deque
 
 import cv2
 import mss
@@ -19,6 +20,7 @@ from pickup_policy import classify, PickupGate, Pickup
 from spot_fishing import SpotCycle
 from rod_detector import locate_rod, RodReady
 from performance import PerformanceRecorder
+from tracking_control import ReelMotion
 
 
 class ForegroundInput(Input):
@@ -97,8 +99,9 @@ def safe_cast_pointer(screen):
     return 260<=x<=2240 and 160<=y<=1240
 
 
-class TrackingAssist:
+class TrackingAssist(ReelMotion):
     def __init__(self):
+        super().__init__()
         self.active = False
         self.count = 0
         self.candidate = 0
@@ -109,10 +112,8 @@ class TrackingAssist:
         self.held = False
 
     def suspend(self):
-        self.previous = None
-        self.held = False
+        super().suspend()
         self.candidate = 0
-        self.velocity = self.target_velocity = 0
 
     def step(self, detection, visible, now):
         if detection is None or not visible:
@@ -132,15 +133,7 @@ class TrackingAssist:
             if self.candidate < 2: return False
             self.active = True; self.count += 1
             self.previous = None; self.velocity = self.target_velocity = 0
-        if self.previous:
-            dt = max(.005, now-self.previous[0])
-            self.velocity = .55*self.velocity+.45*(detection['ball']-self.previous[1])/dt
-            self.target_velocity = .7*self.target_velocity+.3*(detection['target']-self.previous[2])/dt
-        error = detection['ball']-detection['target']+.09*(self.velocity-self.target_velocity)
-        if error > 3: self.held = True
-        elif error < -3: self.held = False
-        self.previous = (now,detection['ball'],detection['target'])
-        return self.held
+        return super().step(detection,now)
 
 
 def main(argv=None):
@@ -176,6 +169,8 @@ def main(argv=None):
     gate=PickupGate();rod_gate=RodReady();rod_ready=False;evidence=Pickup('empty');stable=False;world=False;rod=None
     active_time=0.;last_tick=time.monotonic();last_scan=-10.;resuming=True
     missing_since=None;last_capture=0.;capture_index=0
+    samples=deque(maxlen=1800);frame_intervals=deque(maxlen=120);last_track_tick=None
+    track_frames=inside_frames=missed_frames=0
     done=threading.Event()
     watcher=threading.Thread(target=watch_focus,args=(inp,done),daemon=True);watcher.start()
     performance=PerformanceRecorder(ledger.base.get('started'))
@@ -192,6 +187,10 @@ def main(argv=None):
               'spot_armed':spot.armed if spot else False,'active_seconds':round(active_time,1),
               'spot_paused':spot.paused if spot else False,
               'wait_reason':wait_reason,
+              'control_fps':round(len(frame_intervals)/sum(frame_intervals),1) if frame_intervals else None,
+              'inside_fraction':round(inside_frames/max(1,track_frames),3),
+              'tracked_frames':track_frames,'missed_frames':missed_frames,
+              'reel_response':{'up':round(tracker.up_accel),'down':round(tracker.down_accel)},
               'reason':reason if not running else '', 'elapsed':round(time.monotonic()-monotonic_started,1)})
         # These hooks are observed minigames; manual pickups stay outside the journal.
         ledger.update(active_time,spot.casts if spot else 0,tracker.count,spot.rewards if spot else 0,0,spot.last_reward if spot else '')
@@ -206,7 +205,9 @@ def main(argv=None):
                 if any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):
                     (RUN/'STOP').write_text('Stopped by physical hotkey');reason='Stopped by physical hotkey';break
                 try:
-                    selected=find_window()
+                    # Enumerating all processes/windows every frame used much
+                    # of the response budget. Keep the already verified handle.
+                    selected=hwnd if hwnd and win32gui.IsWindow(hwnd) else find_window()
                     if not foreground(selected):
                         raise RuntimeError('Waiting for Roblox')
                     rect=rectangle(selected)
@@ -239,13 +240,27 @@ def main(argv=None):
                     detection=detect(roi)
                     ui=screen.capture(sct,(1190,1360,180,70))
                     visible=ui_visible(ui,template)
+                    was_active=tracker.active
                     down=tracker.step(detection,visible,tick)
                     stage='tracking' if tracker.active and visible else 'assist_waiting'
                     if detection is not None and visible:last_activity=time.time()
                     if tracker.count!=last_count:
                         last_count=tracker.count;event('minigame',cycle=tracker.count)
+                        samples.clear();track_frames=inside_frames=missed_frames=0;last_track_tick=None
+                    if was_active and not tracker.active:
+                        event('tracking_quality',cycle=tracker.count,tracked_frames=track_frames,
+                              inside_fraction=round(inside_frames/max(1,track_frames),3),missed_frames=missed_frames)
+                        write('tracking-latest.json',{'session':session,'cycle':tracker.count,'samples':list(samples)})
                     if visible:
                         inp.grab(False);inp.hold(down)
+                        if last_track_tick is not None and 0<tick-last_track_tick<.15:
+                            frame_intervals.append(tick-last_track_tick)
+                        last_track_tick=tick
+                        if detection:
+                            track_frames+=1;inside_frames+=int(detection['inside'])
+                            samples.append({'t':round(tick-monotonic_started,3),**detection,'held':down,
+                                            'velocity':round(tracker.velocity,1),'target_velocity':round(tracker.target_velocity,1)})
+                        else:missed_frames+=1
                         if spot:spot.tracking(active_time)
                         if detection is None:
                             missing_since=missing_since or tick
@@ -307,7 +322,7 @@ def main(argv=None):
                     if wait_reason!=str(error):event('assistant_waiting',message=str(error))
                     wait_reason=str(error)
                 if tick>=next_state:status();next_state=tick+1
-                time.sleep(max(.01, .03-(time.monotonic()-tick)))
+                time.sleep(max(.001, 1/60-(time.monotonic()-tick)))
     except BaseException as error:
         reason=str(error);raise
     finally:

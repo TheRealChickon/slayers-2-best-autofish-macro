@@ -8,6 +8,7 @@ from metrics import Ledger, write as write_metrics, RUN
 from app_config import load_config
 from rod_detector import locate_rod
 from fishing_vision import detect, ui_visible
+from tracking_control import ReelMotion
 from screen_space import ScreenSpace
 from inventory_watch import InventoryDriver, InventoryWatcher
 import landmarks
@@ -110,7 +111,7 @@ def is_reward_banner(text):
     return not is_other_interaction(text) and not is_pickup_prompt(text) and bool(re.search(r'\bx\s*\d+\b|\bnew\b',text,re.I))
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--seconds',type=float,default=0);p.add_argument('--focus',action='store_true');p.add_argument('--record',action='store_true');p.add_argument('--gain',type=float,default=.09);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--seconds',type=float,default=0);p.add_argument('--focus',action='store_true');p.add_argument('--record',action='store_true');p.add_argument('--gain',type=float,default=None,help='Override adaptive braking with the legacy fixed predictor');a=p.parse_args()
     limit=a.seconds if a.seconds>0 else float('inf')
     RUN.mkdir(parents=True,exist_ok=True)
     lock=RUN/'pid.json'
@@ -131,6 +132,7 @@ def main():
     exit_template=cv2.imread(str(ROOT/'assets'/'exit.png'))
     inp=Input(hwnd);started=time.monotonic();now=started;stage='casting';since=now;lastseen=now;ledger=Ledger();last_gui_scan=0;last_tracking_cast=None;last_game_activity=time.time()
     prev=None;velocity=0.;target_velocity=0.;cycles=0;casts=0;missing_casts=0;track_frames=0;inside_frames=0;laststate=0;lastimage=0;last_rod_check=0
+    motion=ReelMotion()
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
     last_reference_check=0;reference_matcher=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
@@ -205,17 +207,21 @@ def main():
                     if stage!='tracking':
                         inventory.begin_round()
                         inp.grab(False);stage='tracking';since=now;prev=None;velocity=0;target_velocity=0;missing_casts=0
+                        motion.suspend()
                         fresh_hook=casts!=last_tracking_cast
                         if fresh_hook:cycles+=1;last_tracking_cast=casts
                         event('minigame' if fresh_hook else 'tracking_reacquired',cycle=cycles,cast=casts);screenshot('start');prompt_seen=False;pickup_tries=0;last_prompt=''
                     lastseen=now
-                    if prev:
-                        dt=max(.005,now-prev[0]);raw=(d['ball']-prev[1])/dt;traw=(d['target']-prev[2])/dt
-                        velocity=.55*velocity+.45*raw;target_velocity=.7*target_velocity+.3*traw
-                    # Hold raises the white marker; release lets it fall. Anticipate momentum.
-                    error=d['ball']-d['target']+a.gain*(velocity-target_velocity)
-                    if error>3:inp.hold(True)
-                    elif error< -3:inp.hold(False)
+                    if a.gain is None:
+                        inp.hold(motion.step(d,now))
+                        velocity=motion.velocity;target_velocity=motion.target_velocity
+                    else:
+                        if prev:
+                            dt=max(.005,now-prev[0]);raw=(d['ball']-prev[1])/dt;traw=(d['target']-prev[2])/dt
+                            velocity=.55*velocity+.45*raw;target_velocity=.7*target_velocity+.3*traw
+                        error=d['ball']-d['target']+a.gain*(velocity-target_velocity)
+                        if error>3:inp.hold(True)
+                        elif error< -3:inp.hold(False)
                     prev=(now,d['ball'],d['target']);track_frames+=1;inside_frames+=int(d['inside'])
                     telemetry.write(f"{now-started:.3f},{cycles},{d['ball']:.1f},{d['target']:.1f},{d['height']:.1f},{velocity:.1f},{int(inp.mouse)},{int(d['inside'])}\n")
                     if a.record and now-lastimage>.1:
@@ -313,7 +319,7 @@ def main():
                     status['last_game_activity']=last_game_activity
                     write_metrics('status.json',status);laststate=now
                     ledger.update(now-started,casts,cycles,pickup_confirmed,failed,last_reward)
-                time.sleep(max(0,.02-(time.monotonic()-tick)))
+                time.sleep(max(.001,1/60-(time.monotonic()-tick)))
         last_reason='session_limit';event('session_limit')
     except BaseException as ex:
         last_reason=str(ex);failure_code=getattr(ex,'code',reason_code(last_reason));failure_details=getattr(ex,'details',{})
