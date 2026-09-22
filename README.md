@@ -119,6 +119,8 @@ This mode never moves the mouse or character, adjusts the camera, changes shift 
 
 Casting requires three consecutive checks of the selected rod plus a fresh check immediately before the click. Keep your pointer clear of the hotbar and other HUD controls. Temporary loss of the rod icon does not permit an early recast. After a round, the pickup scan covers a wider area at full resolution and requires six seconds of consistently empty observations before skipping an unconfirmed reward. While waiting for a bite, only the fast minigame detector runs.
 
+After a confirmed collection, the assistant waits briefly for the rod and rechecks the scene, then casts even if the same reward popup is still fading. A fresh Collect prompt, menu, changed rod or different reward blocks the click. Pickup scans include OCR time in their interval; extra visual rod checks avoid waiting for three full text scans. The status reports pickup evidence and scan time for diagnosis.
+
 Move or reposition while paused, then return to continue. Restarting the controller or Roblox requires F8 again. No pointer coordinate is saved or restored. F9/F12 in Roblox and the app's Pause/Stop remain available.
 
 The detector combines color and target-outline checks so transparent green/yellow bars remain recognizable over red scenery. It still requires the fishing UI and white marker; obscured or ambiguous markers release input instead of guessing. A bounded set of missed-marker crops is retained locally for diagnosis.
