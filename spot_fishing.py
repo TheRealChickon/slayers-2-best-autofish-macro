@@ -1,5 +1,5 @@
 """Bounded local fishing cycle; no navigation, inventory, or reconnect actions."""
-from pickup_policy import Pickup
+from pickup_policy import Pickup, same_reward
 
 
 class SpotCycle:
@@ -132,8 +132,11 @@ class SpotCycle:
                 return 'release'
             return 'collect'
         if self.stage == 'cooldown':
-            if elapsed > 1:
+            if elapsed > .6:
                 self.stage, self.since = 'checking_spot', now
+                # The reward was confirmed already. Recheck the scene/rod,
+                # without stacking another generic 1.2-second wait on it.
+                self.recheck_wait = 0
             return 'release'
         if self.stage in ('checking_spot', 'pickup_wait'):
             if stable and evidence.kind == 'collect' and elapsed > .35:
@@ -146,8 +149,10 @@ class SpotCycle:
                 self.stage, self.since = 'pickup', now
                 self.emit('pickup_hold', attempt=self.tries)
                 return 'collect'
-            wait = max(4 if self.pending_reward else 1.2,self.recheck_wait)
-            if elapsed > wait and stable and evidence.kind == 'empty':
+            confirmed = self.recorded and not self.pending_reward
+            clear = evidence.kind=='empty' or (confirmed and same_reward(evidence,Pickup('reward',self.last_reward)))
+            wait = max(4 if self.pending_reward else 0 if confirmed else 1.2,self.recheck_wait)
+            if elapsed > wait and stable and clear:
                 if now<self.not_before_cast:
                     return 'release'
                 if self.pending_reward and (self.empty_since is None or now-self.empty_since<6):
