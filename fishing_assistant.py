@@ -177,6 +177,7 @@ def main():
                 if d is not None:
                     last_game_activity=time.time()
                     if stage!='tracking':
+                        inventory.begin_round()
                         inp.grab(False);stage='tracking';since=now;prev=None;velocity=0;target_velocity=0;missing_casts=0
                         fresh_hook=casts!=last_tracking_cast
                         if fresh_hook:cycles+=1;last_tracking_cast=casts
@@ -219,6 +220,7 @@ def main():
                     # Time the actual press, not entry into the casting state:
                     # OCR and rod detection can delay this iteration substantially.
                     if not inp.mouse:
+                        inventory.begin_round()
                         move_pointer(*screen.point(1650,800))
                         inp.hold(True);cast_press_started=time.monotonic()
                     elif cast_press_started is not None and time.monotonic()-cast_press_started>=.16:
@@ -259,6 +261,7 @@ def main():
                         recovered=inventory.check_pending()
                         if recovered:
                             pickup_confirmed+=1;last_reward=f"{recovered['item']} X{recovered['quantity']} (inventory)"
+                        inventory.end_round()
                         stage='casting';now=time.monotonic();since=now;cast_press_started=None
                 if now-laststate>1:
                     status={'running':True,'pid':os.getpid(),'session':session,'updated':time.time(),'elapsed':round(now-started,1),'stage':stage,'cycles':cycles,'casts':casts,'completed_100_percent':completed,'failed_rounds':failed,'unknown_rounds':unknown,'reward_banners_observed':pickup_confirmed,'last_reward':last_reward,'track_frames':track_frames,'inside_fraction':round(inside_frames/max(1,track_frames),3),'last_detection':d,'held_mouse':inp.mouse,'held_t':inp.t}
