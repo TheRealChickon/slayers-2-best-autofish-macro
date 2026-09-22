@@ -146,6 +146,18 @@ class IsolatedClients(unittest.TestCase):
             app.transition('closing')
             self.assertEqual(write.call_count, 3)
 
+    def test_console_restores_if_closing_animation_fails(self):
+        app = terminal_app.Terminal()
+        app.alive = False
+        with patch.object(terminal_app.sys.stdin, 'isatty', return_value=True), \
+             patch.object(terminal_app.sys.stdout, 'isatty', return_value=True), \
+             patch.object(terminal_app.sys.stdout, 'write') as write, \
+             patch.object(terminal_app.sys.stdout, 'flush'), \
+             patch.object(app, 'transition', side_effect=[None, RuntimeError('closed')]):
+            with self.assertRaisesRegex(RuntimeError, 'closed'):
+                app.run()
+        self.assertIn('?25h', write.call_args.args[0])
+
     def test_api_read_commands_are_json_and_do_not_control_game(self):
         with patch.object(control_actions, 'resume') as resume, patch.object(control_actions, 'pause') as pause, patch.object(control_actions, 'stop') as stop:
             for operation in ('status', 'items', 'events'):
