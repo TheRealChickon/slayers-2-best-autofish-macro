@@ -56,6 +56,20 @@ class ClickSettling(unittest.TestCase):
             inp=fishing.Input();inp.aim(1650,800);inp.hold(True)
             user.mouse_event.assert_called_once()
 
+    def test_repeat_cast_skips_settle_only_while_known_pointer_is_unchanged(self):
+        inp=fishing.Input()
+        with patch.object(fishing.win32gui,'GetCursorPos',side_effect=[(1650,800)]*2+[(1640,800),(1650,800)]), \
+             patch.object(inp,'aim') as settle:
+            inp.aim_cast(1650,800,after_menu=True)
+            self.assertEqual(settle.call_count,1)
+            inp.aim_cast(1650,800)
+            self.assertEqual(settle.call_count,1)
+            inp.aim_cast(1650,800)
+            self.assertEqual(settle.call_count,2)
+            inp.cast_target=None  # A menu or focus pause invalidates hover state.
+            inp.aim_cast(1650,800)
+            self.assertEqual(settle.call_count,3)
+
     def test_manual_stop_or_focus_loss_during_aim_blocks_click(self):
         for reason in ('stop','focus'):
             with self.subTest(reason=reason),tempfile.TemporaryDirectory() as folder, \

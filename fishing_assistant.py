@@ -63,6 +63,7 @@ def rectangle(h):
 class Input:
     def __init__(self,hwnd=None):
         self.mouse=False; self.t=False; self.hwnd=hwnd
+        self.cast_target=None
         self.lock=threading.RLock(); self.gate=None
     def guard_press(self,down):
         if down and self.gate is not None:self.gate.check()
@@ -87,6 +88,7 @@ class Input:
     def release(self): self.hold(False); self.grab(False)
 
     def aim(self,x,y,after_menu=False):
+        self.cast_target=None
         # Roblox can process its hotbar hover one frame behind the OS cursor.
         # Let the same small hover movement used by recovery settle before a
         # cast or rod click, rather than clicking the previous hotbar target.
@@ -102,6 +104,18 @@ class Input:
                 if any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):
                     raise RuntimeError('Stopped by Escape/F9/F12')
                 time.sleep(.01)
+
+    def aim_cast(self,x,y,after_menu=False):
+        # Once Roblox has seen the cast target, repeating the three hover
+        # movements every round only delays fishing. Re-settle after any menu,
+        # rod click, focus pause, or pointer movement.
+        self.guard_press(True)
+        actual=win32gui.GetCursorPos()
+        if (not after_menu and self.cast_target==(x,y)
+                and abs(actual[0]-x)<=2 and abs(actual[1]-y)<=2):
+            return
+        self.aim(x,y,after_menu=after_menu)
+        self.cast_target=(x,y)
 
 def is_pickup_prompt(text):
     # The moving prompt can be partially occluded by the character.
@@ -139,6 +153,7 @@ def main():
     prev=None;velocity=0.;target_velocity=0.;cycles=0;casts=0;missing_casts=0;track_frames=0;inside_frames=0;laststate=0;lastimage=0;last_rod_check=0
     motion=ReelMotion()
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
+    cooldown_delay=1.0
     last_reference_check=0;reference_matcher=None;paused_at=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
     diagnostics=FaultRecorder(RUN,session);pickup_gate=PickupGate();last_pickup_evidence={};failure_code='';failure_details={}
@@ -154,6 +169,9 @@ def main():
         reward_id=f'{session}:{cycles}:{pickup_confirmed}'
         event('reward_observed',cycle=cycles,text=raw,reward_id=reward_id)
         inventory.observe(raw,last_prompt,reward_id)
+    def start_cooldown(seconds):
+        nonlocal stage,since,cooldown_delay
+        stage='cooldown';since=time.monotonic();cooldown_delay=seconds
     def screenshot(tag):
         im=screen.capture(sct)
         diagnostics.observe(im,tag)
@@ -209,6 +227,7 @@ def main():
                         write_metrics('status.json',state);time.sleep(.1)
                     pause_seconds=time.monotonic()-paused_at;started+=pause_seconds;since+=pause_seconds;lastseen+=pause_seconds
                     paused_at=None
+                    inp.cast_target=None;cast_needs_settle=True
                     previous_stage=stage;stage=resumed_stage(stage,cast_press_started is not None)
                     if previous_stage=='casting' and cast_press_started is not None:
                         casts+=1;event('cast',cast=casts,interrupted=True)
@@ -290,7 +309,7 @@ def main():
                         # OCR and rod detection can delay this iteration substantially.
                         if not inp.mouse:
                             inventory.begin_round()
-                            inp.aim(*screen.point(*load_config()['cast_point']),after_menu=cast_needs_settle);cast_needs_settle=False
+                            inp.aim_cast(*screen.point(*load_config()['cast_point']),after_menu=cast_needs_settle);cast_needs_settle=False
                             inp.hold(True);cast_press_started=time.monotonic()
                         elif cast_press_started is not None and time.monotonic()-cast_press_started>=.16:
                             inp.hold(False);cast_press_started=None;casts+=1;event('cast',cast=casts);stage='waiting';since=time.monotonic()
@@ -306,27 +325,28 @@ def main():
                         if now-since>.4 and now-last_pickup_scan>.35:
                             evidence,stable=pickup_text();last_pickup_scan=time.monotonic();prompt_seen=evidence.kind=='collect' and stable
                             if evidence.kind=='reward' and stable:
-                                record_reward(evidence.text);screenshot('collected');stage='cooldown';since=time.monotonic()
+                                record_reward(evidence.text);screenshot('collected');start_cooldown(.45)
                             elif prompt_seen:
                                 last_prompt=evidence.text
                                 inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;screenshot('pickup');event('pickup_hold',attempt=pickup_tries,prompt_seen=True,text=evidence.text)
                             elif now-since>4 and evidence.kind=='empty':
                                 event('empty_round',cycle=cycles,message='No pickup prompt after repeated wide scans; continuing without holding T')
-                                stage='cooldown';since=time.monotonic()
+                                start_cooldown(1.0)
                             elif now-since>7:
                                 raise FishingFault('pickup_timeout','Pickup prompt remained ambiguous after wide scans',evidence=last_pickup_evidence)
                     elif stage=='pickup':
                         if now-since>.3 and now-last_pickup_scan>.3:
                             evidence,stable=pickup_text();last_pickup_scan=time.monotonic()
                             if now-since>1.8 and evidence.kind=='reward' and stable:
-                                record_reward(evidence.text);screenshot('collected');stage='cooldown';since=time.monotonic();continue
+                                record_reward(evidence.text);screenshot('collected');start_cooldown(.45);continue
                         if now-since>4.0:
                             inp.grab(False);evidence,stable=pickup_text();screenshot('after-pickup')
                             if evidence.kind=='collect':stage='pickup_retry_wait'
                             else:
                                 if evidence.kind=='reward' and stable:record_reward(evidence.text)
                                 elif prompt_seen:inventory.observe_unconfirmed(last_prompt,f'{session}:{cycles}:inventory')
-                                stage='cooldown';event('pickup_attempted',cycle=cycles,attempts=pickup_tries)
+                                start_cooldown(.45 if evidence.kind=='reward' and stable else 1.0)
+                                event('pickup_attempted',cycle=cycles,attempts=pickup_tries)
                             since=time.monotonic()
                     elif stage=='pickup_retry_wait':
                         if now-since>.5:
@@ -336,7 +356,7 @@ def main():
                                 inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1
                             else:stage='pickup_wait';since=time.monotonic()
                     elif stage=='cooldown':
-                        if now-since>1.0:
+                        if now-since>cooldown_delay:
                             if now-last_reference_check>180 and landmarks.profile():
                                 last_reference_check=now
                                 reference_matcher=reference_matcher or landmarks.load_matcher(landmarks.profile())
@@ -346,8 +366,11 @@ def main():
                                     if second and second['rms']>10:
                                         screenshot('drift')
                                         raise FishingFault('alignment_drift','Fishing reference drifted; local alignment required',error=round(second['rms'],2))
+                            menu_scan_due=bool(inventory.pending and inventory.clock()>=inventory.next_check_at)
                             inventory_open=True
                             recovered=inventory.check_pending();inventory_open=False
+                            if menu_scan_due:
+                                inp.cast_target=None;cast_needs_settle=True
                             if recovered:
                                 pickup_confirmed+=1;last_reward=f"{recovered['item']} X{recovered['quantity']} (inventory)"
                             inventory.end_round()
