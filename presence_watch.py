@@ -18,6 +18,7 @@ def query():
 def recovery_needed(presence,absent_since,supervisor,worker,now):
     return (presence.get('ok') and presence.get('type')!=2 and absent_since is not None
             and now-absent_since>=45 and supervisor.get('running') and supervisor.get('stage')=='fishing'
+            and not (worker.get('stage')=='inventory' and now-worker.get('updated',0)<20)
             and now-worker.get('last_game_activity',now)>75)
 
 def watch(done):
