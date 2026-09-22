@@ -5,6 +5,7 @@ from metrics import read, write
 
 
 def phase(supervisor, worker):
+    if supervisor == 'paused_manual': return 'manual_wait'
     if supervisor == 'paused_focus': return 'focus_wait'
     if supervisor != 'fishing': return 'recovery'
     return {'tracking':'minigame','waiting_marker':'minigame','waiting':'bite_wait','casting':'casting','cast_press':'casting','equipping':'casting','equip_wait':'casting',

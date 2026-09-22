@@ -48,6 +48,7 @@ class InventoryDriver:
         self.deadline = None
 
     def guard(self):
+        self.inp.guard_press(True)
         if any(self.user.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):
             (RUN/'STOP').write_text('Stopped by physical hotkey')
         if (RUN/'STOP').exists():
@@ -245,13 +246,16 @@ class InventoryScanner:
             # Closing the menu still runs when the scanning budget expires.
             # The focus, window and manual-stop guards remain in force.
             d.deadline=previous_deadline
-            frame=d.capture()
-            labels=' '.join(r[1] for r in d.text(frame[340:470,10:340])).lower()
-            if self.inventory_count(frame) is not None or 'inventory' in labels:
-                # Focus and STOP are checked again; never type M into another app.
-                d.guard();d.key('M');d.sleep(.5);d.move(1650,800)
-                if self.inventory_count(d.capture()) is not None:
-                    raise RuntimeError('Inventory menu did not close; recovery required')
+            self.close()
+
+    def close(self):
+        d=self.driver
+        frame=d.capture()
+        labels=' '.join(r[1] for r in d.text(frame[340:470,10:340])).lower()
+        if self.inventory_count(frame) is not None or 'inventory' in labels:
+            d.guard();d.key('M');d.sleep(.5);d.move(1650,800)
+            if self.inventory_count(d.capture()) is not None:
+                raise RuntimeError('Inventory menu did not close; recovery required')
 
 
 class InventoryWatcher:

@@ -16,6 +16,7 @@ from faults import FaultRecorder, FishingFault, RecoveryPolicy, reason_code
 from performance import PerformanceRecorder
 from metrics import read as read_metrics
 import landmarks
+from full_pause import InputGate, InputPaused, F8Toggle, PAUSE_FILE
 
 LAUNCH_URL='roblox://placeId='+str(load_config()['place_id'])
 
@@ -25,6 +26,7 @@ class RecoveryError(Exception):pass
 class Recovery:
     def __init__(self):
         self.inp=Input();self.hwnd=None;self.rect=None;self.ocr=RapidOCR();self.sct=mss.MSS();self.shots=0
+        self.inp.gate=InputGate(self.inp,RUN,USER);self.inp.gate.start()
         self.stop=RUN/'STOP';self.log=RUN/'recovery.jsonl';self.last_action='';self.last_action_at=0;self.restarts=0;self.progress=lambda **kw:None
         self.diagnostics=FaultRecorder(RUN,'recovery-'+time.strftime('%Y%m%d-%H%M%S'))
     def event(self,event,**kw):
@@ -39,7 +41,7 @@ class Recovery:
     def select(self,focus=False):
         self.check_stop();self.hwnd=find_window()
         self.inp.hwnd=self.hwnd
-        if focus:
+        if focus and not (RUN/PAUSE_FILE).exists():
             if win32gui.IsIconic(self.hwnd):win32gui.ShowWindow(self.hwnd,9)
             try:
                 if win32gui.GetForegroundWindow()!=self.hwnd:win32gui.SetForegroundWindow(self.hwnd)
@@ -51,6 +53,7 @@ class Recovery:
         except ValueError as error:raise RecoveryError('Roblox window needs adjustment: '+str(error))
     def guard(self):
         self.check_stop()
+        self.inp.gate.check()
         if not self.hwnd or not win32gui.IsWindow(self.hwnd):raise RecoveryError('Roblox window closed')
         if win32gui.GetForegroundWindow()!=self.hwnd:raise RecoveryError('Roblox lost focus')
         if win32gui.IsIconic(self.hwnd):raise RecoveryError('Roblox lost focus')
@@ -58,6 +61,12 @@ class Recovery:
     def sleep(self,seconds,focus=True):
         until=time.monotonic()+seconds
         while time.monotonic()<until:
+            if (RUN/PAUSE_FILE).exists():
+                if focus:raise InputPaused('paused_manual')
+                paused_at=time.monotonic()
+                while (RUN/PAUSE_FILE).exists():
+                    self.check_stop();self.inp.release();self.progress(detail='paused_manual');time.sleep(.1)
+                until+=time.monotonic()-paused_at
             self.guard() if focus else self.check_stop();time.sleep(.025)
     def move(self,x,y):
         self.guard();move_pointer(*self.screen.point(x,y))
@@ -91,6 +100,7 @@ class Recovery:
         return red>500
     def launch(self,restart=False):
         self.inp.release();self.check_stop()
+        while (RUN/PAUSE_FILE).exists():self.sleep(.1,focus=False)
         if self.restarts>=3:raise RecoveryError('Three game restart attempts failed')
         if restart and self.hwnd and win32gui.IsWindow(self.hwnd):
             # Restart only the selected Roblox game client, as requested.
@@ -243,24 +253,38 @@ def main():
     policy=RecoveryPolicy();performance=PerformanceRecorder(read_metrics('totals.json').get('started'))
     # Temporary: restored when this process exits. No persistent Windows setting is changed.
     ctypes.windll.kernel32.SetThreadExecutionState(0x80000003)
+    def paused_changed(paused):
+        driver.inp.gate.poll()
+        driver.event('f8_paused' if paused else 'f8_resumed')
+    toggle=F8Toggle(RUN,lambda:driver.hwnd,paused_changed)
     def emergency_key(key):
+        if key==Key.f8:toggle.press()
         if key in (Key.esc,Key.f9,Key.f12):stop.write_text('Stopped by physical hotkey')
-    listener=Listener(on_press=emergency_key);listener.start()
+    def released_key(key):
+        if key==Key.f8:toggle.release()
+    listener=Listener(on_press=emergency_key,on_release=released_key);listener.start()
     presence_stop=presence_watch.start()
     def status(stage,**kw):
+        if (RUN/PAUSE_FILE).exists():stage='paused_manual'
         performance.tick(stage,read_metrics('status.json'),read_metrics('totals.json'))
-        write_metrics('supervisor.json',{'running':True,'pid':os.getpid(),'updated':time.time(),'started':started,'stage':stage,'mode':'full','recoveries':max(0,recoveries-1),'last_error':last_error,'runs_until_stopped':a.seconds<=0,**kw})
+        write_metrics('supervisor.json',{'running':True,'pid':os.getpid(),'updated':time.time(),'started':started,'stage':stage,'mode':'full','manual_paused':(RUN/PAUSE_FILE).exists(),'recoveries':max(0,recoveries-1),'last_error':last_error,'runs_until_stopped':a.seconds<=0,**kw})
     driver.progress=lambda **kw:status('recovering',**kw)
     try:
-        try:driver.select(focus=a.focus)
+        try:driver.select(focus=a.focus and not (RUN/PAUSE_FILE).exists())
         except RuntimeError:driver.launch()
         if a.restart:driver.launch(restart=True)
         force=a.rejoin
         while time.monotonic()<deadline:
+            while driver.inp.gate.reason() or not driver.inp.gate.acknowledge():
+                driver.check_stop();driver.inp.release();status(driver.inp.gate.reason() or 'paused_focus');time.sleep(.1)
+                if time.monotonic()>=deadline:break
+            if time.monotonic()>=deadline:break
             status('recovering')
             try:
                 driver.recover(force_menu=force)
                 landmarks.align(driver)
+            except InputPaused:
+                driver.inp.release();force=False;continue
             except (RecoveryError,FishingFault) as ex:
                 driver.inp.release();last_error=str(ex);driver.event('recovery_retry',reason=last_error)
                 if 'lost focus' in last_error and driver.hwnd and win32gui.IsWindow(driver.hwnd):
@@ -294,7 +318,10 @@ def main():
             with open(RUN/'worker-stdout.log','a') as stdout,open(RUN/'worker-stderr.log','a') as stderr:
                 child=subprocess.Popen([sys.executable,str(ROOT/'fishing_assistant.py'),'--seconds',str(remaining)],stdout=stdout,stderr=stderr)
             while child.poll() is None:
-                driver.check_stop();status('fishing',worker_pid=child.pid);time.sleep(.3)
+                driver.check_stop()
+                worker=read_metrics('status.json')
+                stage='paused_manual' if (RUN/PAUSE_FILE).exists() else 'paused_focus' if worker.get('updated',0)>=worker_started and worker.get('stage')=='paused_focus' else 'fishing'
+                status(stage,worker_pid=child.pid);time.sleep(.1)
             child=None
             child_status=json.loads((RUN/'status.json').read_text())
             if child_status.get('updated',0)<worker_started:raise RecoveryError('Fishing worker failed before reporting its state; inspect worker-stderr.log')
@@ -338,7 +365,7 @@ def main():
                     parent.terminate()
                 except psutil.NoSuchProcess:pass
                 USER.mouse_event(4,0,0,0,0);USER.keybd_event(ord('T'),USER.MapVirtualKeyW(ord('T'),0),2,0)
-        driver.inp.release()
+        driver.inp.gate.close()
         listener.stop()
         presence_stop.set()
         ctypes.windll.kernel32.SetThreadExecutionState(0x80000000)
