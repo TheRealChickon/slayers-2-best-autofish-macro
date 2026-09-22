@@ -1,11 +1,14 @@
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack, nullcontext
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from minigame_assist import TrackingAssist
+import minigame_assist as assist
+import fishing_assistant
 import control_actions
 import app_config
 import metrics
@@ -40,6 +43,55 @@ class AssistTracking(unittest.TestCase):
         tracker.suspend()
         self.assertFalse(tracker.held)
         self.assertIsNone(tracker.previous)
+
+    def test_focus_return_reacquires_two_frames_without_old_motion(self):
+        tracker=TrackingAssist()
+        tracker.step(marker(),True,1);tracker.step(marker(),True,1.02)
+        tracker.suspend()
+        self.assertFalse(tracker.step(marker(180,250),True,3))
+        self.assertFalse(tracker.step(marker(180,250),True,3.02))
+        self.assertEqual(tracker.velocity,0)
+        self.assertEqual(tracker.count,1)
+        self.assertTrue(tracker.step(marker(200,150),True,3.04))
+
+
+class FocusInput(unittest.TestCase):
+    def setUp(self):
+        temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
+        self.root=Path(temporary.name)
+        patches=[patch.object(assist,'RUN',self.root),patch.object(fishing_assistant,'USER'),
+                 patch.object(assist,'USER'),patch.object(assist,'foreground',return_value=True),
+                 patch.object(fishing_assistant.Input,'guard_press')]
+        self.mocks=[p.start() for p in patches]
+        for p in patches:self.addCleanup(p.stop)
+        self.user=self.mocks[2];self.user.GetAsyncKeyState.return_value=0
+        self.inp=assist.ForegroundInput();self.inp.hwnd=123
+
+    def test_return_sends_real_release_even_when_local_button_is_already_up(self):
+        self.inp.mouse=True;self.inp.suspend_input()
+        self.assertFalse(self.inp.mouse)
+        self.inp.interrupted.clear()
+        self.inp.sync_game_input()
+        self.user.mouse_event.assert_called_once_with(4,0,0,0,0)
+        self.user.keybd_event.assert_not_called()
+        self.inp.sync_game_input()
+        self.assertEqual(self.user.mouse_event.call_count,1)
+
+    def test_sync_cannot_send_to_background_app_or_while_alt_is_held(self):
+        self.inp.suspend_input();self.inp.interrupted.clear()
+        self.mocks[3].return_value=False
+        with self.assertRaises(RuntimeError):self.inp.sync_game_input()
+        self.mocks[3].return_value=True
+        self.user.GetAsyncKeyState.side_effect=lambda key:0x8000 if key==18 else 0
+        with self.assertRaises(RuntimeError):self.inp.sync_game_input()
+        self.user.mouse_event.assert_not_called()
+        self.user.keybd_event.assert_not_called()
+
+    def test_sync_preserves_stop_and_only_releases_t_if_it_was_owned(self):
+        self.inp.t=True;self.inp.suspend_input();self.inp.interrupted.clear()
+        (self.root/'STOP').write_text('Stopped by user')
+        with self.assertRaises(RuntimeError):self.inp.sync_game_input()
+        self.user.mouse_event.assert_not_called();self.user.keybd_event.assert_not_called()
 
 
 class AssistControls(unittest.TestCase):
@@ -76,6 +128,60 @@ class AssistControls(unittest.TestCase):
             self.assertNotIn('--focus',args);self.assertNotIn('--rejoin',args)
             focus.assert_not_called()
         self.assertEqual(app_config.load_config()['mode'],'spot')
+
+    def test_running_assist_f8_and_focus_round_trip_without_real_input(self):
+        import json
+        import numpy as np
+        # Exercise main(), including its pause branch and input application.
+        # The clock, screen, Windows APIs and input sink are all offline fakes.
+        clock={'at':0.,'focus':True};presses=[];states=[];fired=set()
+        inp=assist.ForegroundInput()
+        def tick(delay):
+            clock['at']+=max(.01,delay)
+            t=clock['at']
+            for threshold in (.2,1.25):
+                if t>=threshold and threshold not in fired:
+                    fired.add(threshold);inp.suspend_input();inp.toggle_requested.set()
+            clock['focus']=not (.4<=t<.6 or 1.6<=t<1.8)
+        def mouse(flags,*args):
+            presses.append((clock['at'],flags,clock['focus']))
+        screen=Mock(rect=(0,0,2560,1440))
+        screen.capture.return_value=np.zeros((600,140,3),np.uint8)
+        writes=lambda name,data:states.append((name,dict(data)))
+        with ExitStack() as stack:
+            replacements=[(assist,'RUN',self.root),(assist,'ForegroundInput',lambda:inp),
+                (assist,'foreground',lambda hwnd:clock['focus']),(assist,'navigation_keys_down',lambda:False),
+                (assist,'find_window',lambda:123),(assist,'rectangle',lambda hwnd:screen.rect),
+                (assist,'ScreenSpace',lambda rect:screen),(assist,'Ledger',Mock(return_value=Mock(base={}))),
+                (assist,'PerformanceRecorder',Mock()),(assist,'write',writes),(assist,'read',lambda name:{}),
+                (assist,'detect',lambda roi:{**marker(),'inside':False,'height':54,'ball_height':31}),
+                (assist,'ui_visible',lambda *args:True),
+                (control_actions,'guard',nullcontext),(control_actions,'alive',lambda *args:False),
+                (assist.time,'monotonic',lambda:clock['at']),(assist.time,'time',lambda:clock['at']+1000),
+                (assist.time,'sleep',tick),(assist.threading,'Thread',Mock()),
+                (fishing_assistant.Input,'guard_press',lambda *args:None),
+                (assist.win32gui,'IsWindow',lambda h:True),
+                (assist.win32gui,'GetCursorPos',lambda:(1280,720)),
+                (assist.win32gui,'WindowFromPoint',lambda p:123),
+                (assist.win32gui,'GetAncestor',lambda *args:123),
+                (assist.cv2,'imwrite',lambda *args:True)]
+            for obj,key,value in replacements:stack.enter_context(patch.object(obj,key,value))
+            user=Mock();user.GetAsyncKeyState.return_value=0;user.mouse_event.side_effect=mouse
+            stack.enter_context(patch.object(assist,'USER',user))
+            stack.enter_context(patch.object(fishing_assistant,'USER',user))
+            stack.enter_context(patch.object(assist.mss,'MSS',lambda:nullcontext(None)))
+            self.assertEqual(assist.main(['--mode','assist','--seconds','2.1']),0)
+        downs=[t for t,flag,focus in presses if flag==2]
+        self.assertTrue(any(t<.2 for t in downs))
+        self.assertFalse(any(.2<=t<1.25 for t in downs))
+        self.assertTrue(any(1.25<t<1.6 for t in downs))
+        self.assertTrue(any(t>1.8 for t in downs))
+        self.assertFalse(any(flag==2 and not focus for _,flag,focus in presses))
+        self.assertTrue(any(s.get('stage')=='assist_paused' and s.get('manual_paused') for _,s in states))
+        events=[json.loads(line) for p in self.root.glob('events-*.jsonl') for line in p.read_text().splitlines()]
+        self.assertEqual(sum(e['event']=='assist_paused' for e in events),1)
+        self.assertEqual(sum(e['event']=='assist_resumed' for e in events),1)
+        user.keybd_event.assert_not_called()
 
 
 if __name__=='__main__':unittest.main()

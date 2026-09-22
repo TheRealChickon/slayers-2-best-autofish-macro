@@ -291,7 +291,7 @@ class Window:
         tk.Label(mode_row,text='Mode',bg=BG,fg=MUTED,font=(FONT,10),width=18,anchor='w').pack(side='left')
         self.mode_var=tk.StringVar(value=MODES[config['mode']])
         ttk.Combobox(mode_row,textvariable=self.mode_var,values=tuple(MODES.values()),state='readonly',width=23).pack(side='left',ipady=5)
-        tk.Label(form,text='Fish here: F8 starts / pauses / resumes.\nLosing focus pauses automatically.',bg=BG,fg=MUTED,font=(FONT,9),justify='left').pack(anchor='w',pady=(0,8))
+        tk.Label(form,text='Manual modes: F8 pauses / resumes.\nLosing focus pauses automatically.',bg=BG,fg=MUTED,font=(FONT,9),justify='left').pack(anchor='w',pady=(0,8))
         for key,label in [('account_username','Roblox username'),('rod_slot','Rod slot')]:
             row=tk.Frame(form,bg=BG);row.pack(fill='x',pady=(6,12))
             tk.Label(row,text=label,bg=BG,fg=MUTED,font=(FONT,10),width=18,anchor='w').pack(side='left')
