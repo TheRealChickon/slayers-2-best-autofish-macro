@@ -16,7 +16,7 @@ from fishing_assistant import ROOT, USER, Input, detect, find_window, rectangle
 from metrics import RUN, Ledger, read, write
 from screen_space import ScreenSpace
 from fishing_vision import ui_visible
-from pickup_policy import classify, PickupGate, Pickup
+from pickup_policy import classify, PickupGate, Pickup, same_reward
 from spot_fishing import SpotCycle
 from rod_detector import locate_rod, RodReady
 from performance import PerformanceRecorder
@@ -148,6 +148,12 @@ def safe_cast_pointer(screen):
     return 260<=x<=2240 and 160<=y<=1240
 
 
+def cast_scene_ready(frame, ocr, rod_gate, previous):
+    evidence,world,rod=read_scene(frame,ocr)
+    return (world and rod_gate.matches(rod)
+            and (evidence.kind=='empty' or same_reward(evidence,previous)))
+
+
 class TrackingAssist(ReelMotion):
     def __init__(self):
         super().__init__()
@@ -219,7 +225,7 @@ def main(argv=None):
         from rapidocr_onnxruntime import RapidOCR
         ocr=RapidOCR()
     gate=PickupGate();rod_gate=RodReady();rod_ready=False;evidence=Pickup('empty');stable=False;world=False;rod=None
-    active_time=0.;last_tick=time.monotonic();last_scan=-10.;resuming=True
+    active_time=0.;last_tick=time.monotonic();last_scan=-10.;last_rod_scan=-10.;scan_ms=None;resuming=True
     missing_since=None;last_capture=0.;capture_index=0
     samples=deque(maxlen=1800);frame_intervals=deque(maxlen=120);last_track_tick=None
     track_frames=inside_frames=missed_frames=0
@@ -240,6 +246,8 @@ def main(argv=None):
               'spot_paused':spot.paused if spot else False,
               'manual_paused':spot.paused if spot else assist_paused,
               'wait_reason':wait_reason,
+              'pickup_evidence':evidence.kind if spot else None,
+              'pickup_scan_ms':scan_ms,'rod_ready':rod_ready if spot else None,
               'control_fps':round(len(frame_intervals)/sum(frame_intervals),1) if frame_intervals else None,
               'inside_fraction':round(inside_frames/max(1,track_frames),3),
               'tracked_frames':track_frames,'missed_frames':missed_frames,
@@ -335,26 +343,42 @@ def main(argv=None):
                     elif spot:
                         if spot.stage=='tracking':
                             inp.release()
+                            stage='pickup_wait'
                             if tracker.clear_since is not None and tick-tracker.clear_since>.55:
                                 spot.ended(active_time);last_scan=-10.
                         else:
+                            # Rod confirmation need not wait for three slow OCR
+                            # passes. These are fresh visual observations; a
+                            # full scene check still gates every actual cast.
+                            if world and not rod_ready and tick-last_rod_scan>.15 and spot.stage not in ('cast_press','waiting'):
+                                rod_frame=screen.capture(sct)
+                                rod_ready=rod_gate.observe(locate_rod(rod_frame),time.monotonic())
+                                last_rod_scan=time.monotonic()
                             # Waiting for a bite requires only fast minigame
                             # vision. OCR here delayed the first reel input.
                             if spot.armed and tick-last_scan>.35 and spot.stage not in ('cast_press','waiting'):
+                                scan_started=time.monotonic()
                                 frame=screen.capture(sct)
                                 evidence,world,rod=read_scene(frame,ocr)
-                                stable=gate.observe(evidence,time.monotonic());last_scan=time.monotonic()
-                                rod_ready=rod_gate.observe(rod if world else None,last_scan)
+                                scan_finished=time.monotonic()
+                                scan_ms=round((scan_finished-scan_started)*1000)
+                                # Space scan starts, not scan finishes: OCR's
+                                # own runtime already counts toward the interval.
+                                last_scan=scan_started
+                                stable=gate.observe(evidence,scan_finished)
+                                rod_ready=rod_gate.observe(rod if world else None,scan_started)
+                                last_rod_scan=scan_started
                                 if inp.interrupted.is_set() or not foreground(hwnd):raise RuntimeError('Focus changed during observation')
                             action=spot.step(active_time,evidence,stable,world,rod_ready)
                             if action=='cast':
                                 inp.release()
                                 fresh=screen.capture(sct)
-                                if (not rod_gate.matches(locate_rod(fresh)) or not safe_cast_pointer(screen)
-                                        or ui_visible(fresh[1360:1430,1190:1370],template)):
+                                if (not safe_cast_pointer(screen)
+                                        or ui_visible(fresh[1360:1430,1190:1370],template)
+                                        or not cast_scene_ready(fresh,ocr,rod_gate,evidence)):
                                     spot.cancel_unstarted_press(active_time)
                                     rod_gate.reset();rod_ready=False;last_scan=-10.
-                                    event('cast_withheld',message='Waiting for an equipped rod and a mouse position clear of the HUD.')
+                                    event('cast_withheld',message='Rechecking the pickup, equipped rod and mouse position.')
                                     continue
                                 try:
                                     inp.sync_game_input()
@@ -373,8 +397,9 @@ def main(argv=None):
                                 inp.grab(True)
                             else:inp.release()
                             stage=spot.stage
-                            if stage=='checking_spot' and not rod_ready:
-                                stage='waiting_rod'
+                            if stage=='checking_spot':
+                                if spot.pending_reward:stage='pickup_wait'
+                                elif not rod_ready:stage='waiting_rod'
                     else:
                         inp.release()
                 except (RuntimeError, ValueError, win32gui.error) as error:

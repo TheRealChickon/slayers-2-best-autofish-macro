@@ -8,7 +8,7 @@ import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from fishing_vision import detect, ui_visible
 from spot_fishing import SpotCycle
-from pickup_policy import Pickup
+from pickup_policy import Pickup, same_reward
 from minigame_assist import ForegroundInput, read_scene
 import minigame_assist
 
@@ -115,6 +115,48 @@ class SpotState(unittest.TestCase):
         self.assertEqual(self.step(14.4,'reward'),'release')
         self.step(15,'reward');self.assertEqual(self.spot.rewards,1)
         self.step(16);self.assertEqual(self.step(17.3),'cast')
+
+    def test_confirmed_toast_can_recast_without_waiting_for_popup_to_fade(self):
+        self.spot.tracking(1);self.spot.ended(5)
+        self.assertEqual(self.step(5.5,'collect'),'collect')
+        self.assertEqual(self.step(7.5,'reward'),'release')
+        self.assertEqual(self.spot.rewards,1)
+        self.assertEqual(self.step(8.05,'reward'),'release')
+        self.assertEqual(self.step(8.11,'reward'),'release')
+        self.assertEqual(self.step(8.13,'reward'),'cast')
+        self.step(8.32,'reward');self.step(9,'reward')
+        self.assertEqual(self.spot.rewards,1)
+        self.assertEqual(self.spot.casts,1)
+
+    def test_toast_recast_still_requires_rod_stability_and_matching_reward(self):
+        for obstacle in ('rod','unstable','different','collect','other'):
+            self.setUp();self.spot.tracking(1);self.spot.ended(5)
+            self.step(5.5,'collect');self.step(7.5,'reward');self.step(8.2,'reward')
+            evidence=Pickup('reward','Coral X1')
+            if obstacle=='different':evidence=Pickup('reward','Sea Horse X1')
+            if obstacle in ('collect','other'):evidence=Pickup(obstacle)
+            result=self.spot.step(8.3,evidence,obstacle!='unstable',True,obstacle!='rod')
+            self.assertNotEqual(result,'cast',obstacle)
+
+    def test_unconfirmed_toast_cannot_authorize_cast(self):
+        for t in (2,5,10):self.assertEqual(self.step(t,'reward'),'release')
+        self.assertEqual(self.spot.rewards,0)
+
+    def test_fresh_scene_rejects_collect_menu_and_changed_rod_before_cast(self):
+        frame=np.zeros((1440,2560,3),np.uint8)
+        gate=Mock();gate.matches.return_value=True
+        previous=Pickup('reward','Coral X1')
+        for evidence,world,matched,wanted in (
+            (Pickup('empty'),True,True,True),
+            (Pickup('reward','Coral x 1'),True,True,True),
+            (Pickup('collect','Coral Collect'),True,True,False),
+            (Pickup('reward','Sea Horse X1'),True,True,False),
+            (Pickup('empty'),False,True,False),
+            (Pickup('empty'),True,False,False)):
+            gate.matches.return_value=matched
+            with patch.object(minigame_assist,'read_scene',return_value=(evidence,world,{})):
+                self.assertEqual(minigame_assist.cast_scene_ready(frame,Mock(),gate,previous),wanted)
+        self.assertFalse(same_reward(Pickup('empty'),Pickup('empty')))
 
     def test_f8_starts_then_pauses_and_resumes_without_duplicate_cast(self):
         blank=SpotCycle(Mock())

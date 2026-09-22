@@ -11,6 +11,13 @@ class Pickup:
     center: tuple = (0, 0)
 
 
+def same_reward(first, second):
+    """Only the already confirmed toast may remain visible during a recast."""
+    key=lambda text:re.sub(r'[^a-z0-9]', '', text.casefold())
+    return (first.kind==second.kind=='reward' and bool(key(first.text))
+            and key(first.text)==key(second.text))
+
+
 def classify(rows):
     # Tiny quantity text scores lower than the item name in a wide crop.
     # Keep only exact xN tokens at that lower threshold; a nearby strong item
