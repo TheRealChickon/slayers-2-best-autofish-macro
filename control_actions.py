@@ -103,7 +103,7 @@ def resume(mode=None):
             except (OSError,ValueError):current_mode='full'
             if current_mode!=mode:return 'Pause the current mode before switching modes.'
             if mode=='assist':return 'Minigame only is active. Bring Roblox forward and cast manually.'
-            if mode=='spot':return 'Fish here is active. Bring Roblox forward; F8 selects a fishing point.'
+            if mode=='spot':return 'Fish here is active. Equip your rod, position the mouse, then press F8.'
             focus_game()
             event('continue', 'Returned focus to Roblox.')
             return 'Roblox is focused. Fishing will resume automatically.'
@@ -123,7 +123,7 @@ def resume(mode=None):
             (RUN / 'STOP').write_text('Continue failed; input stopped')
             raise
         message = ('Minigame only is active. Bring Roblox forward and cast manually.' if mode=='assist' else
-                   'Fish here is active. Point at water in Roblox and press F8; tabbing away pauses input.' if mode=='spot' else
+                   'Fish here is active. Equip your rod, position the mouse, then press F8; losing focus pauses input.' if mode=='spot' else
                    'Continuing the saved run. Rejoining and equipping the rod...')
         event('continue',message)
         return message

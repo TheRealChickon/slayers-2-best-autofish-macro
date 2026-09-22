@@ -53,15 +53,19 @@ class SpotState(unittest.TestCase):
     def setUp(self):
         self.events=[]
         self.spot=SpotCycle(lambda kind,**kw:self.events.append((kind,kw)))
-        self.spot.select((1500,700),0)
+        self.spot.arm(0)
 
     def step(self,t,kind='empty',world=True,equipped=True,stable=True):
         return self.spot.step(t,Pickup(kind,'Coral X1' if kind=='reward' else ''),stable,world,equipped)
 
-    def test_point_required_and_hud_rejected(self):
+    def test_player_must_arm_and_equip_before_clicking(self):
         blank=SpotCycle(Mock())
         self.assertEqual(blank.step(20,Pickup('empty'),True,True,True),'release')
-        self.assertFalse(blank.select((100,1400),0));self.assertIsNone(blank.point)
+        self.assertFalse(blank.armed)
+        blank.arm(0)
+        for t in (2,10,60):
+            self.assertEqual(blank.step(t,Pickup('empty'),True,True,False),'release')
+        self.assertEqual(blank.step(61,Pickup('empty'),True,True,True),'cast')
 
     def test_complete_cycle_collects_once_and_repeats(self):
         self.assertEqual(self.step(1.3),'cast')
@@ -73,6 +77,25 @@ class SpotState(unittest.TestCase):
         self.assertEqual(self.step(14.4,'reward'),'release')
         self.step(15,'reward');self.assertEqual(self.spot.rewards,1)
         self.step(16);self.assertEqual(self.step(17.3),'cast')
+
+    def test_f8_starts_then_pauses_and_resumes_without_duplicate_cast(self):
+        blank=SpotCycle(Mock())
+        self.assertTrue(blank.toggle(0))
+        self.assertEqual(blank.step(2,Pickup('empty'),True,True,True),'cast')
+        blank.step(2.2,Pickup('empty'),True,True,True)
+        self.assertFalse(blank.toggle(3))
+        self.assertEqual(blank.step(50,Pickup('collect'),True,True,True),'release')
+        self.assertTrue(blank.toggle(3))  # Paused wall time is excluded.
+        self.assertEqual(blank.step(4,Pickup('empty'),True,True,True),'release')
+        self.assertEqual(blank.casts,1)
+
+    def test_f8_can_pause_during_tracking_or_pickup(self):
+        for stage in ('tracking','pickup'):
+            self.setUp();self.spot.stage=stage;self.spot.since=1
+            self.assertFalse(self.spot.toggle(2))
+            self.assertEqual(self.step(3,'collect'),'release')
+            self.assertTrue(self.spot.toggle(2))
+            self.assertEqual(self.step(2.1,stable=False),'release')
 
     def test_focus_return_reobserves_instead_of_reusing_hold(self):
         self.spot.tracking(1);self.spot.ended(5)
@@ -97,6 +120,41 @@ class SpotState(unittest.TestCase):
         self.assertEqual(self.step(10),'release')
         self.assertEqual(self.step(25),'release')
         self.assertEqual(self.step(32),'cast')
+
+    def test_blocked_press_is_not_counted_as_a_cast_or_bite_wait(self):
+        self.assertEqual(self.step(1.3),'cast')
+        self.spot.cancel_unstarted_press(1.4)
+        self.spot.resume(1.5)
+        self.assertEqual(self.step(2.8),'cast')
+        self.assertEqual(self.spot.casts,0)
+
+    def test_manual_input_forbids_pointer_movement(self):
+        import fishing_assistant
+        with patch.object(fishing_assistant,'move_pointer') as move:
+            with self.assertRaises(RuntimeError):ForegroundInput().aim(850,800)
+            move.assert_not_called()
+
+    def test_f8_releases_once_per_press_and_only_in_roblox(self):
+        for focused in (True,False):
+            inp=Mock(toggle_enabled=True,hwnd=1)
+            done=Mock();done.wait.side_effect=[False,False,True]
+            with patch.object(minigame_assist,'USER') as user,patch.object(minigame_assist,'foreground',return_value=focused),patch.object(minigame_assist,'RUN',Path('nonexistent-test-state')):
+                user.GetAsyncKeyState.side_effect=lambda k:0x8000 if k==119 else 0
+                minigame_assist.watch_focus(inp,done)
+            self.assertEqual(inp.toggle_requested.set.call_count,1 if focused else 0)
+            if focused:inp.release.assert_called_once()
+
+    def test_manual_input_emits_only_left_click_and_t(self):
+        import fishing_assistant
+        from unittest.mock import call
+        with patch.object(fishing_assistant,'USER') as user,patch.object(minigame_assist,'RUN',Path('nonexistent-test-state')):
+            user.MapVirtualKeyW.return_value=20
+            inp=ForegroundInput()
+            inp.hold(True);inp.hold(False);inp.grab(True);inp.release()
+            self.assertEqual(user.mouse_event.call_args_list,[call(2,0,0,0,0),call(4,0,0,0,0)])
+            self.assertEqual(user.keybd_event.call_args_list,[call(ord('T'),20,0,0),call(ord('T'),20,2,0)])
+            user.SetCursorPos.assert_not_called();user.ClipCursor.assert_not_called()
+            user.SetForegroundWindow.assert_not_called()
 
     def test_pickup_and_no_bite_retries_are_bounded(self):
         self.spot.tracking(1);self.spot.ended(2)

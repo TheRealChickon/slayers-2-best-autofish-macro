@@ -1,4 +1,4 @@
-"""Foreground-only manual assist and repeat-at-a-point fishing controllers."""
+"""Foreground-only fishing controllers; the player owns position and focus."""
 import argparse
 import json
 import os
@@ -15,7 +15,6 @@ from fishing_assistant import ROOT, USER, Input, detect, find_window, rectangle
 from metrics import RUN, Ledger, read, write
 from screen_space import ScreenSpace
 from fishing_vision import ui_visible
-from app_config import load_config
 from pickup_policy import classify, PickupGate, Pickup
 from spot_fishing import SpotCycle
 from rod_detector import locate_rod
@@ -28,6 +27,8 @@ class ForegroundInput(Input):
         super().__init__()
         self.lock = threading.RLock()
         self.interrupted = threading.Event()
+        self.toggle_requested = threading.Event()
+        self.toggle_enabled = False
 
     def guard_press(self, down):
         super().guard_press(down)
@@ -42,6 +43,9 @@ class ForegroundInput(Input):
         with self.lock:
             super().grab(down)
 
+    def aim(self, *args, **kwargs):
+        raise RuntimeError('Manual fishing modes never move the pointer')
+
 
 def foreground(hwnd):
     return (hwnd is not None and win32gui.IsWindow(hwnd) and not win32gui.IsIconic(hwnd)
@@ -50,8 +54,15 @@ def foreground(hwnd):
 
 
 def watch_focus(inp, done):
+    f8_down = False
     while not done.wait(.015):
         try:
+            f8 = bool(USER.GetAsyncKeyState(119)&0x8000)
+            if inp.toggle_enabled and f8 and not f8_down and foreground(inp.hwnd):
+                inp.interrupted.set()
+                inp.toggle_requested.set()
+                inp.release()
+            f8_down = f8
             hotkey = any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123))
             if hotkey and not (RUN/'STOP').exists():
                 (RUN/'STOP').write_text('Stopped by physical hotkey')
@@ -149,13 +160,14 @@ def main(argv=None):
         if 'reward_id' in kw:kw['reward_id']=session+':'+kw['reward_id']
         log.write(json.dumps({'at':time.time(),'event':kind,'mode':args.mode,**kw})+'\n')
     spot=SpotCycle(event) if args.mode=='spot' else None
+    inp.toggle_enabled = spot is not None
     ocr=None
     if spot:
         from rapidocr_onnxruntime import RapidOCR
         ocr=RapidOCR()
     gate=PickupGate();evidence=Pickup('empty');stable=False;world=False;rod=None
-    active_time=0.;last_tick=time.monotonic();last_scan=-10.;resuming=True;f8_down=False
-    missing_since=None;last_capture=0.;capture_index=0;equip_attempts=0
+    active_time=0.;last_tick=time.monotonic();last_scan=-10.;resuming=True
+    missing_since=None;last_capture=0.;capture_index=0
     done=threading.Event()
     watcher=threading.Thread(target=watch_focus,args=(inp,done),daemon=True);watcher.start()
     performance=PerformanceRecorder(ledger.base.get('started'))
@@ -169,14 +181,15 @@ def main(argv=None):
               'stage':stage,'cycles':tracker.count,'casts':spot.casts if spot else 0,
               'reward_banners_observed':spot.rewards if spot else 0,'failed_rounds':0,
               'held_mouse':inp.mouse,'held_t':inp.t,'last_game_activity':last_activity,
-              'selected_point':spot.point if spot else None,'active_seconds':round(active_time,1),
+              'spot_armed':spot.armed if spot else False,'active_seconds':round(active_time,1),
+              'spot_paused':spot.paused if spot else False,
               'wait_reason':wait_reason,
               'reason':reason if not running else '', 'elapsed':round(time.monotonic()-monotonic_started,1)})
         # These hooks are observed minigames; manual pickups stay outside the journal.
         ledger.update(active_time,spot.casts if spot else 0,tracker.count,spot.rewards if spot else 0,0,spot.last_reward if spot else '')
         if running:performance.tick('paused_focus' if stage=='paused_focus' else 'fishing',{'stage':stage},read('totals.json'))
     try:
-        event('assist_started',message='Point at water and press F8 to repeat fishing here.' if spot else 'Minigame only: waiting for a manual cast');status()
+        event('assist_started',message='Equip your rod, position the mouse, then press F8 to start.' if spot else 'Minigame only: waiting for a manual cast');status()
         with mss.MSS() as sct:
             while args.seconds<=0 or time.monotonic()-monotonic_started<args.seconds:
                 tick=time.monotonic()
@@ -191,9 +204,21 @@ def main(argv=None):
                     rect=rectangle(selected)
                     if selected!=hwnd or screen is None or screen.rect!=rect:
                         if hwnd is not None and hwnd!=selected and spot:
-                            spot.point=None  # A new Roblox process may be at another spawn.
+                            spot.armed=False  # A new Roblox process needs the player to rearm.
+                            spot.paused=True
                         inp.release();tracker.suspend();screen=ScreenSpace(rect);hwnd=selected;inp.hwnd=hwnd
                         resuming=True
+                    if spot and inp.toggle_requested.is_set():
+                        inp.toggle_requested.clear()
+                        spot.toggle(active_time)
+                        inp.release();tracker.suspend();resuming=True
+                    if spot and (not spot.armed or spot.paused):
+                        inp.release()
+                        stage='spot_paused' if spot.armed else 'select_spot'
+                        wait_reason='Press F8 in Roblox to resume' if spot.armed else 'Equip your rod, position the mouse, then press F8'
+                        if tick>=next_state:status();next_state=tick+1
+                        time.sleep(.03)
+                        continue
                     if inp.interrupted.is_set():resuming=True
                     if resuming:
                         inp.release();inp.interrupted.clear();tracker.suspend()
@@ -231,30 +256,21 @@ def main(argv=None):
                             if tracker.clear_since is not None and tick-tracker.clear_since>.55:
                                 spot.ended(active_time);last_scan=-10.
                         else:
-                            f8=bool(USER.GetAsyncKeyState(119)&0x8000)
-                            if f8 and not f8_down:
-                                x,y=win32gui.GetCursorPos()
-                                point=((x-rect[0])/screen.sx,(y-rect[1])/screen.sy)
-                                if spot.select(point,active_time):
-                                    gate=PickupGate();last_scan=-10.;equip_attempts=0
-                            f8_down=f8
-                            if spot.point and tick-last_scan>.35 and spot.stage not in ('cast_press','equipping','equip_wait'):
+                            if spot.armed and tick-last_scan>.35 and spot.stage!='cast_press':
                                 frame=screen.capture(sct)
                                 evidence,world,rod=read_scene(frame,ocr)
                                 stable=gate.observe(evidence,time.monotonic());last_scan=time.monotonic()
                                 if inp.interrupted.is_set() or not foreground(hwnd):raise RuntimeError('Focus changed during observation')
                             action=spot.step(active_time,evidence,stable,world,bool(rod and rod['equipped']))
-                            if action in ('cast','equip'):
+                            if action=='cast':
                                 inp.release()
-                                if action=='equip':
-                                    equip_attempts+=1
-                                    if not load_config()['auto_rod'] or not rod or equip_attempts>3:
-                                        spot.stage='spot_attention'
-                                        event('rod_unreadable',message='Equip your rod, then point at water and press F8.')
-                                        continue
-                                    point=(rod['x'],rod['y'])
-                                else:point=spot.point;equip_attempts=0
-                                inp.aim(*screen.point(*point));inp.hold(True)
+                                try:
+                                    inp.hold(True)
+                                except (RuntimeError,ValueError,win32gui.error):
+                                    # No click was sent: do not invent a pending
+                                    # bite and wait 30 seconds on the next scan.
+                                    spot.cancel_unstarted_press(active_time)
+                                    raise
                                 spot.since=active_time+time.monotonic()-tick
                             elif action=='hold':inp.grab(False);inp.hold(True)
                             elif action=='collect':

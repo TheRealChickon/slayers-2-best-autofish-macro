@@ -30,7 +30,8 @@ def snapshot(journal=None):
         fishing_states = {'tracking':'Assisting minigame' if supervisor.get('mode')=='assist' else 'Fishing',
                           'pickup':'Collecting','waiting':'Waiting for a bite','casting':'Casting',
                           'inventory':'Reading inventory','assist_waiting':'Waiting for your cast',
-                          'select_spot':'Point at water and press F8','checking_spot':'Checking fishing spot',
+                          'select_spot':'Equip rod, aim, then F8','checking_spot':'Checking fishing spot',
+                          'spot_paused':'Paused — F8 to resume',
                           'spot_blocked':'Waiting for fishing scene','spot_attention':'Check the spot, then press F8',
                           'waiting_marker':'Waiting for a clear marker','pickup_wait':'Checking pickup',
                           'cast_press':'Casting','equipping':'Equipping rod','equip_wait':'Equipping rod','cooldown':'Next cast'}
@@ -59,7 +60,8 @@ def snapshot(journal=None):
                     'Not polled while stopped' if not live else 'Checking',
         'presence_fresh': bool(fresh),
         'recent': recent(journal), 'alignment': read('alignment.json'),
-        'selected_point':worker.get('selected_point'),
+        'spot_armed':worker.get('spot_armed',False),
+        'spot_paused':worker.get('spot_paused',False),
     }
 
 

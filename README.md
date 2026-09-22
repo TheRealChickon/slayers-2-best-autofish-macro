@@ -21,7 +21,7 @@ A Windows fishing assistant for the Project Slayers 2 / Ouwland fishing minigame
 | Operating system | Windows x64; not macOS, Linux, mobile, or Roblox console |
 | Game | This game's Ouwland fishing minigame; not arbitrary Roblox games |
 | Display | Automatic scaling for a 16:9 Roblox client area, with normal game UI scale. 1920 × 1080 and 2560 × 1440 tested live; see resolution notes below |
-| Position | Full farmer uses a saved spawn; Fish here repeats at a point you choose with F8. No travel across the map |
+| Position | Full farmer uses a saved spawn; Fish here stays wherever you put it. No travel across the map |
 | Focus | Roblox must stay visible and foreground; switching apps pauses input |
 
 Setup has been tested from a clean source checkout on Windows with Python 3.12. Portability removes hardcoded account and computer paths; it does not remove the screen-layout and in-game setup requirements.
@@ -76,7 +76,7 @@ If you move the installation folder, run `Setup.cmd` again to refresh the shortc
 | --- | --- | --- |
 | **Full farmer** (`full`) | Saved spawn and initial setup | Rod, casts, minigame, collection, inventory checks, local repairs and reconnects |
 | **Minigame only** (`assist`) | Spot, rod, casts and pickups | Minigame mouse hold/release |
-| **Fish here** (`spot`) | Spot and camera; point at water and press F8 | Repeated casts, minigame and collection; visible rod auto-equip when enabled |
+| **Fish here** (`spot`) | Spot, camera, mouse and rod; F8 starts | Click, reel, collect, repeat |
 
 ### Fish here
 
@@ -86,11 +86,15 @@ Choose **Settings → Mode → Fish here**, save and Continue. Or run:
 .\fishing.cmd spot
 ```
 
-Bring Roblox forward, position your character and camera, hover the mouse over the water you want to cast at, and press **F8**. It checks the scene, then repeats fishing there and holds T only for a recognized Collect prompt. Bait is optional. Empty rounds continue normally. Confirmed reward banners are added to the item journal; this mode does not open inventory to identify unknown drops.
+Bring Roblox forward, equip your rod, position your character, camera and mouse, then press **F8**. Fish here only clicks, reels, holds T for a recognized Collect prompt, and repeats. Bait is optional. Empty rounds continue normally. Confirmed reward banners are added to the item journal.
 
-**Alt-Tab pauses input immediately.** Return to Roblox with the pointer inside its window to continue automatically. It rechecks any current minigame or pickup before casting again. It never moves the character or camera, rejoins, or relaunches the game. A disconnect/menu waits for you to fix it. Three unsuccessful cast or pickup attempts wait for you to check the spot and press F8 again.
+**Losing Roblox focus pauses input.** Return with the pointer inside its window to continue automatically. It rechecks any current minigame or pickup before casting again. Three unsuccessful cast or pickup attempts wait for you to check the spot and press F8 again.
 
-Press F8 between rounds to choose a different point. Move your character/camera while paused, then select the new point. The point lasts for this controller session and adapts to a resized 16:9 client; restarting the controller or Roblox requires another F8 selection so an old coordinate cannot silently start fishing in a new location. F9/F12/Escape and the app's Pause/Stop remain available.
+**F8 toggles pause/resume while in Roblox**, including during a minigame or pickup. A held F8 counts once. A manual F8 pause stays paused when switching away and back. The controller launches idle until your first F8 press.
+
+This mode never moves the mouse or character, adjusts the camera, changes shift lock, switches focus, equips items, opens inventory, or rejoins. Its only injected inputs are the left mouse button and T. It clicks wherever your mouse currently is, including the center when you use shift lock. A disconnect/menu waits for you to fix it.
+
+Move or reposition while paused, then return to continue. Restarting the controller or Roblox requires F8 again. No pointer coordinate is saved or restored. F9/F12/Escape and the app's Pause/Stop remain available.
 
 The detector combines color and target-outline checks so transparent green/yellow bars remain recognizable over red scenery. It still requires the fishing UI and white marker; obscured or ambiguous markers release input instead of guessing. A bounded set of missed-marker crops is retained locally for diagnosis.
 

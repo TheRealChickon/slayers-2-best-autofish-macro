@@ -5,7 +5,8 @@ from pickup_policy import Pickup
 class SpotCycle:
     def __init__(self, emit):
         self.emit = emit
-        self.point = None
+        self.armed = False
+        self.paused = True
         self.stage = 'select_spot'
         self.since = 0
         self.casts = self.rewards = self.misses = self.tries = 0
@@ -14,20 +15,30 @@ class SpotCycle:
         self.recorded = False
         self.recheck_wait = 1.2
 
-    def select(self, point, now):
-        x, y = point
-        if not (260 <= x <= 2240 and 200 <= y <= 1240):
-            self.emit('spot_rejected', message='Point at open water away from the HUD, then press F8.')
+    def arm(self, now):
+        if self.stage in ('tracking', 'pickup', 'cast_press'):
+            self.emit('spot_rejected', message='Finish this cast before restarting.')
             return False
-        if self.stage in ('tracking', 'pickup', 'cast_press', 'equipping'):
-            self.emit('spot_rejected', message='Finish this cast before choosing a new point.')
-            return False
-        self.point = tuple(point)
+        self.armed = True
+        self.paused = False
         self.misses = self.tries = 0
         self.recheck_wait = 1.2
         self.stage, self.since = 'checking_spot', now
-        self.emit('spot_selected', point=self.point, message='Fishing point selected; checking the scene.')
+        self.emit('spot_selected', message='Fishing ready; keeping your mouse and camera as they are.')
         return True
+
+    def toggle(self, now):
+        if self.armed and not self.paused and self.stage != 'spot_attention':
+            self.paused = True
+            self.emit('spot_paused', message='Paused with F8; press F8 to resume.')
+        else:
+            if not self.armed or self.stage == 'spot_attention':
+                self.arm(now)
+            else:
+                self.resume(now)
+            self.paused = False
+            self.emit('spot_resumed', message='F8 enabled fishing; checking the scene.')
+        return not self.paused
 
     def resume(self, now):
         # Re-observe before a new press; never complete an interrupted cast/T
@@ -35,7 +46,7 @@ class SpotCycle:
         self.recheck_wait = (30 if self.stage=='cast_press' else
                              max(1.2,30-(now-self.since)) if self.stage=='waiting' else
                              max(1.2,self.recheck_wait-(now-self.since)) if self.stage=='checking_spot' else 1.2)
-        self.stage = 'checking_spot' if self.point else 'select_spot'
+        self.stage = 'checking_spot' if self.armed else 'select_spot'
         self.since = now
         self.tries = 0
 
@@ -47,6 +58,10 @@ class SpotCycle:
             self.misses = self.tries = 0
             self.recheck_wait = 1.2
 
+    def cancel_unstarted_press(self, now):
+        self.stage, self.since = 'checking_spot', now
+        self.recheck_wait = 1.2
+
     def ended(self, now):
         if self.stage == 'tracking':
             self.stage, self.since = 'pickup_wait', now
@@ -56,7 +71,7 @@ class SpotCycle:
         """Return one explicit action. All time is foreground active time."""
         evidence = evidence or Pickup('empty')
         elapsed = now-self.since
-        if not self.point:
+        if not self.armed or self.paused:
             return 'release'
         if not world:
             if self.stage != 'spot_blocked':
@@ -70,7 +85,7 @@ class SpotCycle:
             self.stage, self.since = 'checking_spot', now
             return 'release'
         if self.stage == 'spot_attention':
-            return 'release'  # F8 selects/rearms after bounded retries.
+            return 'release'  # F8 rearms after bounded retries.
         if stable and evidence.kind == 'reward' and self.pending_reward and not self.recorded:
             # Avoid interpreting a quantity-shaped prompt as a completed hold.
             if self.stage != 'pickup' or elapsed >= 1.8:
@@ -88,15 +103,6 @@ class SpotCycle:
                 self.stage, self.since = 'waiting', now
                 return 'release'
             return 'hold'
-        if self.stage == 'equipping':
-            if elapsed >= .16:
-                self.stage, self.since = 'equip_wait', now
-                return 'release'
-            return 'hold'
-        if self.stage == 'equip_wait':
-            if elapsed >= .7:
-                self.stage, self.since = 'checking_spot', now
-            return 'release'
         if self.stage == 'waiting':
             if elapsed > 30:
                 self.misses += 1
@@ -126,12 +132,14 @@ class SpotCycle:
                 return 'collect'
             wait = max(4 if self.pending_reward else 1.2,self.recheck_wait)
             if elapsed > wait and stable and evidence.kind == 'empty':
+                if not equipped:
+                    return 'release'  # Player equips the rod; never click the hotbar.
                 if self.pending_reward:
                     self.emit('empty_round', message='No reward prompt after repeated scans; continuing.')
                 self.pending_reward = False
                 self.recorded = False
                 self.tries = 0
                 self.recheck_wait = 1.2
-                self.stage, self.since = ('cast_press' if equipped else 'equipping'), now
-                return 'cast' if equipped else 'equip'
+                self.stage, self.since = 'cast_press', now
+                return 'cast'
         return 'release'
