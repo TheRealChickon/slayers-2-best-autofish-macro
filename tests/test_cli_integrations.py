@@ -56,6 +56,17 @@ class CatchLifecycle(unittest.TestCase):
         self.assertEqual(fx.rows(61, 12, True), fx.rows(61, 14, True))
         self.assertIsNone(fx.rows(61, 16, True))
 
+    def test_new_ore_uses_a_distinct_short_effect_once(self):
+        fx = CatchEffects()
+        fx.observe([], 1, 100, 10)
+        row = catch(101, 'Ore', 'ore-1')
+        fx.observe([row], 1, 101, 11)
+        self.assertEqual((fx.active.kind, fx.active.tone), ('ore', 'ore'))
+        self.assertTrue(any('◆' in segment[0] for line in fx.rows(80, 11.3) for segment in line))
+        fx.observe([row], 1, 102, 12)
+        self.assertEqual(fx.active.started, 11)
+        self.assertIsNone(fx.rows(80, 14.7))
+
     def test_secret_timeout_and_unrelated_keys_reset_sequence(self):
         fx = CatchEffects()
         for key in 'blu': fx.key(key, 10)
@@ -122,6 +133,18 @@ class IsolatedClients(unittest.TestCase):
         with patch.object(control_actions, 'stop', return_value='Stopped') as stop:
             app.key('s'); stop.assert_called_once()
         app.key('q'); self.assertFalse(app.alive)
+
+    def test_terminal_transitions_respect_reduced_motion(self):
+        app = terminal_app.Terminal()
+        with patch.object(terminal_app.sys.stdout, 'write') as write, \
+             patch.object(terminal_app.sys.stdout, 'flush'), \
+             patch.object(terminal_app.time, 'sleep') as sleep:
+            app.transition('opening')
+            self.assertEqual(write.call_count, 3)
+            self.assertEqual(sleep.call_count, 3)
+            app.config['reduced_motion'] = True
+            app.transition('closing')
+            self.assertEqual(write.call_count, 3)
 
     def test_api_read_commands_are_json_and_do_not_control_game(self):
         with patch.object(control_actions, 'resume') as resume, patch.object(control_actions, 'pause') as pause, patch.object(control_actions, 'stop') as stop:

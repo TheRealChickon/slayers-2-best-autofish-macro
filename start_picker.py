@@ -41,7 +41,11 @@ def start(args, colors=False):
     game=get_game(game_key)
     mode=args.mode
     if mode is None:
-        mode=choose(game.name,[(key,MODES[key]) for key in game.modes],colors)
+        details = {'assist': 'you cast + collect; bot reels',
+                   'spot': 'you choose the spot; bot casts + collects',
+                   'full': 'saved spawn; bot fishes + rejoins'}
+        mode=choose('How should it fish?',
+                    [(key, f'{MODES[key]}  /  {details[key]}') for key in game.modes], colors)
     if mode is None:return 0
     if mode not in game.modes:raise ValueError(f'{game.name} does not support mode {mode}.')
     print(game.start(mode),flush=True)

@@ -10,6 +10,7 @@ import time
 
 import control_actions as actions
 from app_config import load_config, resolve_account, save_config, MODES
+from cast_point import capture_pointer, validate as validate_cast_point
 from cli_effects import CatchEffects
 from item_journal import Journal
 from live_feed import LiveFeed, event_tone, state_tone
@@ -19,7 +20,8 @@ from status_view import duration, estimate, snapshot
 ESC = '\033['
 RESET = ESC + '0m'
 TONES = {'text': '234;236;226', 'dim': '128;142;137', 'gold': '232;186;64',
-         'green': '156;219;112', 'red': '226;146;135', 'cyan': '111;193;207', 'selected': '245;224;165'}
+         'green': '156;219;112', 'red': '226;146;135', 'cyan': '111;193;207',
+         'ore': '194;150;106', 'selected': '245;224;165'}
 ANSI = re.compile(r'\x1b\[[0-9;]*m')
 
 
@@ -42,6 +44,14 @@ class Terminal:
     pages = ('Run', 'Items', 'Live log', 'Setup')
     categories = ('All', 'Catches', 'Recovery', 'Warnings')
     run_modes = ('assist', 'spot', 'full')
+    mode_details = {
+        'assist': ('green', 'You cast + collect  ·  bot reels'),
+        'spot': ('cyan', 'You pick the spot  ·  bot casts + collects'),
+        'full': ('gold', 'Saved spawn  ·  bot rejoins + fishes'),
+    }
+    settings_keys = ('Username', 'Rod slot', 'Auto rod', 'Motion', 'Bait left',
+                     'Plan hours', 'Mode', 'Cast point', 'Capture pointer',
+                     'Position correction', 'Save reference', 'Disable reference')
 
     def __init__(self):
         self.journal, self.feed = Journal(), LiveFeed()
@@ -113,6 +123,9 @@ class Terminal:
                     save_config(resolve_account(value)); return 'Account saved'
                 self.job(account)
             elif key == 'Rod slot': save_config({'rod_slot': int(value)})
+            elif key == 'Cast point':
+                save_config({'cast_point': validate_cast_point(value)})
+                self.toast('Full farmer cast point saved')
             elif key == 'Plan hours':
                 hours = float(value)
                 if not math.isfinite(hours) or hours <= 0: raise ValueError('Enter positive hours')
@@ -139,7 +152,16 @@ class Terminal:
                 name = rows[self.selection][0]
                 self.switch(2); self.query = name; self.category = 1; self.follow = True
         elif self.page == 3:
-            key = ('Username', 'Rod slot', 'Auto rod', 'Motion', 'Bait left', 'Plan hours', 'Mode', 'Position correction', 'Save reference', 'Disable reference')[self.selection]
+            key = self.settings_keys[self.selection]
+            if key == 'Capture pointer':
+                self.toast('Move the pointer over Roblox water; capturing in 4 seconds')
+                def capture():
+                    time.sleep(4)
+                    point = capture_pointer()
+                    save_config({'cast_point': point})
+                    return f'Cast point saved: {point[0]}, {point[1]}'
+                self.job(capture)
+                return
             if key=='Position correction':self.reference_position=not self.reference_position;return
             if key in ('Save reference','Disable reference'):
                 import landmark_controls
@@ -157,7 +179,9 @@ class Terminal:
                 save_config({option: not self.config[option]}); self.config = load_config()
             else:
                 value = {'Username': self.config['account_username'], 'Rod slot': self.config['rod_slot'],
-                         'Bait left': self.data.get('bait_remaining_estimate') or 0, 'Plan hours': self.hours}[key]
+                         'Bait left': self.data.get('bait_remaining_estimate') or 0,
+                         'Plan hours': self.hours,
+                         'Cast point': ', '.join(map(str, self.config['cast_point']))}[key]
                 self.edit(key, value)
 
     def key(self, key):
@@ -192,7 +216,7 @@ class Terminal:
                 self.follow = key == 'END'
                 self.scroll = 0 if key == 'HOME' else limit if key == 'END' else max(0, min(limit, self.scroll+step))
             else:
-                count = len(self.run_modes)+3 if self.page == 0 else 10 if self.page == 3 else len(self.item_rows())
+                count = len(self.run_modes)+3 if self.page == 0 else len(self.settings_keys) if self.page == 3 else len(self.item_rows())
                 self.selection = 0 if key == 'HOME' else max(0, count-1) if key == 'END' else max(0, min(count-1, self.selection+step))
 
     def body(self, available):
@@ -209,10 +233,14 @@ class Terminal:
                 rows[4:4]=[tint(f"{recent['hooks_per_minute']:.2f} hooks/min   {recent['items_per_minute']:.2f} items/min   {recent['recovery_seconds']:.0f}s recovery / {recent['window_seconds']/60:.0f}m",'cyan')]
             if d.get('reason'):rows[0:0]=[tint(d['reason'], 'gold'), '']
             action_start=len(rows)
-            labels=[MODES[mode]+('  · active' if d['running'] and d.get('mode')==mode else '') for mode in self.run_modes]
-            labels+=['Pause', 'Stop', 'Export log']
-            rows += [tint('› ' + label, 'selected') if self.selection == i else '  '+label
-                     for i, label in enumerate(labels)]
+            for i, mode in enumerate(self.run_modes):
+                accent, detail = self.mode_details[mode]
+                marker = '› ' if self.selection == i else '  '
+                active = '  ● LIVE' if d['running'] and d.get('mode') == mode else ''
+                rows.append(tint(marker + MODES[mode], 'selected' if self.selection == i else accent)
+                            + tint('  /  ' + detail + active, accent if self.selection == i else 'dim'))
+            rows += [tint('› ' + label, 'selected') if self.selection == i else '  ' + label
+                     for i, label in enumerate(('Pause', 'Stop', 'Export log'), start=len(self.run_modes))]
             # Keep the chosen mode/control visible in a short terminal.
             start=max(0,action_start+self.selection-available+1)
             rows=rows[start:]
@@ -241,6 +269,8 @@ class Terminal:
                     ('Auto equip rod', 'On' if self.config['auto_rod'] else 'Off'), ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On'),
                     ('Bait left', d['bait_remaining_estimate'] if d['bait_remaining_estimate'] is not None else 'Unknown'), ('Plan hours', f'{self.hours:g}'),
                     ('Mode',MODES[self.config['mode']]),
+                    ('Cast point', f"{self.config['cast_point'][0]}, {self.config['cast_point'][1]}  ·  Full farmer"),
+                    ('Capture pointer', 'Reads Roblox pointer in 4 seconds'),
                     ('Position correction','On' if self.reference_position else 'Off'),
                     ('Save fishing reference','Enter while paused'),('Disable reference','Enter while paused')]
         return [tint(f"{'›' if i == self.selection else ' '}  {label:<23} {value}", 'selected' if i==self.selection else 'text') for i,(label,value) in enumerate(settings)]
@@ -281,6 +311,7 @@ class Terminal:
         sys.stdout.flush()
         next_update = 0
         try:
+            self.transition('opening')
             while self.alive:
                 while msvcrt.kbhit():
                     key = msvcrt.getwch()
@@ -302,5 +333,23 @@ class Terminal:
                 self.last_lines = lines
                 time.sleep(.07)
         finally:
+            self.transition('closing')
             sys.stdout.write(RESET+ESC+'?25h'+ESC+'?1049l'); sys.stdout.flush()
         return 0
+
+    def transition(self, phase):
+        """Brief terminal-only reveal; reduced motion skips the extra frames."""
+        if self.config['reduced_motion']:
+            return
+        labels = ('Finding the current', 'Reading the water', 'Ready to fish') if phase == 'opening' else (
+            'Saving the view', 'Leaving the water')
+        for index, label in enumerate(labels):
+            size = shutil.get_terminal_size((100, 32))
+            width = min(36, max(12, size.columns-8))
+            fill = round(width * (index + 1) / len(labels))
+            bar = tint('━' * fill, 'gold' if phase == 'opening' else 'cyan') + tint('─' * (width-fill), 'dim')
+            top = max(1, size.lines // 2 - 2)
+            sys.stdout.write(ESC+'2J'+f'{ESC}{top};5H'+tint('F I S H I N G', 'gold')
+                             +f'{ESC}{top+2};5H'+bar+f'{ESC}{top+3};5H'+tint(label, 'dim'))
+            sys.stdout.flush()
+            time.sleep(.09 if phase == 'opening' else .07)
