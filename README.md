@@ -94,6 +94,8 @@ Do not use Escape to cancel an edit: it is a global stop key while fishing. In S
 
 The Run tab shows current state, items, hooks, time, rejoins, game launch attempts, recent events, and a bait plan. Items can be opened directly into a filtered live log. Live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
 
+Recovery actions are cyan, retries and warnings amber, failures red, and catches green. The Run tab's recent events use the same colors as Live log. Rapid screen/OCR observations stay in the raw logs rather than filling the live feed; individual menu actions and Join attempts remain visible.
+
 Scriptable commands remain available:
 
 ```powershell
@@ -130,7 +132,7 @@ Cast and rod clicks allow a brief cursor settle before pressing, with stop and f
 
 When a username is configured, [Roblox's public user lookup](https://create.roblox.com/docs/cloud/reference/features/users) resolves it to an ID and the [presence API](https://create.roblox.com/docs/cloud/reference/domains/presence) is polled every 45 seconds. Persistent absence **and** no fishing activity can request recovery. An API error alone does not mean a disconnect. No Roblox password, cookie, or API key is used or stored.
 
-Rejoin and relaunch are distinct counters. Rejoins count completed joins after the first one in the run; game launches count launch attempts. Known recovery paths are implemented, but a game update or an unfamiliar menu can require recalibration.
+Rejoin and relaunch are distinct counters. Rejoins count completed returns from a Join/reconnect/launch attempt after the initial game-ready state; repeated Join holds count once, and rod-only maintenance resumes do not add rejoins. Counts are rebuilt from saved events, including older runs. Game launches count launch attempts. Known recovery paths are implemented, but a game update or an unfamiliar menu can require recalibration.
 
 ## Local files and privacy
 
@@ -168,7 +170,7 @@ To remove the app, stop it first, close both views, delete its desktop shortcuts
 .\.venv\Scripts\python.exe health_check.py
 ```
 
-The current suite has 40 checks, including real 1080p inventory crops, input guards, duplicate prevention, inventory reconciliation, scan throttling, restart checkpoints, scan-budget cleanup, and interruption while the cursor settles. A live 1080p test rejoined, equipped the rod, completed four hooks without a detected failed round, and confirmed four catches; one missed banner was recovered from inventory differences.
+The current suite has 44 checks, including real 1080p inventory crops, input guards, duplicate prevention, inventory reconciliation, scan throttling, restart checkpoints, scan-budget cleanup, interruption while the cursor settles, and recovery-log counting and colors. A live 1080p test rejoined, equipped the rod, completed four hooks without a detected failed round, and confirmed four catches; one missed banner was recovered from inventory differences.
 
 Tests use isolated temporary state and mocked controls; they do not drive Roblox. Live game validation is still needed after changing vision or input logic. Python 3.12 on Windows x64 is the tested runtime.
 

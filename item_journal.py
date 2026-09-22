@@ -8,6 +8,7 @@ from item_names import item_name
 class Journal:
     def __init__(self):
         self.started=None;self.offsets={};self.prompts={};self.cycles={};self.items=[];self.activity=[];self.counts=collections.Counter();self.launches=0;self.joins=0;self.version=0;self.by_id={};self.corrections={}
+        self.join_pending=False
 
     def update(self,started):
         if started!=self.started:
@@ -42,10 +43,19 @@ class Journal:
                               'session':path.stem.removeprefix('events-'),'reward_id':row['reward_id'],'source':'inventory'}
                         self.items.append(item);self.by_id[item['reward_id']]=item;self.counts[item['item']]+=item['quantity'];changed=True
                     if kind=='launching_game':self.launches+=1;changed=True
-                    if kind=='equipped_rod':self.joins+=1;changed=True
+                    # The first ready event establishes the initial server.
+                    # Later rod setup alone is not a completed server rejoin.
+                    # Several Join holds before the next ready event count once.
+                    if path.name=='recovery.jsonl':
+                        if kind in ('hold_private_join','launching_game','disconnect_observed'):self.join_pending=True
+                        if kind=='supervisor_stopped':self.join_pending=False
+                        if kind=='equipped_rod':
+                            if self.joins==0 or self.join_pending:self.joins+=1;changed=True
+                            self.join_pending=False
                     if path.name in ('recovery.jsonl','controls.jsonl') and kind not in ('screen','disconnect_observed'):
                         message=row.get('message') or row.get('reason') or kind.replace('_',' ')
-                        self.activity.append({'at':row['at'],'kind':kind,'message':message});changed=True
+                        self.activity.append({'at':row['at'],'kind':kind,'message':message,
+                            'group':'recovery' if path.name=='recovery.jsonl' else 'controls'});changed=True
                 self.offsets[key]=f.tell()
         if changed:
             for reward_id,correction in self.corrections.items():
