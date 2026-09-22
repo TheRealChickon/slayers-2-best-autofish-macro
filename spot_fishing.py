@@ -14,6 +14,9 @@ class SpotCycle:
         self.pending_reward = False
         self.recorded = False
         self.recheck_wait = 1.2
+        self.not_before_cast = 0
+        self.empty_since = None
+        self.collect_seen = None
 
     def arm(self, now):
         if self.stage in ('tracking', 'pickup', 'cast_press'):
@@ -49,6 +52,8 @@ class SpotCycle:
         self.stage = 'checking_spot' if self.armed else 'select_spot'
         self.since = now
         self.tries = 0
+        self.empty_since = None
+        self.collect_seen = None
 
     def tracking(self, now):
         if self.stage != 'tracking':
@@ -57,10 +62,13 @@ class SpotCycle:
             self.recorded = False
             self.misses = self.tries = 0
             self.recheck_wait = 1.2
+            self.not_before_cast = 0
+            self.empty_since = None
 
     def cancel_unstarted_press(self, now):
         self.stage, self.since = 'checking_spot', now
         self.recheck_wait = 1.2
+        self.not_before_cast = now+1.2
 
     def ended(self, now):
         if self.stage == 'tracking':
@@ -73,6 +81,11 @@ class SpotCycle:
         elapsed = now-self.since
         if not self.armed or self.paused:
             return 'release'
+        if not world or not stable or evidence.kind!='empty':
+            self.empty_since=None
+        elif self.empty_since is None:
+            self.empty_since=now
+        if stable and evidence.kind=='collect':self.collect_seen=now
         if not world:
             if self.stage != 'spot_blocked':
                 self.emit('spot_blocked', message='Waiting for the fishing scene; no rejoin will be attempted.')
@@ -111,7 +124,10 @@ class SpotCycle:
                 self.since = now
             return 'release'
         if self.stage == 'pickup':
-            if elapsed >= 4:
+            # A confirmed hold can survive one OCR miss, but never keep T
+            # pressed after its prompt has disappeared for multiple scans.
+            if elapsed >= 4 or (evidence.kind=='empty' and
+                                (self.collect_seen is None or now-self.collect_seen>.8)):
                 self.stage, self.since = 'pickup_wait', now
                 return 'release'
             return 'collect'
@@ -132,6 +148,10 @@ class SpotCycle:
                 return 'collect'
             wait = max(4 if self.pending_reward else 1.2,self.recheck_wait)
             if elapsed > wait and stable and evidence.kind == 'empty':
+                if now<self.not_before_cast:
+                    return 'release'
+                if self.pending_reward and (self.empty_since is None or now-self.empty_since<6):
+                    return 'release'
                 if not equipped:
                     return 'release'  # Player equips the rod; never click the hotbar.
                 if self.pending_reward:
@@ -141,5 +161,6 @@ class SpotCycle:
                 self.tries = 0
                 self.recheck_wait = 1.2
                 self.stage, self.since = 'cast_press', now
+                self.not_before_cast = now+30
                 return 'cast'
         return 'release'

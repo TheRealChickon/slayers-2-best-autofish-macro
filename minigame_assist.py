@@ -17,7 +17,7 @@ from screen_space import ScreenSpace
 from fishing_vision import ui_visible
 from pickup_policy import classify, PickupGate, Pickup
 from spot_fishing import SpotCycle
-from rod_detector import locate_rod
+from rod_detector import locate_rod, RodReady
 from performance import PerformanceRecorder
 
 
@@ -75,8 +75,8 @@ def watch_focus(inp, done):
 
 
 def read_scene(frame, ocr):
-    x,y,w,h = 400,150,1800,1120
-    scale=.75
+    x,y,w,h = 160,100,2240,1200
+    scale=1.
     result,_=ocr(cv2.resize(frame[y:y+h,x:x+w],None,fx=scale,fy=scale),use_cls=False)
     rows=[{'text':r[1],'score':float(r[2]),
            'center':(x+float(np.mean(np.array(r[0])[:,0]))/scale,
@@ -86,7 +86,15 @@ def read_scene(frame, ocr):
         'same account','main menu','private server','inventory','settings','leave game','reset character',
         'resume experience','would you like','purchase','fisherman'))
     rod=locate_rod(frame)
-    return classify(rows),bool(rod) and not blocked,rod
+    evidence=classify(rows)
+    return evidence,(bool(rod) or evidence.kind in ('collect','reward')) and not blocked,rod
+
+
+def safe_cast_pointer(screen):
+    x,y=win32gui.GetCursorPos()
+    x=(x-screen.rect[0])/screen.sx;y=(y-screen.rect[1])/screen.sy
+    # A pointer left on the hotbar could unequip the rod instead of casting.
+    return 260<=x<=2240 and 160<=y<=1240
 
 
 class TrackingAssist:
@@ -165,7 +173,7 @@ def main(argv=None):
     if spot:
         from rapidocr_onnxruntime import RapidOCR
         ocr=RapidOCR()
-    gate=PickupGate();evidence=Pickup('empty');stable=False;world=False;rod=None
+    gate=PickupGate();rod_gate=RodReady();rod_ready=False;evidence=Pickup('empty');stable=False;world=False;rod=None
     active_time=0.;last_tick=time.monotonic();last_scan=-10.;resuming=True
     missing_since=None;last_capture=0.;capture_index=0
     done=threading.Event()
@@ -223,7 +231,7 @@ def main(argv=None):
                     if resuming:
                         inp.release();inp.interrupted.clear();tracker.suspend()
                         if spot:spot.resume(active_time)
-                        gate=PickupGate();last_scan=-10.;stable=False;world=False
+                        gate=PickupGate();rod_gate.reset();rod_ready=False;last_scan=-10.;stable=False;world=False
                         resuming=False;event('focus_resumed',message='Roblox foreground; checking the current scene.')
                     else:active_time+=delta
                     wait_reason=''
@@ -256,14 +264,24 @@ def main(argv=None):
                             if tracker.clear_since is not None and tick-tracker.clear_since>.55:
                                 spot.ended(active_time);last_scan=-10.
                         else:
-                            if spot.armed and tick-last_scan>.35 and spot.stage!='cast_press':
+                            # Waiting for a bite requires only fast minigame
+                            # vision. OCR here delayed the first reel input.
+                            if spot.armed and tick-last_scan>.35 and spot.stage not in ('cast_press','waiting'):
                                 frame=screen.capture(sct)
                                 evidence,world,rod=read_scene(frame,ocr)
                                 stable=gate.observe(evidence,time.monotonic());last_scan=time.monotonic()
+                                rod_ready=rod_gate.observe(rod if world else None,last_scan)
                                 if inp.interrupted.is_set() or not foreground(hwnd):raise RuntimeError('Focus changed during observation')
-                            action=spot.step(active_time,evidence,stable,world,bool(rod and rod['equipped']))
+                            action=spot.step(active_time,evidence,stable,world,rod_ready)
                             if action=='cast':
                                 inp.release()
+                                fresh=screen.capture(sct)
+                                if (not rod_gate.matches(locate_rod(fresh)) or not safe_cast_pointer(screen)
+                                        or ui_visible(fresh[1360:1430,1190:1370],template)):
+                                    spot.cancel_unstarted_press(active_time)
+                                    rod_gate.reset();rod_ready=False;last_scan=-10.
+                                    event('cast_withheld',message='Waiting for an equipped rod and a mouse position clear of the HUD.')
+                                    continue
                                 try:
                                     inp.hold(True)
                                 except (RuntimeError,ValueError,win32gui.error):
@@ -279,6 +297,8 @@ def main(argv=None):
                                 inp.grab(True)
                             else:inp.release()
                             stage=spot.stage
+                            if stage=='checking_spot' and not rod_ready:
+                                stage='waiting_rod'
                     else:
                         inp.release()
                 except (RuntimeError, ValueError, win32gui.error) as error:

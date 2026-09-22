@@ -94,9 +94,13 @@ Bring Roblox forward, equip your rod, position your character, camera and mouse,
 
 This mode never moves the mouse or character, adjusts the camera, changes shift lock, switches focus, equips items, opens inventory, or rejoins. Its only injected inputs are the left mouse button and T. It clicks wherever your mouse currently is, including the center when you use shift lock. A disconnect/menu waits for you to fix it.
 
+Casting requires three consecutive checks of the selected rod plus a fresh check immediately before the click. Keep your pointer clear of the hotbar and other HUD controls. Temporary loss of the rod icon does not permit an early recast. After a round, the pickup scan covers a wider area at full resolution and requires six seconds of consistently empty observations before skipping an unconfirmed reward. While waiting for a bite, only the fast minigame detector runs.
+
 Move or reposition while paused, then return to continue. Restarting the controller or Roblox requires F8 again. No pointer coordinate is saved or restored. F9/F12/Escape and the app's Pause/Stop remain available.
 
 The detector combines color and target-outline checks so transparent green/yellow bars remain recognizable over red scenery. It still requires the fishing UI and white marker; obscured or ambiguous markers release input instead of guessing. A bounded set of missed-marker crops is retained locally for diagnosis.
+
+Connected brown/green scenery is separated from the target by its known width; dim tinted markers also use local contrast. These cases have offline regression coverage. Offline checks do not establish a guaranteed live catch rate.
 
 ### Minigame only
 
