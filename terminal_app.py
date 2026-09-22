@@ -333,8 +333,10 @@ class Terminal:
                 self.last_lines = lines
                 time.sleep(.07)
         finally:
-            self.transition('closing')
-            sys.stdout.write(RESET+ESC+'?25h'+ESC+'?1049l'); sys.stdout.flush()
+            try:
+                self.transition('closing')
+            finally:
+                sys.stdout.write(RESET+ESC+'?25h'+ESC+'?1049l'); sys.stdout.flush()
         return 0
 
     def transition(self, phase):
