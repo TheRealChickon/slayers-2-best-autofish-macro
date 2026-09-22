@@ -1,0 +1,13 @@
+/.venv/
+/config.local.json
+/runtime.local.json
+/data/
+/Logs/
+/Screenshots/
+*.csv
+*.jsonl
+*.log
+*.mp4
+*.tmp
+__pycache__/
+*.pyc
