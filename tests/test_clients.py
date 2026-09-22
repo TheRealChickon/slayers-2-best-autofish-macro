@@ -15,6 +15,8 @@ import live_feed
 import metrics
 import rod_detector
 import terminal_app
+import status_view
+import fishing_cli
 import cv2
 import numpy as np
 
@@ -23,7 +25,7 @@ class IsolatedState(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
-        for module in (metrics, item_journal, live_feed, control_actions):
+        for module in (metrics, item_journal, live_feed, control_actions, status_view):
             patcher = patch.object(module, 'RUN', self.root)
             patcher.start(); self.addCleanup(patcher.stop)
         patcher = patch.object(app_config, 'CONFIG', self.root/'config.local.json')
@@ -108,6 +110,36 @@ class IsolatedState(unittest.TestCase):
         app=terminal_app.Terminal(); app.busy=True
         with patch.object(control_actions,'stop',return_value='Stopped') as stop:
             app.key('s'); stop.assert_called_once()
+
+    def test_run_page_launches_each_explicit_mode_without_changing_focus_itself(self):
+        app=terminal_app.Terminal()
+        with patch.object(app,'job',side_effect=lambda fn:fn()), patch.object(control_actions,'resume') as resume:
+            for index,mode in enumerate(('assist','spot','full')):
+                app.selection=index;app.key('ENTER')
+                resume.assert_called_with(mode)
+            app.key('END');self.assertEqual(app.selection,5)
+
+    def test_run_modes_and_stop_reason_are_visible_with_keyboard_scrolling(self):
+        (self.root/'STOP').write_text('Stopped by F12 in Roblox')
+        with patch.object(control_actions,'alive',return_value=False),patch.object(control_actions,'starting',return_value=False):
+            data=status_view.snapshot()
+        self.assertEqual(data['reason'],'Stopped by F12 in Roblox')
+        self.assertIn('Stopped by F12 in Roblox','\n'.join(fishing_cli.status_lines(data)))
+        app=terminal_app.Terminal();app.data=data
+        normal='\n'.join(app.render(100,32))
+        for text in ('Minigame only','Fish here','Full farmer','Stopped by F12 in Roblox'):
+            self.assertIn(text,normal)
+        for index,label in enumerate(('Minigame only','Fish here','Full farmer','Pause','Stop','Export log')):
+            app.selection=index
+            self.assertIn('› '+label,'\n'.join(app.render(65,22)))
+
+    def test_live_focus_reason_replaces_stale_stop_reason(self):
+        metrics.write('status.json',{'wait_reason':'Waiting for Roblox','reason':'Old error'})
+        metrics.write('supervisor.json',{'mode':'assist','stage':'paused_focus'})
+        with patch.object(control_actions,'alive',return_value=True),patch.object(control_actions,'starting',return_value=False):
+            data=status_view.snapshot()
+        self.assertEqual(data['reason'],'Waiting for Roblox')
+        self.assertEqual(data['state'],'Waiting for Roblox')
 
     def test_bait_setting_retains_hook_counters(self):
         metrics.write('totals.json',{'rounds':17})

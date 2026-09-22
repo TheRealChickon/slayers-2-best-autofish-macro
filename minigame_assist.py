@@ -86,6 +86,29 @@ def navigation_keys_down():
     return any(USER.GetAsyncKeyState(key)&0x8000 for key in (18,9,91,92))
 
 
+def request_hotkey_stop(hwnd):
+    """Manual modes must not turn ordinary Escape/other-app input into Stop."""
+    if not window_foreground(hwnd):return None
+    for key, name in ((120, 'F9'), (123, 'F12')):
+        if USER.GetAsyncKeyState(key)&0x8000:
+            reason=f'Stopped by {name} in Roblox'
+            try:
+                # The watcher and main loop can observe the same key. Preserve
+                # whichever stop request won, including an explicit user stop.
+                with (RUN/'STOP').open('x', encoding='utf-8') as stream:stream.write(reason)
+            except FileExistsError:
+                pass
+            return reason
+    return None
+
+
+def stop_reason():
+    for name in ('PAUSE', 'STOP'):
+        try:return (RUN/name).read_text(encoding='utf-8').strip() or f'Stopped by {name} file'
+        except FileNotFoundError:pass
+    return ''
+
+
 def watch_focus(inp, done):
     f8_down = False
     while not done.wait(.015):
@@ -95,9 +118,7 @@ def watch_focus(inp, done):
                 inp.suspend_input()
                 inp.toggle_requested.set()
             f8_down = f8
-            hotkey = any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123))
-            if hotkey and not (RUN/'STOP').exists():
-                (RUN/'STOP').write_text('Stopped by physical hotkey')
+            hotkey = request_hotkey_stop(inp.hwnd)
             if hotkey or (RUN/'STOP').exists() or (RUN/'PAUSE').exists() or not foreground(inp.hwnd) or navigation_keys_down():
                 inp.suspend_input()
         except (RuntimeError, win32gui.error):
@@ -233,14 +254,14 @@ def main(argv=None):
             while args.seconds<=0 or time.monotonic()-monotonic_started<args.seconds:
                 tick=time.monotonic()
                 delta=min(2,tick-last_tick);last_tick=tick
-                if (RUN/'STOP').exists() or (RUN/'PAUSE').exists():reason='Stopped by stop file';break
-                if any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):
-                    (RUN/'STOP').write_text('Stopped by physical hotkey');reason='Stopped by physical hotkey';break
+                requested_stop=stop_reason()
+                if requested_stop:reason=requested_stop;break
                 try:
                     # Enumerating all processes/windows every frame used much
                     # of the response budget. Keep the already verified handle.
                     selected=hwnd if hwnd and win32gui.IsWindow(hwnd) else find_window()
                     inp.hwnd=selected
+                    if request_hotkey_stop(selected):reason=stop_reason();break
                     if inp.toggle_requested.is_set():
                         inp.toggle_requested.clear()
                         if spot:spot.toggle(active_time)

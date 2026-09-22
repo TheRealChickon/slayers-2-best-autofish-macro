@@ -44,6 +44,7 @@ def status_lines(data, colors=False):
            + f" · {recent['window_seconds']/60:.0f}m window" + ('' if recent['fresh'] else ' (saved)')) if recent else '  Recent pace     Collecting a sample'
     return [
         c('FISHING', 'gold') + '  /  ' + c(data['state'].upper(), tone) + '  /  ' + MODES.get(data.get('mode'),'Full farmer'),
+        c('  '+data['reason'], 'gold') if data.get('reason') else '',
         '',
         f"  Collected       {c(format(data['items'], ','), 'green')} items / {data['collections']:,} collections",
         f"  Hooks / casts   {data['hooks']:,} / {data['casts']:,}",
@@ -213,7 +214,7 @@ def execute(args, colors=False):
 
 def shell(colors):
     print('\n'.join(status_lines(snapshot(), colors)))
-    print(color('\nCommands: status, watch, items, logs, pause, continue, stop, plan --hours 8, export', 'gray', colors))
+    print(color('\nModes: assist, spot, continue --mode full\nCommands: status, watch, items, logs, pause, continue, stop, plan --hours 8, export', 'gray', colors))
     print('help shows options. exit closes this prompt and leaves the bot unchanged.\n')
     while True:
         try:

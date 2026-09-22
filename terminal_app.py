@@ -41,6 +41,7 @@ def clip(line, width):
 class Terminal:
     pages = ('Run', 'Items', 'Live log', 'Setup')
     categories = ('All', 'Catches', 'Recovery', 'Warnings')
+    run_modes = ('assist', 'spot', 'full')
 
     def __init__(self):
         self.journal, self.feed = Journal(), LiveFeed()
@@ -126,8 +127,12 @@ class Terminal:
 
     def activate(self):
         if self.page == 0:
-            self.job((actions.resume, actions.pause, actions.stop,
-                      lambda: 'Saved ' + str(self.journal.export()))[self.selection])
+            if self.selection < len(self.run_modes):
+                mode=self.run_modes[self.selection]
+                self.job(lambda:actions.resume(mode))
+            else:
+                self.job((actions.pause, actions.stop,
+                          lambda: 'Saved ' + str(self.journal.export()))[self.selection-len(self.run_modes)])
         elif self.page == 1:
             rows = self.item_rows()
             if rows:
@@ -187,7 +192,7 @@ class Terminal:
                 self.follow = key == 'END'
                 self.scroll = 0 if key == 'HOME' else limit if key == 'END' else max(0, min(limit, self.scroll+step))
             else:
-                count = 4 if self.page == 0 else 10 if self.page == 3 else len(self.item_rows())
+                count = len(self.run_modes)+3 if self.page == 0 else 10 if self.page == 3 else len(self.item_rows())
                 self.selection = 0 if key == 'HOME' else max(0, count-1) if key == 'END' else max(0, min(count-1, self.selection+step))
 
     def body(self, available):
@@ -199,11 +204,18 @@ class Terminal:
                     tint('Last catch  ', 'dim') + (d['last_item'] or '—'), '',
                     f"Bait ~{d['bait_remaining_estimate']:,}" if d['bait_remaining_estimate'] is not None else 'Bait —',
                     tint(f"~{d['hooks_per_hour']:.0f} / hour   •   {self.hours:g}h plan: " + (f'~{amount:,} bait' if amount is not None else 'collecting a sample'), 'dim'), '']
-            rows += [tint('› ' + label, 'selected') if self.selection == i else '  '+label
-                     for i, label in enumerate(('Continue', 'Pause', 'Stop', 'Export log'))]
             recent=d.get('recent')
             if recent:
                 rows[4:4]=[tint(f"{recent['hooks_per_minute']:.2f} hooks/min   {recent['items_per_minute']:.2f} items/min   {recent['recovery_seconds']:.0f}s recovery / {recent['window_seconds']/60:.0f}m",'cyan')]
+            if d.get('reason'):rows[0:0]=[tint(d['reason'], 'gold'), '']
+            action_start=len(rows)
+            labels=[MODES[mode]+('  · active' if d['running'] and d.get('mode')==mode else '') for mode in self.run_modes]
+            labels+=['Pause', 'Stop', 'Export log']
+            rows += [tint('› ' + label, 'selected') if self.selection == i else '  '+label
+                     for i, label in enumerate(labels)]
+            # Keep the chosen mode/control visible in a short terminal.
+            start=max(0,action_start+self.selection-available+1)
+            rows=rows[start:]
             rows += ['', tint('Recent', 'dim')]
             rows += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+tint(r['text'],event_tone(r)) for r in self.feed.rows[-max(0, available-len(rows)):]] if available > len(rows) else []
             return rows
@@ -238,7 +250,7 @@ class Terminal:
         d = self.data
         if width < 65 or height < 22:
             return ['Fishing  /  '+d.get('state', ''), '', 'Enlarge the terminal to at least 65 columns × 22 rows.', '', 'Q close   C continue   P pause   S stop']
-        active = d['running'] and not d['stop_requested'] and d['state'] != 'Waiting for Roblox'
+        active = d['running'] and not d['stop_requested'] and not d.get('manual_paused') and d['state'] != 'Waiting for Roblox'
         spin = '●' if self.config['reduced_motion'] or not active else '◐◓◑◒'[int(time.monotonic()*5)%4]
         state = tint(spin+' '+d['state'],state_tone(d['state'],active))
         mode = '  /  '+MODES.get(d.get('mode'),'Full farmer')
