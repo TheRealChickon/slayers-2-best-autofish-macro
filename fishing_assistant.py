@@ -290,13 +290,13 @@ def main():
                         # OCR and rod detection can delay this iteration substantially.
                         if not inp.mouse:
                             inventory.begin_round()
-                            inp.aim(*screen.point(1650,800),after_menu=cast_needs_settle);cast_needs_settle=False
+                            inp.aim(*screen.point(*load_config()['cast_point']),after_menu=cast_needs_settle);cast_needs_settle=False
                             inp.hold(True);cast_press_started=time.monotonic()
                         elif cast_press_started is not None and time.monotonic()-cast_press_started>=.16:
                             inp.hold(False);cast_press_started=None;casts+=1;event('cast',cast=casts);stage='waiting';since=time.monotonic()
                     elif stage=='equipping':
                         if now-since>.65:
-                            inp.guard_press(True);move_pointer(*screen.point(1650,800));stage='casting';since=now
+                            inp.guard_press(True);move_pointer(*screen.point(*load_config()['cast_point']));stage='casting';since=now
                     elif stage=='waiting':
                         if now-since>30:
                             missing_casts+=1;event('no_minigame',count=missing_casts);screenshot('missing')

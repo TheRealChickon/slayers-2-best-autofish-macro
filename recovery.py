@@ -123,7 +123,8 @@ class Recovery:
         raise RecoveryError('Roblox did not open within 100 seconds')
     def equip_rod(self):
         config=load_config()
-        self.move(1650,800);self.sleep(.3)
+        cast_x, cast_y = config['cast_point']
+        self.move(cast_x,cast_y);self.sleep(.3)
         rod=locate_rod(self.capture()) if config['auto_rod'] else None
         if rod and rod['equipped']:
             self.event('rod_already_equipped',score=rod['score'])
@@ -136,7 +137,7 @@ class Recovery:
         # Refresh Roblox's hover target after leaving the hotbar. The OS cursor
         # can arrive before the game's hit test; otherwise the first cast may
         # toggle the rod off and spend a full bite timeout waiting for nothing.
-        for point,delay in (((1650,800),.30),((1651,800),.15),((1650,800),.30)):
+        for point,delay in (((cast_x,cast_y),.30),((cast_x+1,cast_y),.15),((cast_x,cast_y),.30)):
             self.move(*point);self.sleep(delay)
     def hold_private_join(self,target):
         # The friend-Join button animates into a larger private-Join button.

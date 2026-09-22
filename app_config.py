@@ -4,13 +4,14 @@ import os
 import re
 import urllib.request
 from pathlib import Path
+from cast_point import DEFAULT as DEFAULT_CAST_POINT, validate as validate_cast_point
 
 ROOT = Path(__file__).resolve().parent
 MODES = {'full': 'Full farmer', 'assist': 'Minigame only', 'spot': 'Fish here'}
 CONFIG = ROOT / 'config.local.json'
 DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             'rod_slot': 5, 'auto_rod': True, 'reduced_motion': False, 'inventory_check': True,
-            'place_id': 16205713724, 'mode': 'full'}
+            'place_id': 16205713724, 'mode': 'full', 'cast_point': list(DEFAULT_CAST_POINT)}
 
 
 def load_config():
@@ -20,6 +21,7 @@ def load_config():
     if not 1 <= int(values['rod_slot']) <= 9:
         raise ValueError('Rod slot must be between 1 and 9')
     values['rod_slot'] = int(values['rod_slot'])
+    values['cast_point'] = validate_cast_point(values['cast_point'])
     if values['mode'] not in MODES:
         raise ValueError('Mode must be full, assist, or spot')
     if values['user_id'] is not None:
@@ -40,6 +42,7 @@ def save_config(changes):
     if values['mode'] not in MODES:
         raise ValueError('Mode must be full, assist, or spot')
     if not 1 <= int(values['rod_slot']) <= 9:raise ValueError('Rod slot must be between 1 and 9')
+    values['cast_point'] = validate_cast_point(values['cast_point'])
     temporary = CONFIG.with_suffix('.tmp')
     temporary.write_text(json.dumps(values, indent=2), encoding='utf-8')
     os.replace(temporary, CONFIG)
