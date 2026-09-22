@@ -20,7 +20,7 @@ A Windows fishing assistant for the Project Slayers 2 / Ouwland fishing minigame
 | Accounts | Any account that owns a rod, has it in the visible hotbar, and can use this game's private-server Join menu; configure the username for that account's presence checks |
 | Operating system | Windows x64; not macOS, Linux, mobile, or Roblox console |
 | Game | This game's Ouwland fishing minigame; not arbitrary Roblox games |
-| Display | The calibrated 2560 × 1440 layout and normal game UI scale; other resolutions need recalibration |
+| Display | Automatic scaling for a 16:9 Roblox client area, with normal game UI scale. 1920 × 1080 and 2560 × 1440 tested live; see resolution notes below |
 | Position | Saved spawn at the fishing spot, with a usable camera after rejoin; the bot does not walk to the spot |
 | Focus | Roblox must stay visible and foreground; switching apps pauses input |
 
@@ -46,11 +46,17 @@ If your PowerShell policy blocks scripts, use `Setup.cmd`. The launcher sets a p
 
 The account is configurable. Each account must own a fishing rod, have it in a visible hotbar slot, and have access to the private-server Join menu.
 
-- Use **one Roblox client**, at **2560 × 1440**, with the game's normal UI scale. This is the currently calibrated layout. Other resolutions need new detection regions and menu calibration.
+- Use **one Roblox client**, with a **16:9 client area** and the game's normal UI scale. Fullscreen at **1920 × 1080** or **2560 × 1440** is the simplest setup. The bot measures the client area, scales screenshots for recognition, and maps clicks back to your window automatically.
 - Set the saved spawn at your fishing spot in Ouwland, facing the water. A rejoin must restore the same usable position and camera arrangement. The assistant does not navigate a character across the map or find a fishing spot.
 - Keep the game visible and foreground. Opening another app releases input and waits; Continue returns focus to Roblox and recovery resumes. It cannot fish through a minimized window, lock screen, or sleeping PC. A second monitor is useful for viewing status.
 - The rod is located in the visible hotbar and selected only when its selection ring is absent. If it cannot be recognized during a rejoin, the configured slot is used. Moving the rod to another visible slot is supported; an unequipped rod in the backpack must first be placed in the hotbar.
 - Bait is optional. Equip it in-game if desired. There is no purchasing automation.
+
+## Resolution notes
+
+No manual calibration is required for the supported 16:9 layout. Window borders and title bars are excluded from the measurements, and another monitor or window origin is supported. Moving or resizing Roblox releases input and causes the supervisor to reacquire the client area.
+
+The same coordinate mapping is tested with 720p and 4K image fixtures, but those sizes have not had a full live fishing run. Very small windows can make text unreadable. An ultrawide, 4:3, or differently scaled game UI may rearrange controls; use a 16:9 window in that case. The bot reports an unsupported shape instead of clicking guessed locations. This is resolution adaptation, not automatic navigation to a fishing spot.
 
 ## Desktop shortcuts
 
@@ -106,11 +112,15 @@ Scriptable commands remain available:
 
 The item journal records confirmed quantity/NEW reward banners, original OCR text, quantity, and time. A round without a reward is normal. Unread or partial names are retained instead of silently discarded. OCR can misread text; the original observation remains in the log.
 
+**Identify unknown drops** is enabled by default in Settings. Before casting, the bot opens the inventory and saves a baseline. After a confirmed drop with an unreadable name, it compares a fresh inventory snapshot, subtracts known catches, and corrects the original journal entry only when one remaining increase matches its quantity. Cached local thumbnails make later scans faster and supply game artwork to the window. A visible Collect prompt with a missed banner can also be recovered when the inventory shows one unambiguous new item. Empty rounds without a Collect prompt do not create entries. CSV exports include the evidence source.
+
+Leave the in-game inventory search empty; the scanner does not send typing or movement shortcuts to clear it. The scanner currently requires the complete inventory to fit the visible 10-column grid (at most 100 occupied slots). Unreadable counts, ambiguous changes, or incomplete scans preserve the unknown label and log the reason. It closes the menu before fishing resumes. It cannot reliably repair older unknown entries without a before-catch baseline. Inventory use or trade changes during a comparison can also prevent identification.
+
 Set **Bait left** in terminal Setup after buying/equipping bait. This updates the estimate without resetting hooks or items. Estimated remaining bait is starting stock minus hooks, bounded at zero. Estimated bait per hour is hooks divided by active fishing time; the planner rounds the projected total up. One bait is counted per hook/minigame, including empty rounds. Fishing continues when the estimate reaches zero. These are consumption estimates, not inventory readings.
 
 ## Recovery and focus
 
-The supervisor handles visible disconnect dialogs and a stalled fishing loop. Recovery uses **M → Back to main menu → Play → Ouwland → held private Join**, then equips the rod. If necessary it opens `roblox://placeId=16205713724` or restarts the selected Roblox game process. Retry delays limit repeated restart attempts. Input is released on loss of focus, window changes, or stop requests.
+The supervisor handles visible disconnect dialogs and a stalled fishing loop. Vendor purchase dialogs are cancelled before recovery. Recovery uses **M → Back to main menu → Play → Ouwland → held private Join**, then equips the rod. If necessary it opens `roblox://placeId=16205713724` or restarts the selected Roblox game process. Retry delays limit repeated restart attempts. Input is released on loss of focus, window changes, or stop requests.
 
 When a username is configured, [Roblox's public user lookup](https://create.roblox.com/docs/cloud/reference/features/users) resolves it to an ID and the [presence API](https://create.roblox.com/docs/cloud/reference/domains/presence) is polled every 45 seconds. Persistent absence **and** no fishing activity can request recovery. An API error alone does not mean a disconnect. No Roblox password, cookie, or API key is used or stored.
 
@@ -141,12 +151,18 @@ All local settings, logs, screenshots, recordings, and the Python environment ar
 
 To remove the app, stop it first, close both views, delete its desktop shortcuts, and remove the extracted folder when you no longer need the saved logs. No Windows service or scheduled task is installed.
 
+## Branches and rollback
+
+`master` is the stable release and GitHub default. `dev` holds validated candidates; `dev-rolling` integrates feature branches. New changes start on `feature/<name>` and merge into `dev-rolling` with a merge commit. See [CONTRIBUTING.md](CONTRIBUTING.md) for promotion and rollback commands. The pre-update release is tagged `stable-before-inventory-resolution`. Switching code versions keeps ignored run data and account settings. Always pause before switching.
+
 ## Development
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe health_check.py
 ```
+
+The current suite has 25 checks, including real 1080p inventory crops, input guards, duplicate prevention, and inventory reconciliation. A live 1080p test rejoined, equipped the rod, completed four hooks without a detected failed round, and confirmed four catches; one missed banner was recovered from inventory differences.
 
 Tests use isolated temporary state and mocked controls; they do not drive Roblox. Live game validation is still needed after changing vision or input logic. Python 3.12 on Windows x64 is the tested runtime.
 

@@ -2,11 +2,13 @@
 import argparse, ctypes, json, os, time, sys, traceback, re
 from ctypes import wintypes
 from pathlib import Path
-import cv2, mss, numpy as np, psutil, win32gui, win32process
+import cv2, mss, numpy as np, psutil, win32gui, win32process, win32api
 from rapidocr_onnxruntime import RapidOCR
 from metrics import Ledger, write as write_metrics, RUN
 from app_config import load_config
 from rod_detector import locate_rod
+from screen_space import ScreenSpace
+from inventory_watch import InventoryDriver, InventoryWatcher
 
 ROOT = Path(__file__).resolve().parent
 USER = ctypes.windll.user32
@@ -14,10 +16,18 @@ USER.SetProcessDPIAware()
 
 def move_pointer(x,y):
     # Both monitors are valid; coordinates are absolute virtual-desktop pixels.
-    left,top=USER.GetSystemMetrics(76),USER.GetSystemMetrics(77)
-    width,height=USER.GetSystemMetrics(78),USER.GetSystemMetrics(79)
-    if not (left<=x<left+width and top<=y<top+height):raise RuntimeError('Input is outside the desktop')
+    monitors=[entry[2] for entry in win32api.EnumDisplayMonitors()]
+    left=min(r[0] for r in monitors);top=min(r[1] for r in monitors)
+    width=max(r[2] for r in monitors)-left;height=max(r[3] for r in monitors)-top
+    if not (left<=x<left+width and top<=y<top+height):raise RuntimeError(f'Input ({x}, {y}) is outside desktop ({left}, {top}, {width}, {height})')
     USER.mouse_event(0xC001,round((x-left)*65535/(width-1)),round((y-top)*65535/(height-1)),0,0)
+    # Some display transitions briefly report stale virtual-desktop metrics.
+    # Confirm physical position before any click can be issued.
+    actual=win32gui.GetCursorPos()
+    if abs(actual[0]-x)>2 or abs(actual[1]-y)>2:
+        USER.SetCursorPos(x,y)
+        actual=win32gui.GetCursorPos()
+        if abs(actual[0]-x)>2 or abs(actual[1]-y)>2:raise RuntimeError('Pointer did not reach the intended game position')
 
 def find_window():
     found=[]
@@ -31,9 +41,10 @@ def find_window():
     return found[0]
 
 def rectangle(h):
-    r=wintypes.RECT()
-    ok=ctypes.windll.dwmapi.DwmGetWindowAttribute(h,9,ctypes.byref(r),ctypes.sizeof(r))
-    return (r.left,r.top,r.right,r.bottom) if ok==0 else win32gui.GetWindowRect(h)
+    # Client pixels exclude the title bar and resize border in windowed mode.
+    l,t,r,b=win32gui.GetClientRect(h)
+    x,y=win32gui.ClientToScreen(h,(0,0))
+    return x,y,x+r-l,y+b-t
 
 class Input:
     def __init__(self,hwnd=None): self.mouse=False; self.t=False; self.hwnd=hwnd
@@ -43,6 +54,10 @@ class Input:
     def hold(self,down):
         if down!=self.mouse:
             self.guard_press(down)
+            if down and self.hwnd is not None:
+                under=win32gui.WindowFromPoint(win32gui.GetCursorPos())
+                if win32gui.GetAncestor(under,2)!=self.hwnd:
+                    raise RuntimeError('Pointer is outside Roblox; all inputs released')
             USER.mouse_event(2 if down else 4,0,0,0,0); self.mouse=down
     def grab(self,down):
         if down!=self.t:
@@ -77,7 +92,7 @@ def is_pickup_prompt(text):
 def is_other_interaction(text):
     # T also operates world interactions. A climb prompt means the saved
     # fishing position was disturbed; holding it again cannot collect loot.
-    return bool(re.search(r'\bwall\b|climb',text,re.I))
+    return bool(re.search(r'\bwall\b|climb|\bpurchase\b|\bfisherman\b|\bwould you like\b',text,re.I))
 
 def is_reward_banner(text):
     # Item text alone can still be the pickup prompt. A quantity/new label
@@ -97,21 +112,31 @@ def main():
     stop=RUN/'STOP'
     if stop.exists():raise RuntimeError('Stop is set; use the launcher to start a new session')
     hwnd=find_window();rect=rectangle(hwnd)
-    if rect[2]-rect[0]!=2560 or rect[3]-rect[1]!=1440:raise RuntimeError('This calibration needs Roblox at 2560 × 1440')
+    screen=ScreenSpace(rect)
     if a.focus:win32gui.SetForegroundWindow(hwnd);time.sleep(.3)
     if win32gui.GetForegroundWindow()!=hwnd:raise RuntimeError('Bring Roblox to the foreground before starting')
     # Observed open water, clear of menus and game buttons.
-    move_pointer(rect[0]+1650,rect[1]+800)
+    move_pointer(*screen.point(1650,800))
     ocr=RapidOCR()
     exit_template=cv2.imread(str(ROOT/'assets'/'exit.png'))
     inp=Input(hwnd);started=time.monotonic();now=started;stage='casting';since=now;lastseen=now;ledger=Ledger();last_gui_scan=0;last_tracking_cast=None;last_game_activity=time.time()
     prev=None;velocity=0.;target_velocity=0.;cycles=0;casts=0;missing_casts=0;track_frames=0;inside_frames=0;laststate=0;lastimage=0;last_rod_check=0
-    completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_reason='';last_reward='';end_percent=None;consecutive_failed=0;cast_press_started=None
+    completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
     telemetry=open(RUN/f'tracking-{session}.csv','w',buffering=1);telemetry.write('time,cycle,ball,target,height,velocity,held,inside\n')
     def event(kind,**kw):log.write(json.dumps({'at':time.time(),'event':kind,**kw})+'\n');print(json.dumps({'event':kind,**kw}),flush=True)
+    def inventory_progress(**kw):
+        write_metrics('status.json',{'running':True,'pid':os.getpid(),'session':session,'updated':time.time(),
+            'stage':'inventory','inventory':kw,'last_game_activity':last_game_activity,
+            'held_mouse':False,'held_t':False,'cycles':cycles,'casts':casts})
+    def record_reward(raw):
+        nonlocal pickup_confirmed,last_reward
+        inp.grab(False);pickup_confirmed+=1;last_reward=raw
+        reward_id=f'{session}:{cycles}:{pickup_confirmed}'
+        event('reward_observed',cycle=cycles,text=raw,reward_id=reward_id)
+        inventory.observe(raw,last_prompt,reward_id)
     def screenshot(tag):
-        l,t,r,b=rect;im=np.array(sct.grab({'left':l,'top':t,'width':r-l,'height':b-t}))[:,:,:3]
+        im=screen.capture(sct)
         cv2.imwrite(str(RUN/f'{session}-{cycles%12:03d}-{tag}.jpg'),im,[cv2.IMWRITE_JPEG_QUALITY,88])
         cv2.imwrite(str(RUN/'latest.jpg'),im,[cv2.IMWRITE_JPEG_QUALITY,80])
         return im
@@ -119,18 +144,21 @@ def main():
         result,_=ocr(im)
         return ' '.join(r[1] for r in result or [] if r[2]>.8)
     def pickup_text():
-        im=np.array(sct.grab({'left':rect[0]+950,'top':rect[1]+570,'width':720,'height':360}))[:,:,:3]
+        # Cover dropped loot and nearby interaction prompts across camera positions.
+        im=screen.capture(sct,(550,480,1500,850))
         return read_text(im)
     def check_pickup_position(raw):
         if is_other_interaction(raw):
             inp.release();event('wrong_interaction',text=raw);screenshot('wrong-interaction')
-            raise RuntimeError('Wall climb prompt replaced pickup; rejoin to restore fishing position')
+            raise RuntimeError('Non-fishing interaction replaced pickup; rejoin to restore fishing position')
     def ui_active():
-        im=np.array(sct.grab({'left':rect[0]+1190,'top':rect[1]+1360,'width':180,'height':70}))[:,:,:3]
+        im=screen.capture(sct,(1190,1360,180,70))
         return float(cv2.minMaxLoc(cv2.matchTemplate(im,exit_template,cv2.TM_CCOEFF_NORMED))[1])>.84
     event('started',pid=os.getpid(),session=session)
     try:
         with mss.MSS() as sct:
+            inventory=InventoryWatcher(InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer),event,inventory_progress)
+            inventory.start();now=time.monotonic();since=now
             while now-started<limit:
                 tick=time.monotonic();now=tick
                 if stop.exists():raise RuntimeError('Stopped by stop file')
@@ -138,11 +166,11 @@ def main():
                     (RUN/'RECOVER').unlink();raise RuntimeError('Roblox presence requested reconnect after stalled activity')
                 if any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):raise RuntimeError('Stopped by Escape/F9/F12')
                 if not win32gui.IsWindow(hwnd) or win32gui.IsIconic(hwnd) or win32gui.GetForegroundWindow()!=hwnd:raise RuntimeError('Roblox lost focus; all inputs released')
-                if rectangle(hwnd)!=rect:raise RuntimeError('Roblox moved or resized; recalibration required')
-                roi=np.array(sct.grab({'left':rect[0]+1850,'top':rect[1]+400,'width':140,'height':600}))[:,:,:3]
+                if rectangle(hwnd)!=rect:raise RuntimeError('Roblox moved or resized; reacquiring the client area')
+                roi=screen.capture(sct,(1850,400,140,600))
                 d=detect(roi)
                 if d is None and stage!='tracking' and now-last_gui_scan>5:
-                    gui=np.array(sct.grab({'left':rect[0]+760,'top':rect[1]+410,'width':1040,'height':580}))[:,:,:3]
+                    gui=screen.capture(sct,(760,410,1040,580))
                     raw_gui=read_text(cv2.resize(gui,None,fx=.75,fy=.75)).lower();last_gui_scan=time.monotonic()
                     if any(t in raw_gui for t in ('disconnected','connection lost','connection error','failed to connect','same account launched','error code','reconnect')):
                         inp.release();event('disconnect_gui',text=raw_gui);raise RuntimeError('Disconnect GUI detected; rejoin required')
@@ -152,7 +180,7 @@ def main():
                         inp.grab(False);stage='tracking';since=now;prev=None;velocity=0;target_velocity=0;missing_casts=0
                         fresh_hook=casts!=last_tracking_cast
                         if fresh_hook:cycles+=1;last_tracking_cast=casts
-                        event('minigame' if fresh_hook else 'tracking_reacquired',cycle=cycles,cast=casts);screenshot('start');prompt_seen=False;pickup_tries=0
+                        event('minigame' if fresh_hook else 'tracking_reacquired',cycle=cycles,cast=casts);screenshot('start');prompt_seen=False;pickup_tries=0;last_prompt=''
                     lastseen=now
                     if prev:
                         dt=max(.005,now-prev[0]);raw=(d['ball']-prev[1])/dt;traw=(d['target']-prev[2])/dt
@@ -180,10 +208,10 @@ def main():
                     elif now-lastseen>5:raise RuntimeError('Fishing UI visible but marker detection missing for five seconds')
                 elif stage=='casting':
                     if now-last_rod_check>4 and load_config()['auto_rod']:
-                        frame=np.array(sct.grab({'left':rect[0],'top':rect[1],'width':2560,'height':1440}))[:,:,:3]
+                        frame=screen.capture(sct)
                         rod=locate_rod(frame);last_rod_check=now
                         if rod and not rod['equipped']:
-                            inp.release();move_pointer(rect[0]+rod['x'],rect[1]+rod['y'])
+                            inp.release();move_pointer(*screen.point(rod['x'],rod['y']))
                             # Recheck focus immediately before each injected button action.
                             if win32gui.GetForegroundWindow()!=hwnd:raise RuntimeError('Roblox lost focus; all inputs released')
                             inp.hold(True);time.sleep(.15);inp.hold(False)
@@ -191,13 +219,13 @@ def main():
                     # Time the actual press, not entry into the casting state:
                     # OCR and rod detection can delay this iteration substantially.
                     if not inp.mouse:
-                        move_pointer(rect[0]+1650,rect[1]+800)
+                        move_pointer(*screen.point(1650,800))
                         inp.hold(True);cast_press_started=time.monotonic()
                     elif cast_press_started is not None and time.monotonic()-cast_press_started>=.16:
                         inp.hold(False);cast_press_started=None;casts+=1;event('cast',cast=casts);stage='waiting';since=time.monotonic()
                 elif stage=='equipping':
                     if now-since>.65:
-                        move_pointer(rect[0]+1650,rect[1]+800);stage='casting';since=now
+                        move_pointer(*screen.point(1650,800));stage='casting';since=now
                 elif stage=='waiting':
                     if now-since>30:
                         missing_casts+=1;event('no_minigame',count=missing_casts);screenshot('missing')
@@ -207,17 +235,19 @@ def main():
                     if now-since>.4 and now-last_pickup_scan>.35:
                         raw=pickup_text();check_pickup_position(raw);last_pickup_scan=time.monotonic();prompt_seen=is_pickup_prompt(raw)
                         if prompt_seen or now-since>3:
+                            if prompt_seen:last_prompt=raw
                             inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;screenshot('pickup');event('pickup_hold',attempt=pickup_tries,prompt_seen=prompt_seen,text=raw)
                 elif stage=='pickup':
                     if now-since>.3 and now-last_pickup_scan>.3:
                         raw=pickup_text();check_pickup_position(raw);last_pickup_scan=time.monotonic()
                         if now-since>1.8 and is_reward_banner(raw):
-                            inp.grab(False);pickup_confirmed+=1;last_reward=raw;event('reward_observed',cycle=cycles,text=raw);screenshot('collected');stage='cooldown';since=time.monotonic();continue
+                            record_reward(raw);screenshot('collected');stage='cooldown';since=time.monotonic();continue
                     if now-since>4.0:
                         inp.grab(False);raw=pickup_text();check_pickup_position(raw);screenshot('after-pickup')
                         if is_pickup_prompt(raw) or (not raw and pickup_tries<2):stage='pickup_retry_wait'
                         else:
-                            if is_reward_banner(raw):pickup_confirmed+=1;last_reward=raw;event('reward_observed',cycle=cycles,text=raw)
+                            if is_reward_banner(raw):record_reward(raw)
+                            elif prompt_seen:inventory.observe_unconfirmed(last_prompt,f'{session}:{cycles}:inventory')
                             stage='cooldown';event('pickup_attempted',cycle=cycles,attempts=pickup_tries)
                         since=time.monotonic()
                 elif stage=='pickup_retry_wait':
@@ -225,7 +255,11 @@ def main():
                         if pickup_tries>=3:raise RuntimeError('Pickup prompt still present after three held-T attempts')
                         inp.grab(True);stage='pickup';since=now;pickup_tries+=1
                 elif stage=='cooldown':
-                    if now-since>1.0:stage='casting';since=now
+                    if now-since>1.0:
+                        recovered=inventory.check_pending()
+                        if recovered:
+                            pickup_confirmed+=1;last_reward=f"{recovered['item']} X{recovered['quantity']} (inventory)"
+                        stage='casting';now=time.monotonic();since=now;cast_press_started=None
                 if now-laststate>1:
                     status={'running':True,'pid':os.getpid(),'session':session,'updated':time.time(),'elapsed':round(now-started,1),'stage':stage,'cycles':cycles,'casts':casts,'completed_100_percent':completed,'failed_rounds':failed,'unknown_rounds':unknown,'reward_banners_observed':pickup_confirmed,'last_reward':last_reward,'track_frames':track_frames,'inside_fraction':round(inside_frames/max(1,track_frames),3),'last_detection':d,'held_mouse':inp.mouse,'held_t':inp.t}
                     status['last_game_activity']=last_game_activity

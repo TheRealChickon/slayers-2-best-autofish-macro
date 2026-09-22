@@ -3,25 +3,11 @@ import collections,csv,json,re,time,shutil
 from pathlib import Path
 from fishing_assistant import ROOT,RUN,is_reward_banner
 
-def item_name(raw,prompt=''):
-    def clean(value):
-        value=re.sub(r'\bx\s*\d+\b|\bnew\b|\bT\b|collect|ollect|llect|\blect\b','',value,flags=re.I)
-        return re.sub(r'[^a-z0-9]','',value.lower())
-    known={'coral':'Coral','silkthread':'Silk Thread','metalscraps':'Metal Scraps','seahorse':'Sea Horse','ouwfwesh':'OuwFwesh','ouwfish':'OuwFish','goldenfish':'Golden Fish','zebrafish':'Zebra Fish','clownfish':'Clown Fish','ore':'Ore'}
-    value=clean(raw);hint=clean(prompt)
-    if value in known:return known[value]
-    if hint in known:return known[hint]
-    for key,label in known.items():
-        if len(key)>=4 and value.endswith(key):return label
-    aliases={'wfwesh':'OuwFwesh','uwfwesh':'OuwFwesh','quwfwesh':'OuwFwesh','uwfish':'OuwFish','wfish':'OuwFish','etalscraps':'Metal Scraps','ilkthread':'Silk Thread'}
-    if value in aliases:return aliases[value]
-    if not value:return 'Unidentified item'
-    name=re.sub(r'\bx\s*\d+\b|\bnew!?\b','',raw,flags=re.I).strip(' !')
-    return name+' (partial)' if name else 'Unidentified item'
+from item_names import item_name
 
 class Journal:
     def __init__(self):
-        self.started=None;self.offsets={};self.prompts={};self.cycles={};self.items=[];self.activity=[];self.counts=collections.Counter();self.launches=0;self.joins=0;self.version=0
+        self.started=None;self.offsets={};self.prompts={};self.cycles={};self.items=[];self.activity=[];self.counts=collections.Counter();self.launches=0;self.joins=0;self.version=0;self.by_id={};self.corrections={}
 
     def update(self,started):
         if started!=self.started:
@@ -46,8 +32,15 @@ class Journal:
                     if kind=='pickup_hold':self.prompts[cycle]=row.get('text','')
                     if kind=='reward_observed' and is_reward_banner(row.get('text','')):
                         raw=row.get('text','');m=re.search(r'\bx\s*(\d+)\b',raw,re.I);qty=int(m[1]) if m else 1
-                        item={'at':row['at'],'item':item_name(raw,self.prompts.get(cycle,'')),'quantity':qty,'raw':raw,'session':path.stem.removeprefix('events-')}
+                        item={'at':row['at'],'item':item_name(raw,self.prompts.get(cycle,'')),'quantity':qty,'raw':raw,'session':path.stem.removeprefix('events-'),'reward_id':row.get('reward_id')}
                         self.items.append(item);self.counts[item['item']]+=qty;changed=True
+                        if item['reward_id']:self.by_id[item['reward_id']]=item
+                    if kind=='inventory_resolved' and row.get('reward_id'):
+                        self.corrections[row['reward_id']]=row;changed=True
+                    if kind=='inventory_recovered' and row.get('reward_id') and row['reward_id'] not in self.by_id:
+                        item={'at':row['at'],'item':row['item'],'quantity':row['quantity'],'raw':row.get('raw',''),
+                              'session':path.stem.removeprefix('events-'),'reward_id':row['reward_id'],'source':'inventory'}
+                        self.items.append(item);self.by_id[item['reward_id']]=item;self.counts[item['item']]+=item['quantity'];changed=True
                     if kind=='launching_game':self.launches+=1;changed=True
                     if kind=='equipped_rod':self.joins+=1;changed=True
                     if path.name in ('recovery.jsonl','controls.jsonl') and kind not in ('screen','disconnect_observed'):
@@ -55,14 +48,21 @@ class Journal:
                         self.activity.append({'at':row['at'],'kind':kind,'message':message});changed=True
                 self.offsets[key]=f.tell()
         if changed:
+            for reward_id,correction in self.corrections.items():
+                item=self.by_id.get(reward_id)
+                if not item or item.get('source')=='inventory' or item['quantity']!=correction.get('quantity'):continue
+                if item['item']!='Unidentified item' and not item['item'].endswith('(partial)'):continue
+                self.counts[item['item']]-=item['quantity']
+                if not self.counts[item['item']]:del self.counts[item['item']]
+                item['item']=correction['item'];item['source']='inventory';self.counts[item['item']]+=item['quantity']
             self.items.sort(key=lambda row:row['at']);self.activity.sort(key=lambda row:row['at']);self.version+=1
         return changed
 
     def export(self,directory=ROOT):
         directory=Path(directory)
         with (directory/'Item-log.csv').open('w',newline='',encoding='utf-8-sig') as f:
-            w=csv.writer(f);w.writerow(['Time (local)','Item','Quantity','Original screen text','Session'])
-            for row in self.items:w.writerow([time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(row['at'])),row['item'],row['quantity'],row['raw'],row['session']])
+            w=csv.writer(f);w.writerow(['Time (local)','Item','Quantity','Original screen text','Session','Source'])
+            for row in self.items:w.writerow([time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(row['at'])),row['item'],row['quantity'],row['raw'],row['session'],row.get('source','reward banner')])
         with (directory/'Item-totals.csv').open('w',newline='',encoding='utf-8-sig') as f:
             w=csv.writer(f);w.writerow(['Item','Quantity'])
             w.writerows(self.counts.most_common())
