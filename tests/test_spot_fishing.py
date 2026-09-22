@@ -213,11 +213,11 @@ class SpotState(unittest.TestCase):
         for focused in (True,False):
             inp=Mock(toggle_enabled=True,hwnd=1)
             done=Mock();done.wait.side_effect=[False,False,True]
-            with patch.object(minigame_assist,'USER') as user,patch.object(minigame_assist,'foreground',return_value=focused),patch.object(minigame_assist,'RUN',Path('nonexistent-test-state')):
+            with patch.object(minigame_assist,'USER') as user,patch.object(minigame_assist,'foreground',return_value=focused),patch.object(minigame_assist,'window_foreground',return_value=focused),patch.object(minigame_assist,'RUN',Path('nonexistent-test-state')):
                 user.GetAsyncKeyState.side_effect=lambda k:0x8000 if k==119 else 0
                 minigame_assist.watch_focus(inp,done)
             self.assertEqual(inp.toggle_requested.set.call_count,1 if focused else 0)
-            if focused:inp.release.assert_called_once()
+            if focused:inp.suspend_input.assert_called_once()
 
     def test_manual_input_emits_only_left_click_and_t(self):
         import fishing_assistant

@@ -31,11 +31,15 @@ class ForegroundInput(Input):
         self.interrupted = threading.Event()
         self.toggle_requested = threading.Event()
         self.toggle_enabled = False
+        self.needs_mouse_sync = False
+        self.needs_t_sync = False
 
     def guard_press(self, down):
         super().guard_press(down)
         if down and (self.interrupted.is_set() or (RUN/'STOP').exists() or (RUN/'PAUSE').exists()):
             raise RuntimeError('Input suspended')
+        if down and self.hwnd is not None and navigation_keys_down():
+            raise RuntimeError('Waiting for Alt/Tab to be released')
 
     def hold(self, down):
         with self.lock:
@@ -48,11 +52,38 @@ class ForegroundInput(Input):
     def aim(self, *args, **kwargs):
         raise RuntimeError('Manual fishing modes never move the pointer')
 
+    def suspend_input(self):
+        with self.lock:
+            self.interrupted.set()
+            self.needs_mouse_sync=True
+            self.needs_t_sync=self.needs_t_sync or self.t
+            self.release()
+
+    def sync_game_input(self):
+        """A background release can be missed by Roblox's own input state."""
+        with self.lock:
+            self.guard_press(True)
+            if not foreground(self.hwnd):raise RuntimeError('Waiting for Roblox and pointer')
+            if self.needs_mouse_sync:
+                USER.mouse_event(4,0,0,0,0)
+                self.mouse=False;self.needs_mouse_sync=False
+            if self.needs_t_sync:
+                USER.keybd_event(ord('T'),USER.MapVirtualKeyW(ord('T'),0),2,0)
+                self.t=False;self.needs_t_sync=False
+
+
+def window_foreground(hwnd):
+    return (hwnd is not None and win32gui.IsWindow(hwnd) and not win32gui.IsIconic(hwnd)
+            and win32gui.GetForegroundWindow()==hwnd)
+
 
 def foreground(hwnd):
-    return (hwnd is not None and win32gui.IsWindow(hwnd) and not win32gui.IsIconic(hwnd)
-            and win32gui.GetForegroundWindow()==hwnd
+    return (window_foreground(hwnd)
             and win32gui.GetAncestor(win32gui.WindowFromPoint(win32gui.GetCursorPos()),2)==hwnd)
+
+
+def navigation_keys_down():
+    return any(USER.GetAsyncKeyState(key)&0x8000 for key in (18,9,91,92))
 
 
 def watch_focus(inp, done):
@@ -60,20 +91,17 @@ def watch_focus(inp, done):
     while not done.wait(.015):
         try:
             f8 = bool(USER.GetAsyncKeyState(119)&0x8000)
-            if inp.toggle_enabled and f8 and not f8_down and foreground(inp.hwnd):
-                inp.interrupted.set()
+            if inp.toggle_enabled and f8 and not f8_down and window_foreground(inp.hwnd):
+                inp.suspend_input()
                 inp.toggle_requested.set()
-                inp.release()
             f8_down = f8
             hotkey = any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123))
             if hotkey and not (RUN/'STOP').exists():
                 (RUN/'STOP').write_text('Stopped by physical hotkey')
-            if hotkey or (RUN/'STOP').exists() or (RUN/'PAUSE').exists() or not foreground(inp.hwnd):
-                inp.interrupted.set()
-                inp.release()
+            if hotkey or (RUN/'STOP').exists() or (RUN/'PAUSE').exists() or not foreground(inp.hwnd) or navigation_keys_down():
+                inp.suspend_input()
         except (RuntimeError, win32gui.error):
-            inp.interrupted.set()
-            inp.release()
+            inp.suspend_input()
 
 
 def read_scene(frame, ocr):
@@ -114,6 +142,8 @@ class TrackingAssist(ReelMotion):
     def suspend(self):
         super().suspend()
         self.candidate = 0
+        self.clear_since = None
+        self.last_seen = 0
 
     def step(self, detection, visible, now):
         if detection is None or not visible:
@@ -129,8 +159,8 @@ class TrackingAssist(ReelMotion):
         self.clear_since = None
         self.candidate += 1
         self.last_seen = now
+        if self.candidate < 2:return False
         if not self.active:
-            if self.candidate < 2: return False
             self.active = True; self.count += 1
             self.previous = None; self.velocity = self.target_velocity = 0
         return super().step(detection,now)
@@ -161,7 +191,8 @@ def main(argv=None):
         if 'reward_id' in kw:kw['reward_id']=session+':'+kw['reward_id']
         log.write(json.dumps({'at':time.time(),'event':kind,'mode':args.mode,**kw})+'\n')
     spot=SpotCycle(event) if args.mode=='spot' else None
-    inp.toggle_enabled = spot is not None
+    inp.toggle_enabled = True
+    assist_paused=False
     ocr=None
     if spot:
         from rapidocr_onnxruntime import RapidOCR
@@ -186,6 +217,7 @@ def main(argv=None):
               'held_mouse':inp.mouse,'held_t':inp.t,'last_game_activity':last_activity,
               'spot_armed':spot.armed if spot else False,'active_seconds':round(active_time,1),
               'spot_paused':spot.paused if spot else False,
+              'manual_paused':spot.paused if spot else assist_paused,
               'wait_reason':wait_reason,
               'control_fps':round(len(frame_intervals)/sum(frame_intervals),1) if frame_intervals else None,
               'inside_fraction':round(inside_frames/max(1,track_frames),3),
@@ -208,8 +240,17 @@ def main(argv=None):
                     # Enumerating all processes/windows every frame used much
                     # of the response budget. Keep the already verified handle.
                     selected=hwnd if hwnd and win32gui.IsWindow(hwnd) else find_window()
+                    inp.hwnd=selected
+                    if inp.toggle_requested.is_set():
+                        inp.toggle_requested.clear()
+                        if spot:spot.toggle(active_time)
+                        else:
+                            assist_paused=not assist_paused
+                            event('assist_paused' if assist_paused else 'assist_resumed',message='F8 paused assistance.' if assist_paused else 'F8 resumed assistance.')
+                        inp.release();tracker.suspend();resuming=True
                     if not foreground(selected):
                         raise RuntimeError('Waiting for Roblox')
+                    if navigation_keys_down():raise RuntimeError('Waiting for Alt/Tab to be released')
                     rect=rectangle(selected)
                     if selected!=hwnd or screen is None or screen.rect!=rect:
                         if hwnd is not None and hwnd!=selected and spot:
@@ -217,14 +258,10 @@ def main(argv=None):
                             spot.paused=True
                         inp.release();tracker.suspend();screen=ScreenSpace(rect);hwnd=selected;inp.hwnd=hwnd
                         resuming=True
-                    if spot and inp.toggle_requested.is_set():
-                        inp.toggle_requested.clear()
-                        spot.toggle(active_time)
-                        inp.release();tracker.suspend();resuming=True
-                    if spot and (not spot.armed or spot.paused):
+                    if (spot and (not spot.armed or spot.paused)) or (not spot and assist_paused):
                         inp.release()
-                        stage='spot_paused' if spot.armed else 'select_spot'
-                        wait_reason='Press F8 in Roblox to resume' if spot.armed else 'Equip your rod, position the mouse, then press F8'
+                        stage=('spot_paused' if spot.armed else 'select_spot') if spot else 'assist_paused'
+                        wait_reason='Press F8 in Roblox to resume' if not spot or spot.armed else 'Equip your rod, position the mouse, then press F8'
                         if tick>=next_state:status();next_state=tick+1
                         time.sleep(.03)
                         continue
@@ -252,6 +289,7 @@ def main(argv=None):
                               inside_fraction=round(inside_frames/max(1,track_frames),3),missed_frames=missed_frames)
                         write('tracking-latest.json',{'session':session,'cycle':tracker.count,'samples':list(samples)})
                     if visible:
+                        inp.sync_game_input()
                         inp.grab(False);inp.hold(down)
                         if last_track_tick is not None and 0<tick-last_track_tick<.15:
                             frame_intervals.append(tick-last_track_tick)
@@ -298,6 +336,7 @@ def main(argv=None):
                                     event('cast_withheld',message='Waiting for an equipped rod and a mouse position clear of the HUD.')
                                     continue
                                 try:
+                                    inp.sync_game_input()
                                     inp.hold(True)
                                 except (RuntimeError,ValueError,win32gui.error):
                                     # No click was sent: do not invent a pending
@@ -309,6 +348,7 @@ def main(argv=None):
                             elif action=='collect':
                                 inp.hold(False)
                                 if not inp.t:spot.since=active_time+time.monotonic()-tick
+                                inp.sync_game_input()
                                 inp.grab(True)
                             else:inp.release()
                             stage=spot.stage
@@ -318,7 +358,7 @@ def main(argv=None):
                         inp.release()
                 except (RuntimeError, ValueError, win32gui.error) as error:
                     # No focus stealing, menu input, or relaunch in this mode.
-                    inp.release();tracker.suspend();stage='paused_focus';resuming=True
+                    inp.suspend_input();tracker.suspend();stage='paused_focus';resuming=True
                     if wait_reason!=str(error):event('assistant_waiting',message=str(error))
                     wait_reason=str(error)
                 if tick>=next_state:status();next_state=tick+1

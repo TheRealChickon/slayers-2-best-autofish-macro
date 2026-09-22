@@ -103,4 +103,6 @@ The saved `mode` is `full`, `assist`, or `spot`. Resume uses that selection. The
 
 F8 toggles local pause/resume in Roblox; `spot_paused` reports that manual toggle independently of focus. Focus return never overrides an F8 pause. Starting the controller waits for F8 and sends no game input.
 
+F8 also toggles Minigame only. Both manual modes expose `manual_paused`; Minigame only starts enabled and uses `assist_paused` as its worker stage when toggled off. Focus return restores enabled assistance only after navigation keys are released and fresh minigame frames are observed. It does not clear STOP/PAUSE or a manual F8 pause.
+
 Assist/spot status also reports measured `control_fps`, `tracked_frames`, `missed_frames`, `inside_fraction`, and the learned `reel_response` for the current round. `inside_fraction` covers recognized frames, not catch success. A bounded trace of the most recently finished round is stored locally in `tracking-latest.json`; `tracking_quality` events summarize it. Full farmer and both manual modes share the reeling controller.
