@@ -88,13 +88,13 @@ class RecoveryPacing(unittest.TestCase):
         with patch.object(recovery.time,'monotonic',side_effect=lambda:clock[0]):
             self.assertTrue(driver.hold_private_join((1280,1333)))
         self.assertEqual([call.args for call in driver.inp.hold.call_args_list],[(True,),(False,)])
-        self.assertLess(clock[0],1)
+        self.assertLess(clock[0],1.5)
 
     def test_hold_has_bounded_duration_if_panel_never_changes(self):
         driver,clock=self.driver();driver.text=Mock(return_value=private_rows())
         with patch.object(recovery.time,'monotonic',side_effect=lambda:clock[0]):
             driver.hold_private_join((1280,1333))
-        self.assertLessEqual(clock[0],5)
+        self.assertLessEqual(clock[0],5.3)
         driver.inp.hold.assert_called_with(False)
 
     def test_stop_focus_change_or_ocr_error_always_releases_hold(self):

@@ -57,7 +57,7 @@ class Recovery:
     def move(self,x,y):
         self.guard();move_pointer(*self.screen.point(x,y))
     def click(self,x,y,hold=.18):
-        self.move(x,y);self.sleep(.18);self.move(x+1,y);self.sleep(.08);self.move(x,y);self.sleep(.16)
+        self.move(x,y);self.sleep(.30);self.move(x+1,y);self.sleep(.15);self.move(x,y);self.sleep(.30)
         self.inp.hold(True)
         try:self.sleep(hold)
         finally:self.inp.hold(False)
@@ -113,12 +113,16 @@ class Recovery:
         else:
             self.key(str(config['rod_slot']));self.sleep(.6)
             self.event('rod_equipped',method='configured slot',slot=config['rod_slot'])
-        self.move(1650,800);self.sleep(.35)
+        # Refresh Roblox's hover target after leaving the hotbar. The OS cursor
+        # can arrive before the game's hit test; otherwise the first cast may
+        # toggle the rod off and spend a full bite timeout waiting for nothing.
+        for point,delay in (((1650,800),.30),((1651,800),.15),((1650,800),.30)):
+            self.move(*point);self.sleep(delay)
     def hold_private_join(self,target):
         # The friend-Join button animates into a larger private-Join button.
         # Revalidate after hover settles so an old center cannot dismiss it.
         x,y=target
-        self.move(x,y);self.sleep(.18);self.move(x+1,y);self.sleep(.08);self.move(x,y);self.sleep(.16)
+        self.move(x,y);self.sleep(.30);self.move(x+1,y);self.sleep(.15);self.move(x,y);self.sleep(.30)
         rows=self.text(self.capture(),(820,1190,920,250))
         current=private_join_target(rows)
         self.guard()
