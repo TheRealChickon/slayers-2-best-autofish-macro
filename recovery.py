@@ -10,6 +10,7 @@ from metrics import new_run, write as write_metrics
 import presence_watch
 from app_config import load_config
 from rod_detector import locate_rod
+from screen_space import ScreenSpace
 
 LAUNCH_URL='roblox://placeId='+str(load_config()['place_id'])
 
@@ -25,8 +26,10 @@ class Recovery:
         with self.log.open('a') as f:f.write(json.dumps(row)+'\n')
         print(json.dumps(row),flush=True)
     def check_stop(self):
-        if self.stop.exists() or any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):
-            self.inp.release();self.stop.write_text('User stop');raise UserStop('Stopped by user')
+        if any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)) and not self.stop.exists():
+            self.stop.write_text('Stopped by physical hotkey')
+        if self.stop.exists():
+            self.inp.release();raise UserStop('Stopped by user')
     def select(self,focus=False):
         self.check_stop();self.hwnd=find_window()
         self.inp.hwnd=self.hwnd
@@ -38,7 +41,8 @@ class Recovery:
             self.sleep(.4,focus=False)
         if win32gui.IsIconic(self.hwnd):raise RecoveryError('Roblox lost focus')
         self.rect=rectangle(self.hwnd)
-        if self.rect[2]-self.rect[0]!=2560 or self.rect[3]-self.rect[1]!=1440:raise RecoveryError('Roblox window needs to remain 2560 by 1440')
+        try:self.screen=ScreenSpace(self.rect)
+        except ValueError as error:raise RecoveryError('Roblox window needs adjustment: '+str(error))
     def guard(self):
         self.check_stop()
         if not self.hwnd or not win32gui.IsWindow(self.hwnd):raise RecoveryError('Roblox window closed')
@@ -50,8 +54,7 @@ class Recovery:
         while time.monotonic()<until:
             self.guard() if focus else self.check_stop();time.sleep(.025)
     def move(self,x,y):
-        self.guard();x+=self.rect[0];y+=self.rect[1]
-        move_pointer(x,y)
+        self.guard();move_pointer(*self.screen.point(x,y))
     def click(self,x,y,hold=.18):
         self.move(x,y);self.sleep(.18);self.move(x+1,y);self.sleep(.08);self.move(x,y);self.sleep(.16)
         self.inp.hold(True)
@@ -63,8 +66,7 @@ class Recovery:
         try:self.sleep(seconds)
         finally:USER.keybd_event(ord(k.upper()),scan,2,0)
     def capture(self,tag=None):
-        self.guard();l,t,r,b=self.rect
-        im=np.array(self.sct.grab({'left':l,'top':t,'width':r-l,'height':b-t}))[:,:,:3]
+        self.guard();im=self.screen.capture(self.sct)
         if tag:
             self.shots+=1;cv2.imwrite(str(RUN/f'recovery-{self.shots%20:02d}-{tag}.jpg'),im,[cv2.IMWRITE_JPEG_QUALITY,87])
             cv2.imwrite(str(RUN/'recovery-latest.jpg'),im,[cv2.IMWRITE_JPEG_QUALITY,85])
@@ -130,7 +132,12 @@ class Recovery:
                     self.click(*reconnect[0]['center']);next_action=now+18;self.sleep(2);continue
                 if now>=next_action:self.launch(restart=True);next_action=time.monotonic()+12;deadline=time.monotonic()+180
                 self.sleep(1);continue
-            if 'go back to the main menu' in text:
+            cancel=[r for r in rows if r['text'].strip().lower()=='cancel']
+            if 'purchase' in text and len(cancel)==1:
+                kind='vendor_dialog'
+                if now>=next_action:
+                    self.click(*cancel[0]['center']);self.event('closed_vendor_dialog');force_menu=True;next_action=now+1
+            elif 'go back to the main menu' in text:
                 kind='confirm_menu'
                 if now>=next_action:self.capture(kind);self.click(1208,797);next_action=now+4;self.event(kind);force_menu=False;world_since=None
             elif 'back to main menu' in text:

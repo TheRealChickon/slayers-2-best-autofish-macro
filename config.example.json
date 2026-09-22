@@ -4,6 +4,7 @@
   "user_id": null,
   "rod_slot": 5,
   "auto_rod": true,
+  "inventory_check": true,
   "reduced_motion": false,
   "place_id": 16205713724
 }

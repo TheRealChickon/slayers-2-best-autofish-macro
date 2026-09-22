@@ -28,6 +28,6 @@ result['totals']=read('totals.json')
 result['presence']=read('presence.json')
 presence=result['presence']
 if supervisor.get('running') and not result['stop_requested'] and presence.get('ok') and now-presence.get('checked_at',0)<180 and presence.get('type')!=2:
-    if now-worker.get('last_game_activity',now)>75:issues.append('Roblox presence reports account outside a game and fishing activity has stopped')
+    if now-worker.get('last_game_activity',now)>75 and not (worker.get('stage')=='inventory' and now-worker.get('updated',0)<20):issues.append('Roblox presence reports account outside a game and fishing activity has stopped')
 result['issues']=issues
 print(json.dumps(result,indent=2))

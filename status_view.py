@@ -27,7 +27,7 @@ def snapshot(journal=None):
     elif live:
         state = ('Waiting for Roblox' if stage == 'paused_focus' else
                  {'tracking': 'Fishing', 'pickup': 'Collecting', 'waiting': 'Waiting for a bite',
-                  'casting': 'Casting'}.get(worker.get('stage'), 'Fishing')
+                  'casting': 'Casting', 'inventory': 'Reading inventory'}.get(worker.get('stage'), 'Fishing')
                  if stage == 'fishing' else stage.replace('_', ' ').title())
     else:
         state = 'Paused' if paused else 'Stopped'
