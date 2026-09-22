@@ -1,4 +1,4 @@
-param([switch]$SkipInstall, [switch]$NoDesktop)
+param([switch]$SkipInstall, [switch]$NoDesktop, [switch]$NoCLI)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Runtime.ps1')
 
@@ -23,4 +23,5 @@ if (-not (Test-Path -LiteralPath $localConfig)) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'config.example.json') -Destination $localConfig
 }
 if (-not $NoDesktop) { & (Join-Path $PSScriptRoot 'Install-Desktop.ps1') }
-Write-Host 'Ready. Open Fishing or Fishing CLI on your desktop.' -ForegroundColor Green
+if (-not $NoCLI) { & (Join-Path $PSScriptRoot 'Install-CLI.ps1') }
+Write-Host 'Ready. Run autofish start in a new terminal, or open Fishing on your desktop.' -ForegroundColor Green

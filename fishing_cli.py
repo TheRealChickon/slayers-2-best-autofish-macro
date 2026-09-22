@@ -63,11 +63,16 @@ def status_lines(data, colors=False):
     ]
 
 
-def parser():
-    p = argparse.ArgumentParser(prog='fishing', description='Fishing status, item journal and explicit controls.')
+def parser(prog='autofish'):
+    p = argparse.ArgumentParser(prog=prog, description='Fishing status, item journal and explicit controls.')
     p.add_argument('--no-color', action='store_true', help='Disable terminal colors')
     p.add_argument('--color', action='store_true', help='Use ANSI colors even when NO_COLOR is inherited')
     sub = p.add_subparsers(dest='command')
+    start = sub.add_parser('start', help='Choose a game and mode, then open the dashboard')
+    start.add_argument('--game', help='Game ID from autofish games; omit to choose')
+    start.add_argument('--mode', choices=tuple(MODES), help='Omit to choose a fishing mode')
+    start.add_argument('--no-ui', action='store_true', help='Start and exit without opening the dashboard')
+    sub.add_parser('games', help='List supported games and their IDs')
     for name, help_text in [('status', 'Show the saved run and bot status'), ('items', 'Show item totals')]:
         command = sub.add_parser(name, help=help_text)
         command.add_argument('--json', action='store_true', help='Machine-readable JSON')
@@ -146,6 +151,13 @@ def stream_logs(args, journal, colors):
 
 def execute(args, colors=False):
     command = args.command or 'status'
+    if command=='start':
+        from start_picker import start
+        return start(args, colors)
+    if command=='games':
+        from game_catalog import GAMES
+        for key,game in GAMES.items():print(f'{key:<24} {game.name}')
+        return 0
     if command=='reference':
         import landmark_controls as references
         if args.operation=='save':print(references.setup(args.position,json.loads(args.boxes) if args.boxes else None))
@@ -243,8 +255,8 @@ def shell(colors):
             print(color(str(e), 'red', colors))
 
 
-def main(argv=None):
-    args = parser().parse_args(argv)
+def main(argv=None, prog='autofish'):
+    args = parser(prog).parse_args(argv)
     colors = enable_color(args.color) and not args.no_color
     if colors and args.command in ('watch', 'shell', 'tui'):
         print('\033]0;Fishing CLI\007', end='', flush=True)
