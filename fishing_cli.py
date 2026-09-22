@@ -87,7 +87,7 @@ def parser():
     resume=sub.add_parser('continue', aliases=['resume'], help='Explicitly start the selected mode')
     resume.add_argument('--mode',choices=('full','assist','spot'),help='Full farmer, minigame only, or fish here')
     sub.add_parser('assist',help='Start minigame only; you cast and collect manually')
-    sub.add_parser('spot',help='Repeat fishing and collect at a point selected with F8; pauses on Alt-Tab')
+    sub.add_parser('spot',help='Click, reel and collect; F8 starts/pauses/resumes, losing focus pauses automatically')
     reference=sub.add_parser('reference',help='Save a local fishing view while paused')
     reference.add_argument('operation',choices=('status','save','disable'),nargs='?',default='status')
     reference.add_argument('--position',action='store_true',help='Calibrate small position corrections as well as camera movement')
