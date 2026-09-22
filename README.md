@@ -262,6 +262,7 @@ The supervisor handles visible disconnect dialogs and a stalled fishing loop. Ve
 Menu actions wait for repeated observations of a stable target. Each action has its own retry delay, so a completed menu transition does not inherit a previous button's wait. The private Join button is checked again after the cursor settles; holding ends when its panel changes, with a 4.5-second limit. A short quiet period after Join lets the game transition before another attempt; repeated rejected joins back off. Recovery still requires three continuous seconds of the loaded world before equipping the rod and starting fishing.
 
 Cast and rod clicks allow a brief cursor settle before pressing, with stop and focus checks throughout. The first cast after loading or selecting the rod uses a longer settle to let Roblox update its hover target after the menu; subsequent casts retain their normal timing. The minigame tracking loop is unchanged.
+When a reward is confirmed, the next cast uses a shorter cooldown and skips repeated cursor-settling movements if the pointer is still at the known cast point. Menus, rod changes, focus pauses, pointer movement and uncertain pickups keep the longer checks.
 
 On the primary monitor, mouse moves use primary-screen absolute coordinates; targets on other monitors use virtual-desktop coordinates. The actual cursor position is checked before clicking. This avoids the primary-screen hit-test mismatch observed on the tested two-monitor desktop.
 
