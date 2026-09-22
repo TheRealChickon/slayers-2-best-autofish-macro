@@ -48,6 +48,23 @@ class TintedVision(unittest.TestCase):
         for color in ((0,0,220),(200,200,200),(40,50,60)):
             self.assertFalse(ui_visible(np.full((70,180,3),color,np.uint8),template))
 
+    def test_brown_scenery_connected_to_target_does_not_hide_it(self):
+        im=np.full((600,140,3),(50,75,80),np.uint8)
+        cv2.rectangle(im,(35,30),(104,545),(24,32,36),-1)
+        cv2.rectangle(im,(31,415),(108,467),(20,75,85),-1)
+        cv2.rectangle(im,(55,512),(85,542),(220,220,220),-1)
+        result=detect(im)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result['target'],441.5,delta=2)
+        self.assertAlmostEqual(result['ball'],527.5,delta=2)
+
+    def test_dim_tinted_marker_uses_local_contrast(self):
+        im=self.fixture((70,30,10),(45,115,60))
+        im[350:381,55:86]=(155,145,110)
+        result=detect(im)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result['ball'],365.5,delta=2)
+
 
 class SpotState(unittest.TestCase):
     def setUp(self):
@@ -103,12 +120,14 @@ class SpotState(unittest.TestCase):
         self.spot.resume(6)
         self.assertEqual(self.step(6.1,stable=False),'release')
         self.assertEqual(self.step(7),'release')
-        self.assertEqual(self.step(10.2),'cast')
+        self.assertEqual(self.step(10.2),'release')
+        self.assertEqual(self.step(13.1),'cast')
 
     def test_round_without_reward_continues_without_t(self):
         self.spot.tracking(1);self.spot.ended(5)
         self.assertEqual(self.step(6),'release')
-        self.assertEqual(self.step(9.1),'cast')
+        self.assertEqual(self.step(9.1),'release')
+        self.assertEqual(self.step(12.1),'cast')
         self.assertEqual(self.spot.rewards,0)
 
     def test_focus_return_preserves_pending_bite_wait(self):
@@ -127,6 +146,41 @@ class SpotState(unittest.TestCase):
         self.spot.resume(1.5)
         self.assertEqual(self.step(2.8),'cast')
         self.assertEqual(self.spot.casts,0)
+
+    def test_brief_loss_of_hotbar_cannot_cancel_pending_bite(self):
+        self.assertEqual(self.step(2),'cast');self.step(2.2)
+        self.step(5,world=False);self.step(6)
+        for t in (8,15,25,31):self.assertEqual(self.step(t),'release')
+        self.assertEqual(self.step(32.1),'cast')
+
+    def test_late_pickup_resets_clear_scene_wait_and_is_collected(self):
+        self.spot.tracking(1);self.spot.ended(5)
+        self.step(6)
+        self.assertEqual(self.step(10.5,'collect'),'collect')
+        self.assertEqual(self.step(11),'collect')
+        self.assertEqual(self.step(11.5),'release')
+        self.assertEqual(self.step(13),'release')
+        self.assertEqual(self.step(14,'collect'),'collect')
+
+    def test_pickup_does_not_need_equipped_rod_and_conflicts_release_t(self):
+        self.spot.tracking(1);self.spot.ended(5)
+        self.assertEqual(self.step(6,'collect',equipped=False),'collect')
+        self.assertEqual(self.step(6.3,'other',equipped=False),'release')
+
+    def test_stale_selected_rod_and_hotbar_cursor_cannot_authorize_cast(self):
+        from rod_detector import RodReady
+        from screen_space import ScreenSpace
+        gate=RodReady();rod={'equipped':True,'score':.95,'ring':.5,'x':1470,'y':1385}
+        self.assertFalse(gate.observe(rod,1))
+        self.assertFalse(gate.observe(rod,1.4))
+        self.assertTrue(gate.observe(rod,1.8))
+        self.assertFalse(gate.matches({**rod,'equipped':False}))
+        self.assertFalse(gate.observe(None,2))
+        self.assertFalse(gate.observe(rod,2.4))
+        with patch.object(minigame_assist.win32gui,'GetCursorPos',return_value=(1470,1385)):
+            self.assertFalse(minigame_assist.safe_cast_pointer(ScreenSpace((0,0,2560,1440))))
+        with patch.object(minigame_assist.win32gui,'GetCursorPos',return_value=(1280,720)):
+            self.assertTrue(minigame_assist.safe_cast_pointer(ScreenSpace((0,0,2560,1440))))
 
     def test_manual_input_forbids_pointer_movement(self):
         import fishing_assistant

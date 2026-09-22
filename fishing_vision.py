@@ -22,6 +22,18 @@ def detect(roi):
                 candidate=(area/(w*h), y+h/2, h)
                 if not any(abs(candidate[1]-old[1])<5 for old in targets):targets.append(candidate)
     if not targets:
+        # Brown/green scenery can connect the rectangle to the whole image.
+        # Isolate the known target width, then retain horizontal runs: scattered
+        # background pixels disappear without requiring an isolated contour.
+        bounded=tint.copy()
+        bounded[:,:31]=0;bounded[:,109:]=0
+        bounded=cv2.morphologyEx(bounded,cv2.MORPH_OPEN,np.ones((1,51),np.uint8))
+        for contour in cv2.findContours(bounded,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[0]:
+            x,y,w,h=cv2.boundingRect(contour)
+            area=cv2.contourArea(contour)
+            if 65<=w<=78 and 22<=h<=130 and y>=28 and y+h<=552 and area/(w*h)>.70:
+                targets.append((area/(w*h),y+h/2,h))
+    if not targets:
         # A connected patch of scenery can swallow the color component. Look
         # for a closed rectangle with the same UI geometry, then require green
         # contrast on its horizontal borders; edges alone never authorize input.
@@ -49,6 +61,18 @@ def detect(roi):
             area = cv2.contourArea(contour)
             if 14 <= w <= 45 and 14 <= h <= 48 and 42 <= x <= 87 and .6 <= w/h <= 1.7 and area > 150:
                 balls.append((area, y+h/2, h))
+    if not balls:
+        # During the UI fade, blue/red scenery can tint the white marker below
+        # a fixed brightness threshold. Compare it with the same row beside it.
+        gray=roi.astype(np.float32).mean(axis=2)
+        baseline=(np.median(gray[:,38:49],axis=1)+np.median(gray[:,92:103],axis=1))/2
+        contrast=np.uint8((gray-baseline[:,None]>35)&(roi.max(axis=2)>=100))*255
+        contrast[:,:48]=0;contrast[:,91:]=0
+        contrast=cv2.morphologyEx(contrast,cv2.MORPH_CLOSE,np.ones((5,3),np.uint8))
+        for contour in cv2.findContours(contrast,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[0]:
+            x,y,w,h=cv2.boundingRect(contour);area=cv2.contourArea(contour)
+            if 14<=w<=40 and 14<=h<=48 and 48<=x<=70 and .6<=w/h<=1.7 and area>150:
+                balls.append((area,y+h/2,h))
     if not targets or not balls:
         return None
     # Disagreeing rectangles are ambiguous; wait for the next frame.
