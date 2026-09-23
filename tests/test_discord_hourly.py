@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import unittest
+import io
 from pathlib import Path
 from unittest.mock import patch
 
@@ -79,6 +80,36 @@ class DiscordHourlyTests(unittest.TestCase):
         self.assertTrue(report.valid_webhook("https://discord.com/api/webhooks/123/secret"))
         self.assertFalse(report.valid_webhook("https://discord.com.evil.test/api/webhooks/123/secret"))
         self.assertFalse(report.valid_webhook("http://discord.com/api/webhooks/123/secret"))
+
+    def test_cached_inventory_attaches_without_opening_game(self):
+        (self.run / "inventory-latest.jpg").write_bytes(b"\xff\xd8test-image\xff\xd9")
+        image, captured = report.inventory_snapshot(self.run)
+        summary = report.summarize(self.run, 10, 20, now=20)
+        payload = report.embed(summary, captured)
+        self.assertEqual(payload["embeds"][0]["image"]["url"], "attachment://inventory.jpg")
+
+        class Response(io.BytesIO):
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *_): self.close()
+
+        with patch.object(report.urllib.request, "urlopen", return_value=Response(b'{"id":"posted"}')) as send:
+            status, message_id = report.request_webhook("https://discord.com/api/webhooks/123/redacted", payload, image)
+        self.assertEqual((status, message_id), (200, "posted"))
+        request = send.call_args.args[0]
+        self.assertIn("multipart/form-data", request.headers["Content-type"])
+        self.assertIn(b'name="files[0]"', request.data)
+        self.assertIn(image, request.data)
+
+    def test_immediate_first_report_covers_prior_hour_and_moves_checkpoint(self):
+        (self.run / report.STATE_FILE).write_text(json.dumps({"last_end_at": 1000, "reports_sent": 0}))
+        with patch.object(report, "data_directory", return_value=self.run), \
+             patch.object(report.time, "time", return_value=1100), \
+             patch.object(report, "load_secret", return_value="redacted"), \
+             patch.object(report, "request_webhook", return_value=(200, "message-now")) as send:
+            report.main(["--send-now"])
+            self.assertIn("<t:-2500:t>", send.call_args.args[1]["embeds"][0]["description"])
+        self.assertEqual(report.read_json(self.run / report.STATE_FILE)["last_end_at"], 1100)
 
     @unittest.skipUnless(os.name == "nt", "DPAPI is Windows-only")
     def test_secret_is_encrypted_for_local_user(self):

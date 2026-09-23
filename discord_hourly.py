@@ -16,6 +16,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 
 from app_config import data_directory
@@ -226,7 +227,22 @@ def compact_items(items, limit=950):
     return "\n".join(lines)
 
 
-def embed(summary):
+def inventory_snapshot(run):
+    """Reuse the scanner's saved frame; never open the game inventory here."""
+    path = run / "inventory-latest.jpg"
+    try:
+        before = path.stat()
+        data = path.read_bytes()
+        after = path.stat()
+    except OSError:
+        return None
+    if (before.st_mtime_ns != after.st_mtime_ns or before.st_size != after.st_size
+            or len(data) > 8_000_000 or not data.startswith(b"\xff\xd8") or not data.endswith(b"\xff\xd9")):
+        return None
+    return data, after.st_mtime
+
+
+def embed(summary, inventory_at=None):
     s = summary
     minutes = s["seconds"] / 60
     status = "STOPPED" if s["stopped"] else ("PAUSED" if s["paused"] else
@@ -252,26 +268,44 @@ def embed(summary):
                                        f"{s['totals'].get('rewards', 0):,} rewards · "
                                        f"{s['totals'].get('failed', 0):,} failed rounds"), "inline": False},
     ]
+    if inventory_at is not None:
+        freshness = "new scan" if inventory_at >= s["start"] else "saved scan"
+        fields.append({"name": "INVENTORY", "value": f"{freshness} · captured <t:{int(inventory_at)}:f>", "inline": False})
+    else:
+        fields.append({"name": "INVENTORY", "value": "No saved inventory scan yet; fishing continues.", "inline": False})
     if s["mythical"]:
         names = collections.Counter(row["name"] for row in s["mythical"])
         fields.insert(0, {"name": "✦ MYTHICAL", "value": compact_items(names), "inline": False})
-    return {"username": "Autofish", "allowed_mentions": {"parse": []},
-            "embeds": [{"title": title, "color": color,
+    visual = {"title": title, "color": color,
                         "description": (f"**{status}**  ·  <t:{int(s['start'])}:t> → <t:{int(s['end'])}:t>\n"
                                         f"Current phase: {s['supervisor_stage']} / {s['worker_stage']}"),
                         "fields": fields,
                         "footer": {"text": "Confirmed reward banners + inventory reconciliation · empty rounds are normal"},
-                        "timestamp": dt.datetime.fromtimestamp(s["end"], dt.timezone.utc).isoformat()}]}
+                        "timestamp": dt.datetime.fromtimestamp(s["end"], dt.timezone.utc).isoformat()}
+    if inventory_at is not None:
+        visual["image"] = {"url": "attachment://inventory.jpg"}
+    return {"username": "Autofish", "allowed_mentions": {"parse": []}, "embeds": [visual]}
 
 
-def request_webhook(url, payload=None):
+def request_webhook(url, payload=None, attachment=None):
     if payload is None:
         request = urllib.request.Request(url, headers={"User-Agent": "Autofish/1.0"}, method="GET")
     else:
         separator = "&" if "?" in url else "?"
-        request = urllib.request.Request(url + separator + "wait=true",
-                                         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                                         headers={"Content-Type": "application/json", "User-Agent": "Autofish/1.0"},
+        if attachment is None:
+            data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            content_type = "application/json"
+        else:
+            boundary = "autofish-" + uuid.uuid4().hex
+            encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            data = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"payload_json\"\r\n"
+                    "Content-Type: application/json\r\n\r\n").encode() + encoded + b"\r\n"
+            data += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"files[0]\"; "
+                     "filename=\"inventory.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n").encode()
+            data += attachment + f"\r\n--{boundary}--\r\n".encode()
+            content_type = f"multipart/form-data; boundary={boundary}"
+        request = urllib.request.Request(url + separator + "wait=true", data=data,
+                                         headers={"Content-Type": content_type, "User-Agent": "Autofish/1.0"},
                                          method="POST")
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
@@ -287,7 +321,7 @@ def request_webhook(url, payload=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_mutually_exclusive_group(required=True)
-    for option in ("configure", "verify", "init", "preview", "send"):
+    for option in ("configure", "verify", "init", "preview", "send", "send-now"):
         actions.add_argument("--" + option, action="store_true")
     args = parser.parse_args(argv)
     run = data_directory()
@@ -314,19 +348,23 @@ def main(argv=None):
     if args.send and now - start < WINDOW_SECONDS:
         print(json.dumps({"sent": False, "reason": "not_due", "next_due_at": start + WINDOW_SECONDS}))
         return
+    if args.send_now and not state.get("reports_sent"):
+        start = min(start, now - WINDOW_SECONDS)
     summary = summarize(run, start, now, now)
-    payload = embed(summary)
+    inventory = inventory_snapshot(run)
+    payload = embed(summary, inventory[1] if inventory else None)
     if args.preview:
         print(json.dumps({"summary": {**summary, "items": dict(summary["items"])}, "payload": payload},
                          indent=2, ensure_ascii=True))
         return
-    code, message_id = request_webhook(load_secret(run), payload)
+    code, message_id = request_webhook(load_secret(run), payload, inventory[0] if inventory else None)
     if code not in (200, 204):
         raise RuntimeError(f"Unexpected Discord response: HTTP {code}")
     state.update(last_end_at=now, reports_sent=state.get("reports_sent", 0) + 1,
                  last_message_id=message_id)
     atomic_json(state_path, state)
     print(json.dumps({"sent": True, "at": now, "rewards": summary["rewards"],
+                      "inventory_at": inventory[1] if inventory else None,
                       "mythical": [r["name"] for r in summary["mythical"]], "stopped": summary["stopped"]}))
 
 
