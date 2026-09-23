@@ -59,11 +59,21 @@ class RecoveryPolicy:
     # Re-equipping the rod there cannot restore the saved fishing position.
     LOCAL = {'pickup_other','pickup_timeout','tracking_lost','window','alignment_drift'}
 
-    def __init__(self): self.last_local = -float('inf')
+    def __init__(self):
+        self.last_local = -float('inf')
+        self.no_minigame_rejoins = collections.deque()
 
     def choose(self, code, now, reference_ready):
         if code in ('manual_stop','session_limit'): return 'stop'
         if code == 'focus': return 'wait_focus'
+        if code == 'no_minigame':
+            # A rejoin restores the saved spot, but cannot make an unsafe
+            # spawn stable. Stop after repeated failures rather than quietly
+            # cycling through menus for the rest of the night.
+            while self.no_minigame_rejoins and now-self.no_minigame_rejoins[0]>5400:
+                self.no_minigame_rejoins.popleft()
+            self.no_minigame_rejoins.append(now)
+            return 'stop_unstable_position' if len(self.no_minigame_rejoins)>=3 else 'rejoin'
         if code in self.LOCAL and (reference_ready or code == 'window') and now-self.last_local >= 120:
             self.last_local = now
             return 'local'

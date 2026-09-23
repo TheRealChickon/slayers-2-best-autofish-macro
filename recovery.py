@@ -349,6 +349,9 @@ def main():
             code=child_status.get('failure_code') or reason_code(reason)
             action=policy.choose(code,time.monotonic(),landmarks.profile() is not None)
             driver.event('recovery_decision',code=code,action=action)
+            if action=='stop_unstable_position':
+                raise FishingFault('unstable_fishing_position',
+                    'Fishing position failed after three separate rejoins within 90 minutes; check that the saved spawn is safely back from the water edge')
             if action=='local':
                 force=False;driver.event('local_repair',reason=reason)
             elif action=='wait_focus' and win32gui.IsWindow(driver.hwnd):
