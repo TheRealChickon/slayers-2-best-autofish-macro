@@ -9,7 +9,7 @@ import threading
 import time
 
 import control_actions as actions
-from app_config import load_config, resolve_account, save_config, MODES
+from app_config import data_directory, load_config, resolve_account, save_config, MODES
 from cast_point import capture_pointer, validate as validate_cast_point
 from cli_effects import CatchEffects
 from cli_scene import scene_frame
@@ -52,7 +52,8 @@ class Terminal:
     }
     settings_keys = ('Username', 'Rod slot', 'Auto rod', 'Motion', 'Bait left',
                      'Plan hours', 'Mode', 'Cast point', 'Capture pointer',
-                     'Position correction', 'Save reference', 'Disable reference')
+                     'Position correction', 'Save reference', 'Disable reference',
+                     'Discord webhook', 'Test webhook', 'Remove webhook')
 
     def __init__(self):
         self.journal, self.feed = Journal(), LiveFeed()
@@ -116,7 +117,7 @@ class Terminal:
 
     def finish_edit(self):
         key, value = self.editing, self.buffer.strip()
-        self.editing = None
+        self.editing, self.buffer = None, ''
         try:
             if key == 'Search': self.query = value; self.selection = self.scroll = 0
             elif key == 'Username':
@@ -137,6 +138,10 @@ class Terminal:
                 stock = read('bait.json')
                 stock['starting_stock'] = remaining + read('totals.json').get('rounds', 0)
                 write('bait.json', stock); self.toast('Bait estimate updated')
+            elif key == 'Discord webhook':
+                from discord_hourly import configure_secret
+                configure_secret(data_directory(), value)
+                self.toast('Discord webhook saved')
         except (ValueError, OSError) as error: self.toast(error, False)
 
     def activate(self):
@@ -162,6 +167,21 @@ class Terminal:
                     save_config({'cast_point': point})
                     return f'Cast point saved: {point[0]}, {point[1]}'
                 self.job(capture)
+                return
+            if key == 'Test webhook':
+                from discord_hourly import load_secret, request_webhook
+                def verify():
+                    code,_=request_webhook(load_secret(data_directory()))
+                    return f'Discord reachable (HTTP {code}); no post sent'
+                self.job(verify)
+                return
+            if key == 'Remove webhook':
+                from discord_hourly import SECRET_FILE
+                (data_directory()/SECRET_FILE).unlink(missing_ok=True)
+                self.toast('Discord webhook removed')
+                return
+            if key == 'Discord webhook':
+                self.edit(key)
                 return
             if key=='Position correction':self.reference_position=not self.reference_position;return
             if key in ('Save reference','Disable reference'):
@@ -189,7 +209,7 @@ class Terminal:
         if self.editing:
             self.effects.secret = ''
             if key == 'ENTER': self.finish_edit()
-            elif key == 'CANCEL': self.editing = None
+            elif key == 'CANCEL': self.editing, self.buffer = None, ''
             elif key == 'BACKSPACE': self.buffer = self.buffer[:-1]
             elif len(key) == 1 and key.isprintable(): self.buffer += key
             return
@@ -273,7 +293,9 @@ class Terminal:
                     ('Cast point', f"{self.config['cast_point'][0]}, {self.config['cast_point'][1]}  ·  Full farmer"),
                     ('Capture pointer', 'Reads Roblox pointer in 4 seconds'),
                     ('Position correction','On' if self.reference_position else 'Off'),
-                    ('Save fishing reference','Enter while paused'),('Disable reference','Enter while paused')]
+                    ('Save fishing reference','Enter while paused'),('Disable reference','Enter while paused'),
+                    ('Discord webhook','Configured' if (data_directory()/'discord-webhook.dpapi').exists() else 'Not set'),
+                    ('Test webhook','Check connection · no post'),('Remove webhook','Delete local webhook')]
         return [tint(f"{'›' if i == self.selection else ' '}  {label:<23} {value}", 'selected' if i==self.selection else 'text') for i,(label,value) in enumerate(settings)]
 
     def render(self, width, height):
@@ -296,7 +318,8 @@ class Terminal:
         lines += ['  '+' '*offset+line for line in self.body(available)[:available]]
         lines += [''] * max(0, height-5-len(lines))
         if self.editing:
-            lines.append('  '+tint(self.editing+' › ', 'gold')+self.buffer+'▏')
+            visible='•'*len(self.buffer) if self.editing=='Discord webhook' else self.buffer
+            lines.append('  '+tint(self.editing+' › ', 'gold')+visible+'▏')
             help_text = 'Enter save   Ctrl+G cancel'
         else:
             lines.append('  '+(self.notice if time.monotonic()<self.notice_until else tint('Working…', 'gold') if self.busy else ''))

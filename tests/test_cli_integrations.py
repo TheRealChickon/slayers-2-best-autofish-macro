@@ -13,6 +13,7 @@ import app_config
 import control_actions
 import control_api
 import cli_scene
+import discord_hourly
 import fishing_cli
 import item_journal
 import live_feed
@@ -111,6 +112,27 @@ class IsolatedClients(unittest.TestCase):
             app.refresh()
         self.assertEqual(app.journal.counts, {'Golden Fish': 1})
         self.assertEqual(len(app.journal.items), 1)
+
+    def test_webhook_is_editable_without_displaying_secret(self):
+        app = terminal_app.Terminal()
+        app.refresh(); app.switch(3)
+        app.edit('Discord webhook', 'https://discord.com/api/webhooks/123/secret')
+        rendered='\n'.join(terminal_app.ANSI.sub('', line) for line in app.render(120, 35))
+        self.assertNotIn('secret', rendered)
+        with patch.object(discord_hourly, 'configure_secret') as configure:
+            app.finish_edit()
+            configure.assert_called_once()
+        self.assertEqual(app.buffer, '')
+
+    def test_webhook_cli_status_does_not_reveal_token(self):
+        with patch.object(app_config, 'data_directory', return_value=self.root):
+            (self.root/'discord-webhook.dpapi').write_bytes(b'encrypted')
+            output=io.StringIO()
+            with redirect_stdout(output):
+                code=fishing_cli.main(['webhook','status'])
+        self.assertEqual(code,0)
+        self.assertIn('configured',output.getvalue())
+        self.assertNotIn('encrypted',output.getvalue())
 
     def test_effects_preserve_controls_log_layout_and_editing(self):
         app = terminal_app.Terminal(); app.refresh(); app.switch(2)
