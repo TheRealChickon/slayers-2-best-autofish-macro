@@ -276,6 +276,20 @@ Rejoin and relaunch are distinct counters. Rejoins count completed returns from 
 
 ## Local files and privacy
 
+### Optional Discord hourly report
+
+`discord_hourly.py` reads the saved fishing events and posts one color-coded Discord embed per hour. It reports new confirmed item names and quantities, casts and items per minute, minigame completions, empty rounds, pickup retries, and completed rejoins. It never opens Roblox or scans inventory. A clear Lost Set reward receives a Mythical highlight in that hour's report. Unreadable names are counted separately instead of being guessed.
+
+Configure a private webhook locally, then initialize its first hourly window:
+
+```powershell
+Read-Host 'Discord webhook URL' | .\.venv\Scripts\python.exe .\discord_hourly.py --configure
+.\.venv\Scripts\python.exe .\discord_hourly.py --verify
+.\.venv\Scripts\python.exe .\discord_hourly.py --init
+```
+
+Run `python discord_hourly.py --send` once per hour from a scheduler; an early invocation exits without posting. A successful send advances the checkpoint, so each report covers new activity since the previous one. `--preview` renders the next embed locally without sending or advancing the checkpoint. The webhook is encrypted for the current Windows user in the selected local data directory as `discord-webhook.dpapi`; it is never written to Git or the item logs. Keep that file and `discord-hourly-state.json` together when moving a run. A different Windows account must configure its own webhook.
+
 | File or folder | Contents |
 | --- | --- |
 | `config.local.json` | Local username, numeric ID, rod slot, motion and data settings |
