@@ -5,6 +5,7 @@ from metrics import RUN, read
 from item_journal import Journal
 from performance import recent
 from app_config import load_config
+from landmarks import profile as reference_profile
 import control_actions as actions
 
 
@@ -68,7 +69,8 @@ def snapshot(journal=None):
         'presence': 'Not configured' if presence.get('disabled') else presence.get('state', 'Unknown') if fresh else
                     'Not polled while stopped' if not live else 'Checking',
         'presence_fresh': bool(fresh),
-        'recent': recent(journal), 'alignment': read('alignment.json'),
+        'recent': recent(journal),
+        'alignment': read('alignment.json') if reference_profile() else {'enabled': False},
         'spot_armed':worker.get('spot_armed',False),
         'spot_paused':worker.get('spot_paused',False),
         'manual_paused':f8_paused or worker.get('manual_paused',False),
