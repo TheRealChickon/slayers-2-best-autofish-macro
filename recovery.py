@@ -149,6 +149,15 @@ class Recovery:
         # toggle the rod off and spend a full bite timeout waiting for nothing.
         for point,delay in (((cast_x,cast_y),.30),((cast_x+1,cast_y),.15),((cast_x,cast_y),.30)):
             self.move(*point);self.sleep(delay)
+    def backstep_after_join(self,joined):
+        # This local setting is for saved spawns at a water edge. Only move
+        # after a confirmed Join, never during a rod-only repair or on focus
+        # return. key() rechecks focus/pause and always releases S.
+        seconds=load_config()['spawn_backstep_seconds']
+        if not joined or seconds<=0:return
+        self.event('spawn_backstep',seconds=seconds)
+        self.key('S',seconds);self.sleep(.5)
+        self.capture('after-backstep')
     def hold_private_join(self,target):
         # The friend-Join button animates into a larger private-Join button.
         # Revalidate after hover settles so an old center cannot dismiss it.
@@ -225,6 +234,7 @@ class Recovery:
                     if pacer.ready('open_menu',now):
                         self.capture('before-menu');self.key('M');pacer.acted('open_menu',time.monotonic(),2);self.event('open_menu')
                 elif pacer.ready('world_ready',now,stable_seconds=3):
+                    self.backstep_after_join(join_attempts>0)
                     self.equip_rod();self.capture('equipped');self.event('equipped_rod');self.restarts=0;return
             elif kind=='private_join' and pacer.ready(kind,now):
                 if target is None:

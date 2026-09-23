@@ -11,7 +11,8 @@ MODES = {'full': 'Full farmer', 'assist': 'Minigame only', 'spot': 'Fish here'}
 CONFIG = ROOT / 'config.local.json'
 DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             'rod_slot': 5, 'auto_rod': True, 'reduced_motion': False, 'inventory_check': True,
-            'place_id': 16205713724, 'mode': 'full', 'cast_point': list(DEFAULT_CAST_POINT)}
+            'place_id': 16205713724, 'mode': 'full', 'cast_point': list(DEFAULT_CAST_POINT),
+            'spawn_backstep_seconds': 0.0}
 
 
 def load_config():
@@ -22,6 +23,9 @@ def load_config():
         raise ValueError('Rod slot must be between 1 and 9')
     values['rod_slot'] = int(values['rod_slot'])
     values['cast_point'] = validate_cast_point(values['cast_point'])
+    values['spawn_backstep_seconds'] = float(values['spawn_backstep_seconds'])
+    if not 0 <= values['spawn_backstep_seconds'] <= .35:
+        raise ValueError('Spawn backstep must be between 0 and 0.35 seconds')
     if values['mode'] not in MODES:
         raise ValueError('Mode must be full, assist, or spot')
     if values['user_id'] is not None:
@@ -43,6 +47,9 @@ def save_config(changes):
         raise ValueError('Mode must be full, assist, or spot')
     if not 1 <= int(values['rod_slot']) <= 9:raise ValueError('Rod slot must be between 1 and 9')
     values['cast_point'] = validate_cast_point(values['cast_point'])
+    values['spawn_backstep_seconds'] = float(values['spawn_backstep_seconds'])
+    if not 0 <= values['spawn_backstep_seconds'] <= .35:
+        raise ValueError('Spawn backstep must be between 0 and 0.35 seconds')
     temporary = CONFIG.with_suffix('.tmp')
     temporary.write_text(json.dumps(values, indent=2), encoding='utf-8')
     os.replace(temporary, CONFIG)
