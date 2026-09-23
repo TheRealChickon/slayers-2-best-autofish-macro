@@ -1,0 +1,92 @@
+"""The digest must reflect confirmed catches without touching the game."""
+
+import json
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import discord_hourly as report
+
+
+class DiscordHourlyTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.run = Path(self.temp.name)
+
+    def rows(self, name, *rows):
+        (self.run / name).write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    def test_named_items_retries_and_rejoins(self):
+        self.rows("events-one.jsonl",
+                  {"at": 10, "event": "cast"},
+                  {"at": 11, "event": "minigame"},
+                  {"at": 15, "event": "minigame_ended", "percent": 100},
+                  {"at": 16, "event": "pickup_hold", "cycle": 1, "attempt": 1, "text": "Lost Mask Collect"},
+                  {"at": 17, "event": "pickup_hold", "cycle": 1, "attempt": 2, "text": "Lost Mask Collect"},
+                  {"at": 18, "event": "reward_observed", "cycle": 1, "text": "Lost Mask X1", "reward_id": "a"},
+                  {"at": 19, "event": "reward_observed", "cycle": 1, "text": "Lost Mask X1", "reward_id": "a"},
+                  {"at": 20, "event": "reward_observed", "cycle": 2, "text": "Coral X2", "reward_id": "b"},
+                  {"at": 21, "event": "inventory_resolved", "reward_id": "b", "item": "Sea Horse"},
+                  {"at": 22, "event": "empty_round"})
+        self.rows("recovery.jsonl",
+                  {"at": 1, "event": "hold_private_join"},
+                  {"at": 2, "event": "equipped_rod"},
+                  {"at": 23, "event": "recovery_decision"},
+                  {"at": 24, "event": "hold_private_join"},
+                  {"at": 25, "event": "hold_private_join"},
+                  {"at": 26, "event": "equipped_rod"},
+                  {"at": 27, "event": "equipped_rod"})
+        result = report.summarize(self.run, 9, 30, now=30)
+        self.assertEqual(result["casts"], 1)
+        self.assertEqual(result["rewards"], 2)
+        self.assertEqual(result["items"], {"Lost Mask": 1, "Sea Horse": 2})
+        self.assertEqual(result["pickup_retries"], 1)
+        self.assertEqual(result["recovery_decisions"], 1)
+        self.assertEqual(result["rejoins"], 1)
+        self.assertEqual(len(result["mythical"]), 1)
+        self.assertEqual(report.embed(result)["embeds"][0]["title"], "✦ Mythical catch!")
+
+    def test_prompt_is_not_a_collected_item(self):
+        self.rows("events-one.jsonl",
+                  {"at": 10, "event": "pickup_hold", "cycle": 1, "attempt": 1, "text": "Lost Mask Collect"},
+                  {"at": 11, "event": "empty_round"})
+        result = report.summarize(self.run, 9, 20, now=20)
+        self.assertEqual(result["rewards"], 0)
+        self.assertEqual(result["mythical"], [])
+
+    def test_send_waits_one_hour_and_uses_checkpoint(self):
+        with patch.object(report, "data_directory", return_value=self.run), patch.object(report.time, "time", return_value=100):
+            report.main(["--init"])
+        with patch.object(report, "data_directory", return_value=self.run), \
+             patch.object(report.time, "time", return_value=1000), \
+             patch.object(report, "request_webhook") as request:
+            report.main(["--send"])
+            request.assert_not_called()
+        with patch.object(report, "data_directory", return_value=self.run), \
+             patch.object(report.time, "time", return_value=3701), \
+             patch.object(report, "load_secret", return_value="redacted"), \
+             patch.object(report, "request_webhook", return_value=(200, "message-one")) as request:
+            report.main(["--send"])
+            request.assert_called_once()
+        state = report.read_json(self.run / report.STATE_FILE)
+        self.assertEqual(state["last_end_at"], 3701)
+        self.assertEqual(state["reports_sent"], 1)
+
+    def test_only_discord_webhook_hosts_accepted(self):
+        self.assertTrue(report.valid_webhook("https://discord.com/api/webhooks/123/secret"))
+        self.assertFalse(report.valid_webhook("https://discord.com.evil.test/api/webhooks/123/secret"))
+        self.assertFalse(report.valid_webhook("http://discord.com/api/webhooks/123/secret"))
+
+    @unittest.skipUnless(os.name == "nt", "DPAPI is Windows-only")
+    def test_secret_is_encrypted_for_local_user(self):
+        hook = "https://discord.com/api/webhooks/123/secret"
+        report.configure_secret(self.run, hook)
+        self.assertNotIn(hook.encode(), (self.run / report.SECRET_FILE).read_bytes())
+        self.assertEqual(report.load_secret(self.run), hook)
+
+
+if __name__ == "__main__":
+    unittest.main()
