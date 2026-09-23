@@ -12,7 +12,7 @@ from tracking_control import ReelMotion
 from screen_space import ScreenSpace
 from inventory_watch import InventoryDriver, InventoryWatcher
 import landmarks
-from pickup_policy import classify as classify_pickup, PickupGate
+from pickup_policy import classify as classify_pickup, classify_toast, same_reward, PickupGate
 from faults import FishingFault, FaultRecorder, reason_code
 from full_pause import InputGate, InputPaused, PAUSE_FILE, resumed_stage
 
@@ -207,6 +207,18 @@ def main():
                 event('wrong_interaction',evidence=last_pickup_evidence);screenshot('wrong-interaction')
                 raise FishingFault('pickup_other','Non-fishing interaction replaced pickup; local alignment required',evidence=last_pickup_evidence)
         return evidence,stable
+    def pickup_toast():
+        # The toast sits beside the avatar's right shoulder. A narrow OCR pass
+        # avoids the player title and waterfall that can hide its small X1 in
+        # the wide prompt scan. This only confirms a reward after a held T.
+        x,y,w,h=1240,670,310,180
+        im=screen.capture(sct,(x,y,w,h))
+        results,_=ocr(cv2.resize(im,None,fx=1.5,fy=1.5))
+        inp.guard_press(True)
+        rows=[{'text':r[1],'score':float(r[2]),
+               'center':(float(np.mean(np.array(r[0])[:,0])),float(np.mean(np.array(r[0])[:,1])))}
+              for r in results or []]
+        return classify_toast(rows)
     def ui_active():
         im=screen.capture(sct,(1190,1360,180,70))
         return ui_visible(im,exit_template)
@@ -362,6 +374,10 @@ def main():
                                         evidence,stable=follow,follow_stable
                                     if follow.kind=='collect' or (follow.kind=='reward' and follow_stable):
                                         break
+                            if evidence.kind!='collect' and not (evidence.kind=='reward' and stable):
+                                first=pickup_toast();time.sleep(.08);second=pickup_toast()
+                                if same_reward(first,second):
+                                    evidence,stable=second,True
                             screenshot('after-pickup')
                             if evidence.kind=='collect':stage='pickup_retry_wait'
                             else:
