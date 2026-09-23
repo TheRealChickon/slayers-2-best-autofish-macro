@@ -13,7 +13,7 @@ import landmarks
 import metrics
 import performance
 from faults import FaultRecorder, FishingFault, RecoveryPolicy
-from pickup_policy import PickupGate, classify
+from pickup_policy import PickupGate, classify, classify_toast
 
 
 def row(text,x=1250,y=700):return {'text':text,'score':.95,'center':(x,y)}
@@ -46,6 +46,16 @@ class PickupEvidence(unittest.TestCase):
         self.assertFalse(gate.observe(classify([row('Collect',x=1600)]),1.5))
         self.assertTrue(gate.observe(classify([row('Collect',x=1604)]),1.9))
         self.assertFalse(gate.observe(classify([row('Collect',x=1604)]),4))
+
+    def test_narrow_toast_recovers_recorded_rewards_without_accepting_a_prompt(self):
+        # OCR examples from the 20-minute pickup recording: the wide scan
+        # missed these toasts although all three items were visibly collected.
+        for name,amount,confidence in [('Ore','1',.91),('Coral','X1',.85),('Silk Thread','x1',.61)]:
+            quantity=row(amount,x=1300,y=730);quantity['score']=confidence
+            self.assertEqual(classify_toast([row(name),quantity]).text,f'{name} X1')
+            self.assertEqual(classify_toast([row(name),quantity,row('Collect')]).kind,'empty')
+            self.assertEqual(classify_toast([row(name)]).kind,'empty')
+            self.assertEqual(classify_toast([row(name),row(amount,x=1800,y=1000)]).kind,'empty')
 
 
 class RecoveryDecisions(unittest.TestCase):
