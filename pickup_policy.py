@@ -29,7 +29,10 @@ def classify(rows):
         close=[r for r in rows if abs(r['center'][0]-x)<180 and abs(r['center'][1]-y)<65]
         return ' '.join(r['text'] for r in sorted(close,key=lambda r:r['center'][1]))
     collect = [r for r in rows if re.search(r'\b(?:collect|ollect|llect)\b', r['text'], re.I)]
-    other = [r for r in rows if re.search(r'\bwall\b|climb|\bpurchase\b|\bfisherman\b|would you like', r['text'], re.I)]
+    # "Legendary Fisherman" is the player's title above the avatar, not a
+    # world interaction. Requiring an action word keeps that title from
+    # aborting every pickup scan after the legendary rod is obtained.
+    other = [r for r in rows if re.search(r'\bwall\b|climb|\bpurchase\b|would you like', r['text'], re.I)]
     # Quantity labels need an item name, not a lone X1 elsewhere in the scene.
     rewards = [r for r in rows if re.search(r'\b(?:x\s*\d+|new)\b', r['text'], re.I)
                and len(re.sub(r'\b(?:x\s*\d+|new)\b|[^a-z]', '', cluster(r).lower())) >= 3

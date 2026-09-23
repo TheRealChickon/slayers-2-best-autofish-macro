@@ -6,7 +6,7 @@ import numpy as np
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from app_config import ROOT
-from rod_detector import locate_rod,selected_rod,RodReady
+from rod_detector import locate_rod,selected_rod,unselected_rod,RodReady
 
 
 class RodVariants(unittest.TestCase):
@@ -64,3 +64,26 @@ class RodVariants(unittest.TestCase):
         rare={**rod,'name':'rare'}
         self.assertFalse(gate.matches(rare))
         self.assertFalse(gate.observe(rare,2.2))
+
+    def test_legendary_icon_and_selected_ring(self):
+        for selected in (False,True):
+            with self.subTest(selected=selected):
+                frame=np.full((1440,2560,3),(25,25,25),np.uint8)
+                if selected:cv2.circle(frame,(1472,1386),39,(170,170,170),2)
+                suffix='equipped' if selected else 'unequipped'
+                icon=cv2.imread(str(ROOT/f'assets/legendary-rod-{suffix}.png'))
+                frame[1352:1426,1436:1512]=icon
+                rod=locate_rod(frame)
+                self.assertEqual(rod['name'],'legendary')
+                self.assertEqual(selected_rod(rod),selected)
+                self.assertEqual(unselected_rod(rod),not selected)
+
+    def test_weak_rod_match_never_authorizes_equipping(self):
+        self.assertFalse(unselected_rod({'name':'rare','equipped':False,'score':.734,'ring':.02}))
+
+    def test_legendary_1080p_selected_ring(self):
+        frame=np.full((1440,2560,3),(25,25,25),np.uint8)
+        cv2.circle(frame,(1472,1386),39,(170,170,170),2)
+        frame[1352:1426,1436:1512]=cv2.imread(str(ROOT/'assets/legendary-rod-equipped.png'))
+        normalized=cv2.resize(cv2.resize(frame,(1920,1080)),(2560,1440))
+        self.assertTrue(selected_rod(locate_rod(normalized)))

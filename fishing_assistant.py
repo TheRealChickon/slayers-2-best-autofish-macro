@@ -6,7 +6,7 @@ import cv2, mss, numpy as np, psutil, win32gui, win32process, win32api
 from rapidocr_onnxruntime import RapidOCR
 from metrics import Ledger, write as write_metrics, RUN
 from app_config import load_config
-from rod_detector import locate_rod
+from rod_detector import locate_rod, unselected_rod
 from fishing_vision import detect, ui_visible
 from tracking_control import ReelMotion
 from screen_space import ScreenSpace
@@ -129,7 +129,7 @@ def is_pickup_prompt(text):
 def is_other_interaction(text):
     # T also operates world interactions. A climb prompt means the saved
     # fishing position was disturbed; holding it again cannot collect loot.
-    return bool(re.search(r'\bwall\b|climb|\bpurchase\b|\bfisherman\b|\bwould you like\b',text,re.I))
+    return bool(re.search(r'\bwall\b|climb|\bpurchase\b|\bwould you like\b',text,re.I))
 
 def is_reward_banner(text):
     # Item text alone can still be the pickup prompt. A quantity/new label
@@ -203,8 +203,8 @@ def main():
         last_pickup_evidence={'kind':evidence.kind,'text':evidence.text,'center':evidence.center,'stable':stable}
         if evidence.kind in ('other','ambiguous'):
             inp.grab(False)
-            if stable:
-                event('wrong_interaction',**last_pickup_evidence);screenshot('wrong-interaction')
+            if stable and stage=='pickup':
+                event('wrong_interaction',evidence=last_pickup_evidence);screenshot('wrong-interaction')
                 raise FishingFault('pickup_other','Non-fishing interaction replaced pickup; local alignment required',evidence=last_pickup_evidence)
         return evidence,stable
     def ui_active():
@@ -304,7 +304,7 @@ def main():
                         if now-last_rod_check>4 and load_config()['auto_rod']:
                             frame=screen.capture(sct)
                             rod=locate_rod(frame);last_rod_check=now
-                            if rod and not rod['equipped']:
+                            if unselected_rod(rod):
                                 inp.release();inp.aim(*screen.point(rod['x'],rod['y']))
                                 # Recheck focus immediately before each injected button action.
                                 if win32gui.GetForegroundWindow()!=hwnd:raise RuntimeError('Roblox lost focus; all inputs released')
@@ -336,7 +336,7 @@ def main():
                             elif prompt_seen:
                                 last_prompt=evidence.text
                                 inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;screenshot('pickup');event('pickup_hold',attempt=pickup_tries,prompt_seen=True,text=evidence.text)
-                            elif now-since>4 and evidence.kind=='empty':
+                            elif now-since>4 and evidence.kind in ('empty','other'):
                                 event('empty_round',cycle=cycles,message='No pickup prompt after repeated wide scans; continuing without holding T')
                                 start_cooldown(1.0)
                             elif now-since>7:

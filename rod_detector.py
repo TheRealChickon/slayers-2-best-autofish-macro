@@ -37,7 +37,9 @@ def selected_ring(frame,x,y,scale=1.):
     bright=edge-np.maximum(outer,inner)>8
     coverage=float(bright.mean())
     quadrants=int((bright.reshape(4,24).mean(axis=1)>.5).sum())
-    return coverage,coverage>.65 and quadrants>=3
+    # Downsampled 1080p clients soften the thin circle by roughly one pixel.
+    # Keep the three-quadrant shape requirement while allowing that blur.
+    return coverage,coverage>.58 and quadrants>=3
 
 
 def locate_rod(frame):
@@ -67,6 +69,12 @@ def locate_rod(frame):
 def selected_rod(rod):
     """Stricter evidence for unattended clicks than for finding an icon."""
     return bool(rod and rod.get('equipped') and rod.get('score',0)>=.88 and rod.get('ring',0)>=.30)
+
+
+def unselected_rod(rod):
+    """Only a clear icon without the selected ring authorizes a rod click."""
+    return bool(rod and not rod.get('equipped') and rod.get('score',0)>=.88
+                and rod.get('ring',1)<.30)
 
 
 class RodReady:
