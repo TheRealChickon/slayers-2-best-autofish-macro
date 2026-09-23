@@ -9,7 +9,7 @@ from fishing_assistant import ROOT, RUN, USER, Input, find_window, rectangle,mov
 from metrics import new_run, write as write_metrics
 import presence_watch
 from app_config import load_config
-from rod_detector import locate_rod
+from rod_detector import locate_rod, selected_rod, unselected_rod
 from screen_space import ScreenSpace
 from recovery_pacing import MenuPacer, private_join_target
 from faults import FaultRecorder, FishingFault, RecoveryPolicy, reason_code
@@ -136,9 +136,9 @@ class Recovery:
         cast_x, cast_y = config['cast_point']
         self.move(cast_x,cast_y);self.sleep(.3)
         rod=locate_rod(self.capture()) if config['auto_rod'] else None
-        if rod and rod['equipped']:
+        if selected_rod(rod):
             self.event('rod_already_equipped',score=rod['score'])
-        elif rod:
+        elif unselected_rod(rod):
             self.click(rod['x'],rod['y']);self.sleep(.6)
             self.event('rod_equipped',method='visible hotbar',score=rod['score'])
         else:

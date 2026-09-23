@@ -35,6 +35,11 @@ class PickupEvidence(unittest.TestCase):
         self.assertEqual(classify([row('Wall Climb')]).kind,'other')
         self.assertEqual(classify([]).kind,'empty')
 
+    def test_player_legendary_fisherman_title_is_not_an_interaction(self):
+        self.assertEqual(classify([row('Legendary Fisherman',y=610)]).kind,'empty')
+        self.assertEqual(classify([row('Legendary Fisherman',y=610),row('Collect',y=830)]).kind,'collect')
+        self.assertEqual(classify([row('Legendary Fisherman',y=610),row('Wall Climb',y=830)]).kind,'other')
+
     def test_prompt_must_repeat_in_same_area_before_authorizing_input(self):
         gate=PickupGate()
         self.assertFalse(gate.observe(classify([row('Collect')]),1))
