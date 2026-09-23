@@ -59,6 +59,19 @@ class DiscordHourlyTests(unittest.TestCase):
         self.assertEqual(result["rewards"], 0)
         self.assertEqual(result["mythical"], [])
 
+    def test_ore_projection_counts_only_confirmed_ore_quantity(self):
+        self.rows("events-one.jsonl",
+                  {"at": 10, "event": "reward_observed", "cycle": 1, "text": "Ore X3", "reward_id": "ore"},
+                  {"at": 20, "event": "reward_observed", "cycle": 2, "text": "Coral X2", "reward_id": "coral"},
+                  {"at": 30, "event": "pickup_hold", "cycle": 3, "text": "Ore Collect"})
+        result = report.summarize(self.run, 0, 3600, now=3600)
+        self.assertEqual(result["ores"], 3)
+        self.assertEqual(result["ores_per_day"], 72)
+        pace = next(field["value"] for field in report.embed(result)["embeds"][0]["fields"]
+                    if field["name"] == "PACE")
+        self.assertIn("72 ores/day", pace)
+        self.assertIn("3 Ore confirmed", pace)
+
     def test_send_waits_one_hour_and_uses_checkpoint(self):
         with patch.object(report, "data_directory", return_value=self.run), patch.object(report.time, "time", return_value=100):
             report.main(["--init"])
