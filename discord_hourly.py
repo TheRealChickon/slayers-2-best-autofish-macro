@@ -318,7 +318,7 @@ def main(argv=None):
     payload = embed(summary)
     if args.preview:
         print(json.dumps({"summary": {**summary, "items": dict(summary["items"])}, "payload": payload},
-                         indent=2, ensure_ascii=False))
+                         indent=2, ensure_ascii=True))
         return
     code, message_id = request_webhook(load_secret(run), payload)
     if code not in (200, 204):
