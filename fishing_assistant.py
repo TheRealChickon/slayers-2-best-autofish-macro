@@ -21,9 +21,9 @@ USER = ctypes.windll.user32
 USER.SetProcessDPIAware()
 
 # Normal hooks arrive within about seven seconds in the observed sessions.
-# Two misses still tolerate a transient slow cast before restoring the spawn.
+# Two missed hooks can be ordinary bad luck; wait for a third before rejoining.
 BITE_WAIT_TIMEOUT_SECONDS = 15
-MISSED_CASTS_BEFORE_REJOIN = 2
+MISSED_CASTS_BEFORE_REJOIN = 3
 
 def move_pointer(x,y):
     # Both monitors are valid; coordinates are absolute virtual-desktop pixels.
@@ -325,7 +325,7 @@ def main():
                         if now-since>BITE_WAIT_TIMEOUT_SECONDS:
                             missing_casts+=1;event('no_minigame',count=missing_casts);screenshot('missing')
                             if missing_casts>=MISSED_CASTS_BEFORE_REJOIN:
-                                raise FishingFault('no_minigame','Two casts without a recognized minigame',
+                                raise FishingFault('no_minigame','Three casts without a recognized minigame',
                                     missed_casts=missing_casts,wait_seconds=BITE_WAIT_TIMEOUT_SECONDS)
                             stage='pickup_wait';since=now
                     elif stage=='pickup_wait':
