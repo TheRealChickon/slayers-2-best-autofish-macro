@@ -9,11 +9,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from faults import RecoveryPolicy, reason_code
+from fishing_assistant import MISSED_CASTS_BEFORE_REJOIN
 
 
 class RecoveryLoopGuard(unittest.TestCase):
-    def test_shortened_miss_reason_still_rejoins_instead_of_restarting(self):
-        code = reason_code('Two casts without a recognized minigame')
+    def test_two_empty_casts_do_not_force_rejoin(self):
+        self.assertGreater(MISSED_CASTS_BEFORE_REJOIN, 2)
+        code = reason_code('Three casts without a recognized minigame')
         self.assertEqual(code, 'no_minigame')
         self.assertEqual(RecoveryPolicy().choose(code, 0, False), 'rejoin')
 
