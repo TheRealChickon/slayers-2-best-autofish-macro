@@ -20,6 +20,16 @@ from full_pause import InputGate, InputPaused, F8Toggle, PAUSE_FILE
 
 LAUNCH_URL='roblox://placeId='+str(load_config()['place_id'])
 
+
+def confirm_menu_button_visible(im):
+    """Recognize the green confirm button when dimmed inventory hides OCR text."""
+    if not isinstance(im,np.ndarray) or im.shape[:2]!=(1440,2560):return False
+    button=im[779:815,1140:1277]
+    pixels=((button[:,:,1]>75)
+            &(button[:,:,1]>button[:,:,2].astype(np.float32)*1.5)
+            &(button[:,:,1]>button[:,:,0].astype(np.float32)*1.1))
+    return int(np.count_nonzero(pixels))>400
+
 class UserStop(Exception):pass
 class RecoveryError(Exception):pass
 
@@ -186,7 +196,7 @@ class Recovery:
                 target=reconnect[0]['center'] if len(reconnect)==1 else None
             elif skip:kind='skip_loading';target=skip[0]['center']
             elif 'purchase' in text and len(cancel)==1:kind='vendor_dialog';target=cancel[0]['center']
-            elif 'go back to the main menu' in text:
+            elif confirm_menu_button_visible(im) or 'go back to the main menu' in text:
                 kind='confirm_menu';target=(1208,797)
             elif 'back to main menu' in text:
                 kind='game_menu';target=next(r['center'] for r in rows if 'back to main menu' in r['text'].lower())
