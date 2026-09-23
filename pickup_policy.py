@@ -46,6 +46,30 @@ def classify(rows):
     return Pickup(kind, cluster(row), tuple(row['center']))
 
 
+def classify_toast(rows):
+    """Read the small reward toast after T without authorizing any game input."""
+    if any(re.search(r'collect|climb|wall|purchase', row['text'], re.I) for row in rows):
+        return Pickup('empty')
+    blocked = re.compile(r'collect|fisherman|climb|wall|purchase', re.I)
+    names = [row for row in rows if row.get('score', 0) >= .90
+             and len(re.sub(r'[^a-z]', '', row['text'].lower())) >= 3
+             and not blocked.search(row['text'])]
+    amounts = []
+    for row in rows:
+        token = re.sub(r'\s+', '', row['text']).lower()
+        match = re.fullmatch(r'(?:x|\?)?(\d{1,3})', token)
+        threshold = .85 if token.isdigit() else .65 if token.startswith('?') else .60
+        if match and row.get('score', 0) >= threshold:
+            amounts.append((row, int(match.group(1))))
+    if len(names) != 1 or len(amounts) != 1:
+        return Pickup('empty')
+    name = names[0]
+    amount, quantity = amounts[0]
+    if quantity < 1 or quantity > 99 or math.dist(name['center'], amount['center']) > 210:
+        return Pickup('empty')
+    return Pickup('reward', f"{name['text'].strip()} X{quantity}", tuple(name['center']))
+
+
 class PickupGate:
     def __init__(self):
         self.previous = None
