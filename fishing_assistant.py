@@ -336,6 +336,9 @@ def main():
                             elif prompt_seen:
                                 last_prompt=evidence.text
                                 inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;screenshot('pickup');event('pickup_hold',attempt=pickup_tries,prompt_seen=True,text=evidence.text)
+                            elif now-since>3.5 and evidence.kind=='empty' and stable:
+                                event('empty_round',cycle=cycles,message='No pickup prompt after repeated wide scans; continuing without holding T')
+                                start_cooldown(.4)
                             elif now-since>4 and evidence.kind in ('empty','other'):
                                 event('empty_round',cycle=cycles,message='No pickup prompt after repeated wide scans; continuing without holding T')
                                 start_cooldown(1.0)
@@ -347,7 +350,19 @@ def main():
                             if now-since>1.8 and evidence.kind=='reward' and stable:
                                 record_reward(evidence.text);screenshot('collected');start_cooldown(.45);continue
                         if now-since>4.0:
-                            inp.grab(False);evidence,stable=pickup_text();screenshot('after-pickup')
+                            inp.grab(False);evidence,stable=pickup_text()
+                            # A banner can appear just as the T hold ends. Confirm
+                            # it across another frame before deferring to the
+                            # inventory, while still retrying a persistent prompt.
+                            if evidence.kind!='collect' and not (evidence.kind=='reward' and stable):
+                                for _ in range(2):
+                                    time.sleep(.08)
+                                    follow,follow_stable=pickup_text()
+                                    if follow.kind in ('collect','reward'):
+                                        evidence,stable=follow,follow_stable
+                                    if follow.kind=='collect' or (follow.kind=='reward' and follow_stable):
+                                        break
+                            screenshot('after-pickup')
                             if evidence.kind=='collect':stage='pickup_retry_wait'
                             else:
                                 if evidence.kind=='reward' and stable:record_reward(evidence.text)
