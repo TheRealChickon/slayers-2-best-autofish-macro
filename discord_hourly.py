@@ -266,7 +266,7 @@ def embed(summary):
 
 def request_webhook(url, payload=None):
     if payload is None:
-        request = urllib.request.Request(url, method="GET")
+        request = urllib.request.Request(url, headers={"User-Agent": "Autofish/1.0"}, method="GET")
     else:
         separator = "&" if "?" in url else "?"
         request = urllib.request.Request(url + separator + "wait=true",
