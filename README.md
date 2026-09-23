@@ -261,6 +261,8 @@ The supervisor handles visible disconnect dialogs and a stalled fishing loop. Ve
 
 If casts stop starting minigames after three separate rejoins within 90 minutes, Full farmer stops with an unsafe-position message instead of endlessly cycling through menus. Move the saved spawn farther from the water edge, then explicitly start or continue again. Health checks flag the pattern after two such recoveries.
 
+For a saved spawn right on a ledge, `spawn_backstep_seconds` in `config.local.json` can move the character a small distance backward after a confirmed private-server Join. It defaults to `0` for other accounts and is capped at `0.35`; it never runs on a focus return or rod-only repair. Check that your chosen cast point still lands in water after enabling it.
+
 Menu actions wait for repeated observations of a stable target. Each action has its own retry delay, so a completed menu transition does not inherit a previous button's wait. The private Join button is checked again after the cursor settles; holding ends when its panel changes, with a 4.5-second limit. A short quiet period after Join lets the game transition before another attempt; repeated rejected joins back off. Recovery still requires three continuous seconds of the loaded world before equipping the rod and starting fishing.
 
 Cast and rod clicks allow a brief cursor settle before pressing, with stop and focus checks throughout. The first cast after loading or selecting the rod uses a longer settle to let Roblox update its hover target after the menu; subsequent casts retain their normal timing. The minigame tracking loop is unchanged.

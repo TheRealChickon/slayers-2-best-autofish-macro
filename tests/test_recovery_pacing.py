@@ -107,6 +107,17 @@ class RecoveryPacing(unittest.TestCase):
                 with self.assertRaises(type(error)):driver.hold_private_join((1280,1333))
             self.assertEqual([call.args for call in driver.inp.hold.call_args_list],[(True,),(False,)])
 
+    def test_local_backstep_only_follows_confirmed_join(self):
+        driver, _ = self.driver()
+        driver.key = Mock()
+        with patch.object(recovery, 'load_config', return_value={'spawn_backstep_seconds': .18}):
+            driver.backstep_after_join(False)
+            driver.key.assert_not_called()
+            driver.backstep_after_join(True)
+        driver.key.assert_called_once_with('S', .18)
+        driver.event.assert_called_once_with('spawn_backstep', seconds=.18)
+        driver.capture.assert_called_once_with('after-backstep')
+
     def test_full_rejoin_handles_animation_then_waits_for_loaded_world(self):
         driver,clock=self.driver();state={'kind':'world','since':0,'holding':False,'covered':True};events=[]
         def transition(kind):state.update(kind=kind,since=clock[0])
@@ -141,7 +152,9 @@ class RecoveryPacing(unittest.TestCase):
         driver.world_visible=lambda frame:frame['kind']=='world'
         driver.equip_rod=Mock();driver.event=lambda event,**kw:events.append((event,clock[0]))
         driver.inp.hold.side_effect=hold
-        with patch.object(recovery.time,'monotonic',side_effect=lambda:clock[0]):driver.recover(True)
+        with patch.object(recovery.time,'monotonic',side_effect=lambda:clock[0]), \
+             patch.object(recovery,'load_config',return_value={'spawn_backstep_seconds':0.0}):
+            driver.recover(True)
         driver.equip_rod.assert_called_once()
         self.assertEqual(sum(event=='hold_private_join' for event,_ in events),1)
         self.assertLess(clock[0],25)
