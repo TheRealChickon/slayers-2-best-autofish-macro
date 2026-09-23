@@ -201,6 +201,7 @@ def summarize(run, start, end, now=None):
         "completed": sum(row.get("event") == "minigame_ended" and row.get("percent") == 100 for _, row in events),
         "failed": failed, "empty": kinds["empty_round"], "rewards": len(rewards),
         "items": items, "unknown": unknown, "mythical": mythical,
+        "ores": items.get("Ore", 0), "ores_per_day": items.get("Ore", 0) * 86400 / elapsed,
         "pickup_holds": kinds["pickup_hold"], "pickup_retries": pickup_retries,
         "unconfirmed_pickups": kinds["pickup_attempted"],
         "recovery_decisions": decisions, "rejoins": rejoins, "launches": launches,
@@ -257,6 +258,7 @@ def embed(summary, inventory_at=None):
         {"name": "PACE", "value": (f"**{s['casts'] / minutes:.1f}** casts/min  ·  "
                                    f"**{s['rewards'] / minutes:.1f}** collected/min\n"
                                    f"{s['casts']} casts · {s['rewards']} confirmed rewards\n"
+                                   f"**{s['ores_per_day']:,.0f} ores/day** projected · {s['ores']} Ore confirmed\n"
                                    f"Wall-clock pace, including pauses"), "inline": True},
         {"name": "MINIGAMES", "value": (f"{s['minigames']} started · {s['completed']} completed\n"
                                        f"{s['failed']} failed · {s['empty']} empty rounds"), "inline": True},
