@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import app_config
 import control_actions
 import control_api
+import cli_scene
+import discord_hourly
 import fishing_cli
 import item_journal
 import live_feed
@@ -55,6 +57,17 @@ class CatchLifecycle(unittest.TestCase):
         self.assertIn('Clown Fish', fx.active.title)
         self.assertEqual(fx.rows(61, 12, True), fx.rows(61, 14, True))
         self.assertIsNone(fx.rows(61, 16, True))
+
+    def test_new_ore_uses_a_distinct_short_effect_once(self):
+        fx = CatchEffects()
+        fx.observe([], 1, 100, 10)
+        row = catch(101, 'Ore', 'ore-1')
+        fx.observe([row], 1, 101, 11)
+        self.assertEqual((fx.active.kind, fx.active.tone), ('ore', 'ore'))
+        self.assertTrue(any('◆' in segment[0] for line in fx.rows(80, 11.3) for segment in line))
+        fx.observe([row], 1, 102, 12)
+        self.assertEqual(fx.active.started, 11)
+        self.assertIsNone(fx.rows(80, 14.7))
 
     def test_secret_timeout_and_unrelated_keys_reset_sequence(self):
         fx = CatchEffects()
@@ -100,6 +113,27 @@ class IsolatedClients(unittest.TestCase):
         self.assertEqual(app.journal.counts, {'Golden Fish': 1})
         self.assertEqual(len(app.journal.items), 1)
 
+    def test_webhook_is_editable_without_displaying_secret(self):
+        app = terminal_app.Terminal()
+        app.refresh(); app.switch(3)
+        app.edit('Discord webhook', 'https://discord.com/api/webhooks/123/secret')
+        rendered='\n'.join(terminal_app.ANSI.sub('', line) for line in app.render(120, 35))
+        self.assertNotIn('secret', rendered)
+        with patch.object(discord_hourly, 'configure_secret') as configure:
+            app.finish_edit()
+            configure.assert_called_once()
+        self.assertEqual(app.buffer, '')
+
+    def test_webhook_cli_status_does_not_reveal_token(self):
+        with patch.object(app_config, 'data_directory', return_value=self.root):
+            (self.root/'discord-webhook.dpapi').write_bytes(b'encrypted')
+            output=io.StringIO()
+            with redirect_stdout(output):
+                code=fishing_cli.main(['webhook','status'])
+        self.assertEqual(code,0)
+        self.assertIn('configured',output.getvalue())
+        self.assertNotIn('encrypted',output.getvalue())
+
     def test_effects_preserve_controls_log_layout_and_editing(self):
         app = terminal_app.Terminal(); app.refresh(); app.switch(2)
         app.changed_at -= 1
@@ -122,6 +156,50 @@ class IsolatedClients(unittest.TestCase):
         with patch.object(control_actions, 'stop', return_value='Stopped') as stop:
             app.key('s'); stop.assert_called_once()
         app.key('q'); self.assertFalse(app.alive)
+
+    def test_terminal_transitions_respect_reduced_motion(self):
+        app = terminal_app.Terminal()
+        with patch.object(terminal_app.sys.stdout, 'write') as write, \
+             patch.object(terminal_app.sys.stdout, 'flush'), \
+             patch.object(terminal_app.time, 'sleep') as sleep:
+            app.transition('opening')
+            self.assertEqual(write.call_count, 19)  # 18 full-screen frames, then dashboard
+            self.assertEqual(sleep.call_count, 18)
+            self.assertIn('\x1b[2J', write.call_args_list[0].args[0])
+            app.config['reduced_motion'] = True
+            app.transition('closing')
+            self.assertEqual(write.call_count, 19)
+
+    def test_rod_cast_and_reel_frames_move_the_float(self):
+        def float_position(phase, progress):
+            rows = [terminal_app.ANSI.sub('', line) for line in cli_scene.scene_frame(80, 24, progress, phase)]
+            return next((row.index('●'), y) for y, row in enumerate(rows) if '●' in row)
+        self.assertLess(float_position('opening', 0), float_position('opening', 1))
+        self.assertGreater(float_position('closing', 0), float_position('closing', 1))
+        rows = [terminal_app.ANSI.sub('', line) for line in cli_scene.scene_frame(80, 24, 1, 'opening')]
+        frame = ''.join(rows)
+        self.assertEqual(len(rows), 23)
+        self.assertTrue(all(len(row) == 79 for row in rows))
+        for columns, lines in ((65, 22), (120, 40)):
+            sized = [terminal_app.ANSI.sub('', line) for line in cli_scene.scene_frame(columns, lines, .5, 'closing')]
+            self.assertEqual(len(sized), lines-1)
+            self.assertTrue(all(len(row) == columns-1 for row in sized))
+        self.assertIn('╱', frame)
+        self.assertIn('≈', frame)
+        self.assertIn('✦', frame)
+        self.assertIn('><(((o>', frame)
+
+    def test_console_restores_if_closing_animation_fails(self):
+        app = terminal_app.Terminal()
+        app.alive = False
+        with patch.object(terminal_app.sys.stdin, 'isatty', return_value=True), \
+             patch.object(terminal_app.sys.stdout, 'isatty', return_value=True), \
+             patch.object(terminal_app.sys.stdout, 'write') as write, \
+             patch.object(terminal_app.sys.stdout, 'flush'), \
+             patch.object(app, 'transition', side_effect=[None, RuntimeError('closed')]):
+            with self.assertRaisesRegex(RuntimeError, 'closed'):
+                app.run()
+        self.assertIn('?25h', write.call_args.args[0])
 
     def test_api_read_commands_are_json_and_do_not_control_game(self):
         with patch.object(control_actions, 'resume') as resume, patch.object(control_actions, 'pause') as pause, patch.object(control_actions, 'stop') as stop:

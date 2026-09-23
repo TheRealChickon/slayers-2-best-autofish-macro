@@ -18,7 +18,7 @@ from fishing_assistant import ROOT, find_window, rectangle
 from item_journal import Journal
 from status_view import snapshot, duration
 import control_actions as actions
-from app_config import load_config, save_config, resolve_account
+from app_config import load_config, save_config, resolve_account, MODES
 from live_feed import LiveFeed
 from ui_motion import SoftButton, tween, mix
 
@@ -59,6 +59,8 @@ class Window:
         style.configure('Treeview.Heading',background=PANEL,foreground=MUTED,font=(FONT,10),relief='flat')
         style.map('Treeview',background=[('selected',LINE)],foreground=[('selected',TEXT)])
         style.configure('Vertical.TScrollbar',background=LINE,troughcolor=BG,bordercolor=BG,arrowcolor=MUTED,arrowsize=10)
+        style.configure('TCombobox',fieldbackground=PANEL,background=PANEL,foreground=TEXT,arrowcolor=MUTED,borderwidth=0)
+        style.map('TCombobox',fieldbackground=[('readonly',PANEL)],foreground=[('readonly',TEXT)])
         self.main=tk.Frame(self.root,bg=BG);self.main.pack(fill='both',expand=True,padx=30,pady=22)
         top=tk.Frame(self.main,bg=BG);top.pack(fill='x')
         tk.Label(top,text='Fishing',bg=BG,fg=TEXT,font=(FONT,22,'bold')).pack(side='left')
@@ -283,22 +285,42 @@ class Window:
 
     def build_settings(self):
         config=load_config();self.setting_vars={}
+        form=tk.Frame(self.settings_page,bg=BG);form.pack(side='left',anchor='n',padx=(0,28))
+        options=tk.Frame(self.settings_page,bg=BG);options.pack(side='left',anchor='n',fill='x',expand=True)
+        mode_row=tk.Frame(form,bg=BG);mode_row.pack(fill='x',pady=(6,12))
+        tk.Label(mode_row,text='Mode',bg=BG,fg=MUTED,font=(FONT,10),width=18,anchor='w').pack(side='left')
+        self.mode_var=tk.StringVar(value=MODES[config['mode']])
+        ttk.Combobox(mode_row,textvariable=self.mode_var,values=tuple(MODES.values()),state='readonly',width=23).pack(side='left',ipady=5)
+        tk.Label(form,text='Manual modes: F8 pauses / resumes.\nLosing focus pauses automatically.',bg=BG,fg=MUTED,font=(FONT,9),justify='left').pack(anchor='w',pady=(0,8))
         for key,label in [('account_username','Roblox username'),('rod_slot','Rod slot')]:
-            row=tk.Frame(self.settings_page,bg=BG);row.pack(fill='x',pady=(6,12))
+            row=tk.Frame(form,bg=BG);row.pack(fill='x',pady=(6,12))
             tk.Label(row,text=label,bg=BG,fg=MUTED,font=(FONT,10),width=18,anchor='w').pack(side='left')
             var=tk.StringVar(value=str(config[key]));self.setting_vars[key]=var
             tk.Entry(row,textvariable=var,bg=PANEL,fg=TEXT,insertbackground=GOLD,relief='flat',highlightthickness=0,font=(FONT,11),width=25).pack(side='left',ipady=7)
         for key,label in [('auto_rod','Auto equip rod'),('inventory_check','Identify unknown drops'),('reduced_motion','Reduce motion')]:
             var=tk.BooleanVar(value=config[key]);self.setting_vars[key]=var
-            tk.Checkbutton(self.settings_page,text=label,variable=var,bg=BG,fg=TEXT,selectcolor=PANEL,activebackground=BG,activeforeground=TEXT,highlightthickness=0,borderwidth=0,font=(FONT,11)).pack(anchor='w',pady=7)
-        self.button(self.settings_page,'Save',self.save_settings,TEXT,PANEL).pack(anchor='w',pady=(16,8))
-        self.button(self.settings_page,'Setup guide',lambda:os.startfile(str(ROOT/'README.md')),MUTED,BG,padx=0).pack(anchor='w')
+            tk.Checkbutton(options,text=label,variable=var,bg=BG,fg=TEXT,selectcolor=PANEL,activebackground=BG,activeforeground=TEXT,highlightthickness=0,borderwidth=0,font=(FONT,11)).pack(anchor='w',pady=7)
+        self.button(form,'Save',self.save_settings,TEXT,PANEL).pack(anchor='w',pady=(16,8))
+        import landmark_controls
+        reference=landmark_controls.status()
+        self.position_var=tk.BooleanVar(value=reference['position_enabled'])
+        tk.Checkbutton(options,text='Correct small position drift',variable=self.position_var,bg=BG,fg=TEXT,selectcolor=PANEL,activebackground=BG,highlightthickness=0,borderwidth=0,font=(FONT,11)).pack(anchor='w',pady=5)
+        reference_row=tk.Frame(options,bg=BG);reference_row.pack(fill='x')
+        def save_reference():
+            position=self.position_var.get()
+            self.run_action(lambda:landmark_controls.setup(position))
+        self.button(reference_row,'Save fishing view',save_reference,MUTED,BG,padx=0).pack(side='left')
+        self.button(reference_row,'Disable reference',lambda:self.run_action(landmark_controls.disable),MUTED,BG,padx=15).pack(side='left')
+        self.button(form,'Setup guide',lambda:os.startfile(str(ROOT/'README.md')),MUTED,BG,padx=0).pack(anchor='w')
 
     def save_settings(self):
         values={key:var.get() for key,var in self.setting_vars.items()}
+        mode=next(key for key,label in MODES.items() if label==self.mode_var.get())
         def save():
+            if mode!=load_config().get('mode','full') and (actions.alive() or actions.starting()):
+                raise ValueError('Pause before switching modes.')
             account=resolve_account(values['account_username'])
-            save_config(dict(account,rod_slot=int(values['rod_slot']),auto_rod=values['auto_rod'],reduced_motion=values['reduced_motion'],inventory_check=values['inventory_check']))
+            save_config(dict(account,rod_slot=int(values['rod_slot']),auto_rod=values['auto_rod'],reduced_motion=values['reduced_motion'],inventory_check=values['inventory_check'],mode=mode))
             return 'Settings saved'
         self.run_action(save)
 
@@ -358,7 +380,8 @@ class Window:
                 self.values[key].set(value)
             remain=d['bait_remaining_estimate'];hours=d['bait_hours_remaining_estimate']
             self.bait.configure(text=f'~{remain:,} bait' if remain is not None else 'Bait —')
-            self.rate.configure(text=f'~{d["hooks_per_hour"]:.0f} / hour'+(f'  ·  ~{hours:.1f} hours left' if hours is not None else ''))
+            recent=d.get('recent')
+            self.rate.configure(text=(f'{recent["hooks_per_minute"]:.2f} hooks/min  ·  {recent["items_per_minute"]:.2f} items/min' if recent else f'~{d["hooks_per_hour"]:.0f} / hour')+(f'  ·  ~{hours:.1f} hours left' if hours is not None else ''))
             self.presence.configure(text=d['presence'] if d['presence_fresh'] else '')
             self.note.configure(text=f'{d["logged_collections"]:,} collections  ·  {d["unread_items"]} items with partial/unread names')
             self.pause_button.pack_forget();self.continue_button.pack_forget()

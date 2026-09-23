@@ -11,6 +11,7 @@ import psutil
 import win32gui
 from metrics import RUN
 from fishing_assistant import ROOT, find_window
+from app_config import load_config, save_config, MODES
 
 _mutex = threading.RLock()
 _starting = None
@@ -67,7 +68,7 @@ def pause():
         (RUN / 'PAUSE').write_text('Paused by user')
         (RUN / 'STOP').write_text('Paused by user')
         event('pause', 'Pause requested; releasing game input and keeping totals.')
-    return 'Pausing. Continue will rejoin and keep all counters.'
+    return 'Pausing. Continue resumes the selected mode and keeps all counters.'
 
 
 def stop():
@@ -85,23 +86,36 @@ def focus_game():
     win32gui.SetForegroundWindow(h)
 
 
-def resume():
+def resume(mode=None):
     global _starting
+    mode = mode or load_config().get('mode','full')
+    if mode not in MODES:raise ValueError('Mode must be full, assist, or spot')
     with guard():
+        if alive('calibration-pid.json'):
+            return 'Reference setup is running. Stop cancels it.'
         live, pending = alive(), starting()
         if live or pending:
             if (RUN / 'PAUSE').exists() or (RUN / 'STOP').exists():
                 return 'Pause/stop is still finishing. Try Continue in a moment.'
             if not live:
                 return 'Starting; waiting for the fishing supervisor.'
+            try:current_mode=json.loads((RUN/'supervisor.json').read_text()).get('mode','full')
+            except (OSError,ValueError):current_mode='full'
+            if current_mode!=mode:return 'Pause the current mode before switching modes.'
+            if mode=='assist':return 'Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.'
+            if mode=='spot':return 'Fish here is active. Equip your rod, position the mouse, then press F8.'
+            (RUN/'F8_PAUSE').unlink(missing_ok=True)
             focus_game()
             event('continue', 'Returned focus to Roblox.')
             return 'Roblox is focused. Fishing will resume automatically.'
         # Only an explicit Continue command may release a manual stop.
+        save_config({'mode':mode})
         (RUN / 'PAUSE').unlink(missing_ok=True)
         (RUN / 'STOP').unlink(missing_ok=True)
-        args = [sys.executable, str(ROOT / 'recovery.py'), '--seconds', '0', '--rejoin',
-                '--focus', '--resume-counters', '--respect-stop']
+        (RUN / 'F8_PAUSE').unlink(missing_ok=True)
+        args = ([sys.executable,str(ROOT/'minigame_assist.py'),'--respect-stop','--mode',mode] if mode in ('assist','spot') else
+                [sys.executable, str(ROOT / 'recovery.py'), '--seconds', '0', '--rejoin',
+                 '--focus', '--resume-counters', '--respect-stop'])
         try:
             with (RUN / 'supervisor-stdout.log').open('a') as out, (RUN / 'supervisor-stderr.log').open('a') as err:
                 _starting = subprocess.Popen(args, stdout=out, stderr=err, creationflags=subprocess.CREATE_NO_WINDOW)
@@ -110,5 +124,8 @@ def resume():
         except Exception:
             (RUN / 'STOP').write_text('Continue failed; input stopped')
             raise
-        event('continue', 'Continuing saved run; rejoining and equipping the rod.')
-        return 'Continuing the saved run. Rejoining and equipping the rod...'
+        message = ('Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.' if mode=='assist' else
+                   'Fish here is active. Equip your rod, position the mouse, then press F8; losing focus pauses input.' if mode=='spot' else
+                   'Continuing the saved run. Rejoining and equipping the rod...')
+        event('continue',message)
+        return message

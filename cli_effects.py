@@ -4,7 +4,8 @@ from dataclasses import dataclass
 
 
 # These are the app's existing highlighted catches, not official rarity tiers.
-SPECIAL_CATCHES = {'Golden Fish': 'gold', 'Clown Fish': 'green', 'Zebra Fish': 'cyan'}
+SPECIAL_CATCHES = {'Golden Fish': 'gold', 'Clown Fish': 'green',
+                   'Zebra Fish': 'cyan', 'Ore': 'ore'}
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,9 @@ class CatchEffects:
 
     def catch(self, name, quantity, now):
         # One slot: a newer catch replaces the effect, never builds a backlog.
-        self.active = Effect('catch', f'{name}  ×{quantity}', SPECIAL_CATCHES[name], now, 4.8)
+        self.active = Effect('ore' if name == 'Ore' else 'catch',
+                             f'{name}  ×{quantity}', SPECIAL_CATCHES[name], now,
+                             3.6 if name == 'Ore' else 4.8)
 
     def key(self, key, now):
         if now - self.key_at > 2:
@@ -90,6 +93,16 @@ class CatchEffects:
             for y, line in enumerate((r' /\_/\ ', '( o.o )  ><>', ' > ^ <')):
                 put(y, anchor, line, 'cyan')
             put(1, anchor+17, 'CATFISH!', 'gold')
+        elif effect.kind == 'ore':
+            # A compact mineral glint, distinct from the swimming fish effect.
+            center = width//2
+            rise = round(3*min(1, elapsed/.45))
+            put(max(0, 2-rise), center-1, '◆', 'ore')
+            for offset, symbol in ((-9, '·'), (-5, '✦'), (6, '✦'), (10, '·')):
+                if .2 < (elapsed + abs(offset)*.09) % 1.2 < .8:
+                    put((abs(offset)+int(elapsed*3)) % 3, center+offset, symbol, 'ore')
+            centered(1, effect.title, 'ore')
+            centered(2, '⌁' * min(9, width), 'dim')
         else:
             # Gentle travel and sparse sparkles; no screen clearing or flashing.
             center = (width-8)//2

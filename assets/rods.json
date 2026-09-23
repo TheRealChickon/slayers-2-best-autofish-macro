@@ -1,0 +1,14 @@
+[
+  {"name":"common","priority":1,"variants":[
+    {"image":"rod-icon.png","selected":true,"anchor":[30,19]},
+    {"image":"rod-unequipped.png","selected":false,"anchor":[30,19]}
+  ]},
+  {"name":"rare","priority":2,"variants":[
+    {"image":"rare-rod-equipped.png","selected":true,"anchor":[35.5,33.5]},
+    {"image":"rare-rod-unequipped.png","selected":false,"anchor":[35.5,33.5]}
+  ]},
+  {"name":"legendary","priority":3,"variants":[
+    {"image":"legendary-rod-equipped.png","selected":true,"anchor":[35.5,33.5]},
+    {"image":"legendary-rod-unequipped.png","selected":false,"anchor":[35.5,33.5]}
+  ]}
+]

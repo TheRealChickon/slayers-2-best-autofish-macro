@@ -27,6 +27,8 @@ Read commands never start, focus, or stop Roblox. Controls call the same seriali
 
 The interface uses `config.local.json` and `FISHING_DATA_DIR` exactly like the app. Keep the installation directory and intended Windows user/session fixed in a future adapter.
 
+`resume` uses the mode saved in Settings. In `assist` mode it starts only minigame tracking and never focuses, casts, collects or rejoins. Status includes `mode` (`full` or `assist`), `recent` (nullable recent rates and phase seconds) and `alignment` (the last local alignment result). Mode changes and reference calibration remain explicit local setup operations; there is no automatic remote calibration.
+
 ## Response contract
 
 Valid API invocations produce one JSON object on stdout, with no ANSI escapes or progress text:
@@ -95,3 +97,12 @@ def fishing(command, request_id):
 ```
 
 A remotely hosted Discord bot will need an authenticated bridge to this function on the gaming PC. Keep that future transport separate from Fishing's game controller. Authorize the intended Discord owner/server and allowlisted operations there; do not expose arbitrary shell commands or the state directory. The PC must still be awake, unlocked, and able to foreground Roblox. None of that bridge is installed or enabled by this release.
+## Fishing modes
+
+The saved `mode` is `full`, `assist`, or `spot`. Resume uses that selection. The `spot` mode waits for the local player to equip a rod and press F8, pauses when Roblox loses focus, and resumes without recovery or reconnect actions. `spot_armed` in status indicates whether F8 has enabled repeated fishing for this session. It sends only left-button and T holds/releases; the player controls the pointer, camera, equipment and focus. No mouse coordinate is saved or restored.
+
+F8 toggles local pause/resume in Roblox; `spot_paused` reports that manual toggle independently of focus. Focus return never overrides an F8 pause. Starting the controller waits for F8 and sends no game input.
+
+F8 also toggles Minigame only. Both manual modes expose `manual_paused`; Minigame only starts enabled and uses `assist_paused` as its worker stage when toggled off. Focus return restores enabled assistance only after navigation keys are released and fresh minigame frames are observed. It does not clear STOP/PAUSE or a manual F8 pause.
+
+Assist/spot status also reports measured `control_fps`, `tracked_frames`, `missed_frames`, `inside_fraction`, and the learned `reel_response` for the current round. `inside_fraction` covers recognized frames, not catch success. A bounded trace of the most recently finished round is stored locally in `tracking-latest.json`; `tracking_quality` events summarize it. Full farmer and both manual modes share the reeling controller.

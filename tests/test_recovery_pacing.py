@@ -89,6 +89,8 @@ class RecoveryPacing(unittest.TestCase):
             self.assertTrue(driver.hold_private_join((1280,1333)))
         self.assertEqual([call.args for call in driver.inp.hold.call_args_list],[(True,),(False,)])
         self.assertLess(clock[0],1.5)
+        for call in driver.move.call_args_list:
+            self.assertGreaterEqual(call.args[0],1345)  # Away from JOIN's text.
 
     def test_hold_has_bounded_duration_if_panel_never_changes(self):
         driver,clock=self.driver();driver.text=Mock(return_value=private_rows())
@@ -105,8 +107,19 @@ class RecoveryPacing(unittest.TestCase):
                 with self.assertRaises(type(error)):driver.hold_private_join((1280,1333))
             self.assertEqual([call.args for call in driver.inp.hold.call_args_list],[(True,),(False,)])
 
+    def test_local_backstep_only_follows_confirmed_join(self):
+        driver, _ = self.driver()
+        driver.key = Mock()
+        with patch.object(recovery, 'load_config', return_value={'spawn_backstep_seconds': .18}):
+            driver.backstep_after_join(False)
+            driver.key.assert_not_called()
+            driver.backstep_after_join(True)
+        driver.key.assert_called_once_with('S', .18)
+        driver.event.assert_called_once_with('spawn_backstep', seconds=.18)
+        driver.capture.assert_called_once_with('after-backstep')
+
     def test_full_rejoin_handles_animation_then_waits_for_loaded_world(self):
-        driver,clock=self.driver();state={'kind':'world','since':0,'holding':False};events=[]
+        driver,clock=self.driver();state={'kind':'world','since':0,'holding':False,'covered':True};events=[]
         def transition(kind):state.update(kind=kind,since=clock[0])
         def capture(tag=None):
             if state['kind']=='loading' and clock[0]-state['since']>2:transition('world')
@@ -117,7 +130,8 @@ class RecoveryPacing(unittest.TestCase):
             kind=frame['kind']
             if kind=='world':return [{'text':'Mistfall Lv. 50','center':(100,100)}]
             if kind=='private_join':
-                return private_rows(1366 if clock[0]-frame['since']<.8 else 1333)
+                rows=private_rows(1366 if clock[0]-frame['since']<.8 else 1333)
+                return rows[:1] if box is None or state['covered'] else rows
             return {'game_menu':[{'text':'Back to main menu','center':(800,700)}],
                 'confirm_menu':[{'text':'Go back to the main menu','center':(1000,700)}],
                 'main_menu':[{'text':'Play','center':(600,700)}],
@@ -133,14 +147,17 @@ class RecoveryPacing(unittest.TestCase):
                 state['held_since']=clock[0]
             state['holding']=pressed
         driver.capture=capture;driver.text=text;driver.click=click
+        driver.move=lambda x,y:state.update(covered=False) if (x,y)==(1630,1120) else None
         driver.select=Mock();driver.progress=Mock();driver.key=lambda key:transition('game_menu')
         driver.world_visible=lambda frame:frame['kind']=='world'
         driver.equip_rod=Mock();driver.event=lambda event,**kw:events.append((event,clock[0]))
         driver.inp.hold.side_effect=hold
-        with patch.object(recovery.time,'monotonic',side_effect=lambda:clock[0]):driver.recover(True)
+        with patch.object(recovery.time,'monotonic',side_effect=lambda:clock[0]), \
+             patch.object(recovery,'load_config',return_value={'spawn_backstep_seconds':0.0}):
+            driver.recover(True)
         driver.equip_rod.assert_called_once()
         self.assertEqual(sum(event=='hold_private_join' for event,_ in events),1)
-        self.assertLess(clock[0],20)
+        self.assertLess(clock[0],25)
         self.assertGreaterEqual(clock[0]-state['since'],3)
         self.assertFalse(state['holding'])
 

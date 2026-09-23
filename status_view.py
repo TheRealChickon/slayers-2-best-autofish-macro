@@ -3,6 +3,9 @@ import math
 import time
 from metrics import RUN, read
 from item_journal import Journal
+from performance import recent
+from app_config import load_config
+from landmarks import profile as reference_profile
 import control_actions as actions
 
 
@@ -19,18 +22,32 @@ def snapshot(journal=None):
     live = actions.alive()
     starting = actions.starting() and not live
     paused, stop = (RUN / 'PAUSE').exists(), (RUN / 'STOP').exists()
+    f8_paused = live and supervisor.get('mode','full')=='full' and (RUN/'F8_PAUSE').exists()
     stage = supervisor.get('stage', 'starting')
     if (live or starting) and stop:
         state = 'Pausing' if paused else 'Stopping'
     elif starting:
         state = 'Starting'
     elif live:
-        state = ('Waiting for Roblox' if stage == 'paused_focus' else
-                 {'tracking': 'Fishing', 'pickup': 'Collecting', 'waiting': 'Waiting for a bite',
-                  'casting': 'Casting', 'inventory': 'Reading inventory'}.get(worker.get('stage'), 'Fishing')
-                 if stage == 'fishing' else stage.replace('_', ' ').title())
+        fishing_states = {'tracking':'Assisting minigame' if supervisor.get('mode')=='assist' else 'Fishing',
+                          'pickup':'Collecting','waiting':'Waiting for a bite','casting':'Casting',
+                          'inventory':'Reading inventory','assist_waiting':'Waiting for your cast',
+                          'select_spot':'Equip rod, aim, then F8','checking_spot':'Checking fishing spot',
+                          'spot_paused':'Paused — F8 to resume',
+                          'assist_paused':'Paused — F8 to resume',
+                          'waiting_rod':'Waiting for equipped rod',
+                          'spot_blocked':'Waiting for fishing scene','spot_attention':'Check the spot, then press F8',
+                          'waiting_marker':'Waiting for a clear marker','pickup_wait':'Checking pickup',
+                          'cast_press':'Casting','equipping':'Equipping rod','equip_wait':'Equipping rod','cooldown':'Next cast'}
+        state = ('Paused — F8 to resume' if f8_paused or stage=='paused_manual' else 'Waiting for Roblox' if stage=='paused_focus' else fishing_states.get(worker.get('stage'),'Fishing')
+                 if stage=='fishing' else stage.replace('_',' ').title())
     else:
         state = 'Paused' if paused else 'Stopped'
+    reason = worker.get('wait_reason', '') if live else worker.get('reason', '') or supervisor.get('reason', '')
+    if stop or paused:
+        try:reason = (RUN / ('PAUSE' if paused else 'STOP')).read_text(encoding='utf-8').strip() or reason
+        except OSError:pass
+    if starting and not stop:reason = ''
     rounds, seconds = totals.get('rounds', 0), totals.get('active_seconds', 0)
     rate = rounds * 3600 / seconds if seconds > 0 else 0
     stock = bait.get('starting_stock')
@@ -39,8 +56,9 @@ def snapshot(journal=None):
     unknown = sum(qty for name, qty in journal.counts.items()
                   if name == 'Unidentified item' or name.endswith('(partial)'))
     return {
-        'state': state, 'running': live, 'starting': starting, 'stop_requested': stop,
+        'state': state, 'mode': supervisor.get('mode','full') if live else load_config()['mode'], 'running': live, 'starting': starting, 'stop_requested': stop,
         'paused': paused, 'started': totals.get('started'), 'updated': totals.get('updated'),
+        'reason': reason,
         'collections': totals.get('rewards', 0), 'items': sum(journal.counts.values()),
         'logged_collections': len(journal.items), 'unread_items': unknown,
         'hooks': rounds, 'casts': totals.get('casts', 0), 'failed_rounds': totals.get('failed', 0),
@@ -51,6 +69,11 @@ def snapshot(journal=None):
         'presence': 'Not configured' if presence.get('disabled') else presence.get('state', 'Unknown') if fresh else
                     'Not polled while stopped' if not live else 'Checking',
         'presence_fresh': bool(fresh),
+        'recent': recent(journal),
+        'alignment': read('alignment.json') if reference_profile() else {'enabled': False},
+        'spot_armed':worker.get('spot_armed',False),
+        'spot_paused':worker.get('spot_paused',False),
+        'manual_paused':f8_paused or worker.get('manual_paused',False),
     }
 
 

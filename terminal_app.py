@@ -9,8 +9,10 @@ import threading
 import time
 
 import control_actions as actions
-from app_config import load_config, resolve_account, save_config
+from app_config import data_directory, load_config, resolve_account, save_config, MODES
+from cast_point import capture_pointer, validate as validate_cast_point
 from cli_effects import CatchEffects
+from cli_scene import scene_frame
 from item_journal import Journal
 from live_feed import LiveFeed, event_tone, state_tone
 from metrics import read, write
@@ -19,7 +21,8 @@ from status_view import duration, estimate, snapshot
 ESC = '\033['
 RESET = ESC + '0m'
 TONES = {'text': '234;236;226', 'dim': '128;142;137', 'gold': '232;186;64',
-         'green': '156;219;112', 'red': '226;146;135', 'cyan': '111;193;207', 'selected': '245;224;165'}
+         'green': '156;219;112', 'red': '226;146;135', 'cyan': '111;193;207',
+         'ore': '194;150;106', 'selected': '245;224;165'}
 ANSI = re.compile(r'\x1b\[[0-9;]*m')
 
 
@@ -41,6 +44,16 @@ def clip(line, width):
 class Terminal:
     pages = ('Run', 'Items', 'Live log', 'Setup')
     categories = ('All', 'Catches', 'Recovery', 'Warnings')
+    run_modes = ('assist', 'spot', 'full')
+    mode_details = {
+        'assist': ('green', 'You cast + collect  ·  bot reels'),
+        'spot': ('cyan', 'You pick the spot  ·  bot casts + collects'),
+        'full': ('gold', 'Saved spawn  ·  bot rejoins + fishes'),
+    }
+    settings_keys = ('Username', 'Rod slot', 'Auto rod', 'Motion', 'Bait left',
+                     'Plan hours', 'Mode', 'Cast point', 'Capture pointer',
+                     'Position correction', 'Save reference', 'Disable reference',
+                     'Discord webhook', 'Test webhook', 'Remove webhook')
 
     def __init__(self):
         self.journal, self.feed = Journal(), LiveFeed()
@@ -61,6 +74,8 @@ class Terminal:
         self.last_lines = []
         self.changed_at = time.monotonic()
         self.effects = CatchEffects()
+        import landmark_controls
+        self.reference_position=landmark_controls.status()['position_enabled']
 
     def refresh(self):
         while not self.jobs.empty():
@@ -102,7 +117,7 @@ class Terminal:
 
     def finish_edit(self):
         key, value = self.editing, self.buffer.strip()
-        self.editing = None
+        self.editing, self.buffer = None, ''
         try:
             if key == 'Search': self.query = value; self.selection = self.scroll = 0
             elif key == 'Username':
@@ -110,6 +125,9 @@ class Terminal:
                     save_config(resolve_account(value)); return 'Account saved'
                 self.job(account)
             elif key == 'Rod slot': save_config({'rod_slot': int(value)})
+            elif key == 'Cast point':
+                save_config({'cast_point': validate_cast_point(value)})
+                self.toast('Full farmer cast point saved')
             elif key == 'Plan hours':
                 hours = float(value)
                 if not math.isfinite(hours) or hours <= 0: raise ValueError('Enter positive hours')
@@ -120,32 +138,78 @@ class Terminal:
                 stock = read('bait.json')
                 stock['starting_stock'] = remaining + read('totals.json').get('rounds', 0)
                 write('bait.json', stock); self.toast('Bait estimate updated')
+            elif key == 'Discord webhook':
+                from discord_hourly import configure_secret
+                configure_secret(data_directory(), value)
+                self.toast('Discord webhook saved')
         except (ValueError, OSError) as error: self.toast(error, False)
 
     def activate(self):
         if self.page == 0:
-            self.job((actions.resume, actions.pause, actions.stop,
-                      lambda: 'Saved ' + str(self.journal.export()))[self.selection])
+            if self.selection < len(self.run_modes):
+                mode=self.run_modes[self.selection]
+                self.job(lambda:actions.resume(mode))
+            else:
+                self.job((actions.pause, actions.stop,
+                          lambda: 'Saved ' + str(self.journal.export()))[self.selection-len(self.run_modes)])
         elif self.page == 1:
             rows = self.item_rows()
             if rows:
                 name = rows[self.selection][0]
                 self.switch(2); self.query = name; self.category = 1; self.follow = True
         elif self.page == 3:
-            key = ('Username', 'Rod slot', 'Auto rod', 'Motion', 'Bait left', 'Plan hours')[self.selection]
+            key = self.settings_keys[self.selection]
+            if key == 'Capture pointer':
+                self.toast('Move the pointer over Roblox water; capturing in 4 seconds')
+                def capture():
+                    time.sleep(4)
+                    point = capture_pointer()
+                    save_config({'cast_point': point})
+                    return f'Cast point saved: {point[0]}, {point[1]}'
+                self.job(capture)
+                return
+            if key == 'Test webhook':
+                from discord_hourly import load_secret, request_webhook
+                def verify():
+                    code,_=request_webhook(load_secret(data_directory()))
+                    return f'Discord reachable (HTTP {code}); no post sent'
+                self.job(verify)
+                return
+            if key == 'Remove webhook':
+                from discord_hourly import SECRET_FILE
+                (data_directory()/SECRET_FILE).unlink(missing_ok=True)
+                self.toast('Discord webhook removed')
+                return
+            if key == 'Discord webhook':
+                self.edit(key)
+                return
+            if key=='Position correction':self.reference_position=not self.reference_position;return
+            if key in ('Save reference','Disable reference'):
+                import landmark_controls
+                position=self.reference_position
+                self.job((lambda:landmark_controls.setup(position)) if key=='Save reference' else landmark_controls.disable)
+                return
+            if key == 'Mode':
+                if self.data.get('running') or self.data.get('starting'):
+                    self.toast('Pause before switching modes.',False);return
+                modes=list(MODES)
+                save_config({'mode':modes[(modes.index(self.config['mode'])+1)%len(modes)]})
+                self.config=load_config();return
             if key in ('Auto rod', 'Motion'):
                 option = 'auto_rod' if key == 'Auto rod' else 'reduced_motion'
                 save_config({option: not self.config[option]}); self.config = load_config()
             else:
                 value = {'Username': self.config['account_username'], 'Rod slot': self.config['rod_slot'],
-                         'Bait left': self.data.get('bait_remaining_estimate') or 0, 'Plan hours': self.hours}[key]
+                         'Bait left': self.data.get('bait_remaining_estimate') or 0,
+                         'Plan hours': self.hours,
+                         'Cast point': ', '.join(map(str, self.config['cast_point']))}[key]
                 self.edit(key, value)
 
     def key(self, key):
         if self.editing:
             self.effects.secret = ''
             if key == 'ENTER': self.finish_edit()
-            elif key == 'CANCEL': self.editing = None
+            elif key == 'CANCEL': self.editing, self.buffer = None, ''
             elif key == 'BACKSPACE': self.buffer = self.buffer[:-1]
             elif len(key) == 1 and key.isprintable(): self.buffer += key
             return
@@ -173,7 +237,7 @@ class Terminal:
                 self.follow = key == 'END'
                 self.scroll = 0 if key == 'HOME' else limit if key == 'END' else max(0, min(limit, self.scroll+step))
             else:
-                count = 4 if self.page == 0 else 6 if self.page == 3 else len(self.item_rows())
+                count = len(self.run_modes)+3 if self.page == 0 else len(self.settings_keys) if self.page == 3 else len(self.item_rows())
                 self.selection = 0 if key == 'HOME' else max(0, count-1) if key == 'END' else max(0, min(count-1, self.selection+step))
 
     def body(self, available):
@@ -185,8 +249,22 @@ class Terminal:
                     tint('Last catch  ', 'dim') + (d['last_item'] or '—'), '',
                     f"Bait ~{d['bait_remaining_estimate']:,}" if d['bait_remaining_estimate'] is not None else 'Bait —',
                     tint(f"~{d['hooks_per_hour']:.0f} / hour   •   {self.hours:g}h plan: " + (f'~{amount:,} bait' if amount is not None else 'collecting a sample'), 'dim'), '']
-            rows += [tint('› ' + label, 'selected') if self.selection == i else '  '+label
-                     for i, label in enumerate(('Continue', 'Pause', 'Stop', 'Export log'))]
+            recent=d.get('recent')
+            if recent:
+                rows[4:4]=[tint(f"{recent['hooks_per_minute']:.2f} hooks/min   {recent['items_per_minute']:.2f} items/min   {recent['recovery_seconds']:.0f}s recovery / {recent['window_seconds']/60:.0f}m",'cyan')]
+            if d.get('reason'):rows[0:0]=[tint(d['reason'], 'gold'), '']
+            action_start=len(rows)
+            for i, mode in enumerate(self.run_modes):
+                accent, detail = self.mode_details[mode]
+                marker = '› ' if self.selection == i else '  '
+                active = '  ● LIVE' if d['running'] and d.get('mode') == mode else ''
+                rows.append(tint(marker + MODES[mode], 'selected' if self.selection == i else accent)
+                            + tint('  /  ' + detail + active, accent if self.selection == i else 'dim'))
+            rows += [tint('› ' + label, 'selected') if self.selection == i else '  ' + label
+                     for i, label in enumerate(('Pause', 'Stop', 'Export log'), start=len(self.run_modes))]
+            # Keep the chosen mode/control visible in a short terminal.
+            start=max(0,action_start+self.selection-available+1)
+            rows=rows[start:]
             rows += ['', tint('Recent', 'dim')]
             rows += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+tint(r['text'],event_tone(r)) for r in self.feed.rows[-max(0, available-len(rows)):]] if available > len(rows) else []
             return rows
@@ -210,7 +288,14 @@ class Terminal:
             return result
         settings = [('Username', self.config['account_username'] or 'Not set'), ('Rod slot', self.config['rod_slot']),
                     ('Auto equip rod', 'On' if self.config['auto_rod'] else 'Off'), ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On'),
-                    ('Bait left', d['bait_remaining_estimate'] if d['bait_remaining_estimate'] is not None else 'Unknown'), ('Plan hours', f'{self.hours:g}')]
+                    ('Bait left', d['bait_remaining_estimate'] if d['bait_remaining_estimate'] is not None else 'Unknown'), ('Plan hours', f'{self.hours:g}'),
+                    ('Mode',MODES[self.config['mode']]),
+                    ('Cast point', f"{self.config['cast_point'][0]}, {self.config['cast_point'][1]}  ·  Full farmer"),
+                    ('Capture pointer', 'Reads Roblox pointer in 4 seconds'),
+                    ('Position correction','On' if self.reference_position else 'Off'),
+                    ('Save fishing reference','Enter while paused'),('Disable reference','Enter while paused'),
+                    ('Discord webhook','Configured' if (data_directory()/'discord-webhook.dpapi').exists() else 'Not set'),
+                    ('Test webhook','Check connection · no post'),('Remove webhook','Delete local webhook')]
         return [tint(f"{'›' if i == self.selection else ' '}  {label:<23} {value}", 'selected' if i==self.selection else 'text') for i,(label,value) in enumerate(settings)]
 
     def render(self, width, height):
@@ -218,10 +303,11 @@ class Terminal:
         d = self.data
         if width < 65 or height < 22:
             return ['Fishing  /  '+d.get('state', ''), '', 'Enlarge the terminal to at least 65 columns × 22 rows.', '', 'Q close   C continue   P pause   S stop']
-        active = d['running'] and not d['stop_requested'] and d['state'] != 'Waiting for Roblox'
+        active = d['running'] and not d['stop_requested'] and not d.get('manual_paused') and d['state'] != 'Waiting for Roblox'
         spin = '●' if self.config['reduced_motion'] or not active else '◐◓◑◒'[int(time.monotonic()*5)%4]
         state = tint(spin+' '+d['state'],state_tone(d['state'],active))
-        lines = ['', '  '+tint('FISHING', 'gold')+'     '+state+'     '+tint(d['presence'], 'dim'), '',
+        mode = '  /  '+MODES.get(d.get('mode'),'Full farmer')
+        lines = ['', '  '+tint('FISHING'+mode, 'gold')+'     '+state+'     '+tint(d['presence'], 'dim'), '',
                  '  '+'     '.join(tint(f'{i+1} {name}', 'gold' if i==self.page else 'dim') for i,name in enumerate(self.pages)), '',
                  '  '+tint('─'*min(width-4, 110), 'dim'), '']
         effect_rows = self.effects.rows(width-4, time.monotonic(), self.config['reduced_motion'])
@@ -232,7 +318,8 @@ class Terminal:
         lines += ['  '+' '*offset+line for line in self.body(available)[:available]]
         lines += [''] * max(0, height-5-len(lines))
         if self.editing:
-            lines.append('  '+tint(self.editing+' › ', 'gold')+self.buffer+'▏')
+            visible='•'*len(self.buffer) if self.editing=='Discord webhook' else self.buffer
+            lines.append('  '+tint(self.editing+' › ', 'gold')+visible+'▏')
             help_text = 'Enter save   Ctrl+G cancel'
         else:
             lines.append('  '+(self.notice if time.monotonic()<self.notice_until else tint('Working…', 'gold') if self.busy else ''))
@@ -248,6 +335,7 @@ class Terminal:
         sys.stdout.flush()
         next_update = 0
         try:
+            self.transition('opening')
             while self.alive:
                 while msvcrt.kbhit():
                     key = msvcrt.getwch()
@@ -269,5 +357,30 @@ class Terminal:
                 self.last_lines = lines
                 time.sleep(.07)
         finally:
-            sys.stdout.write(RESET+ESC+'?25h'+ESC+'?1049l'); sys.stdout.flush()
+            try:
+                self.transition('closing')
+            finally:
+                sys.stdout.write(RESET+ESC+'?25h'+ESC+'?1049l'); sys.stdout.flush()
         return 0
+
+    def transition(self, phase):
+        """Cast or reel across the whole terminal, then restore the dashboard."""
+        if self.config['reduced_motion']:
+            return
+        size = shutil.get_terminal_size((100, 32))
+        if size.columns < 65 or size.lines < 22:
+            return
+        frames = 18 if phase == 'opening' else 14
+        for index in range(frames):
+            art = scene_frame(size.columns, size.lines, index/(frames-1), phase)
+            sys.stdout.write((ESC+'2J' if index == 0 else '') +
+                             ''.join(f'{ESC}{row+1};1H'+line
+                                     for row, line in enumerate(art)))
+            sys.stdout.flush()
+            time.sleep(.045)
+        if phase == 'opening':
+            self.refresh()
+            self.last_lines = self.render(size.columns, size.lines)
+            sys.stdout.write(ESC+'2J'+''.join(f'{ESC}{row+1};1H'+line
+                                             for row, line in enumerate(self.last_lines)))
+            sys.stdout.flush()
