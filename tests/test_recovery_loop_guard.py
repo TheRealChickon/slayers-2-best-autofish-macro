@@ -8,10 +8,15 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from faults import RecoveryPolicy
+from faults import RecoveryPolicy, reason_code
 
 
 class RecoveryLoopGuard(unittest.TestCase):
+    def test_shortened_miss_reason_still_rejoins_instead_of_restarting(self):
+        code = reason_code('Two casts without a recognized minigame')
+        self.assertEqual(code, 'no_minigame')
+        self.assertEqual(RecoveryPolicy().choose(code, 0, False), 'rejoin')
+
     def test_repeated_no_minigame_rejoins_stop_but_old_failures_expire(self):
         policy = RecoveryPolicy()
         self.assertEqual(policy.choose('no_minigame', 0, False), 'rejoin')
