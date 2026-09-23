@@ -38,6 +38,12 @@ class RecoveryLoopGuard(unittest.TestCase):
             self.assertTrue(report['pause_requested'])
             self.assertEqual(report['recent_90min']['no_minigame_recoveries'], 2)
             self.assertTrue(any('2 no-minigame recovery decisions' in issue for issue in report['issues']))
+            (root / 'supervisor.json').write_text(json.dumps({'running': True, 'pid': os.getpid(),
+                                                             'stage': 'paused_manual', 'started': now - 100}))
+            restarted = json.loads(subprocess.check_output([sys.executable, str(script)], env=env, text=True))
+            self.assertEqual(restarted['recent_90min']['no_minigame_recoveries'], 2)
+            self.assertEqual(restarted['recent_90min']['current_supervisor_no_minigame_recoveries'], 0)
+            self.assertEqual(restarted['issues'], [])
 
 
 if __name__ == '__main__':
