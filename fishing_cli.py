@@ -1,6 +1,7 @@
 """Fishing CLI. Opening it only reads status; Continue explicitly starts input."""
 import argparse
 import ctypes
+import getpass
 import json
 import os
 import shlex
@@ -101,6 +102,8 @@ def parser(prog='autofish'):
     sub.add_parser('diagnostics',help='Show the last eight failure reports and local screenshot paths')
     sub.add_parser('stop', help='Stop game input and retain counters')
     sub.add_parser('export', help='Save the complete item log and totals as CSV')
+    webhook=sub.add_parser('webhook', help='Set or inspect the hourly Discord webhook')
+    webhook.add_argument('operation', choices=('status','set','verify','remove'), nargs='?', default='status')
     tui=sub.add_parser('tui', help='Keyboard interface with live logs and settings')
     tui.add_argument('--page', choices=('run','items','log','setup'), default='run')
     sub.add_parser('shell', help='Interactive command prompt; does not start fishing')
@@ -170,6 +173,23 @@ def execute(args, colors=False):
         print(path)
         print(path.read_text() if path.exists() else 'No failure reports saved')
         return 0
+    if command=='webhook':
+        from app_config import data_directory
+        from discord_hourly import SECRET_FILE, configure_secret, load_secret, request_webhook
+        run=data_directory()
+        if args.operation=='status':
+            print('Discord webhook: configured' if (run/SECRET_FILE).exists() else 'Discord webhook: not configured')
+        elif args.operation=='set':
+            value=getpass.getpass('Discord webhook URL: ') if sys.stdin.isatty() else sys.stdin.read().strip()
+            configure_secret(run,value)
+            print('Discord webhook saved locally for hourly reports.')
+        elif args.operation=='verify':
+            code,_=request_webhook(load_secret(run))
+            print(f'Discord webhook reachable (HTTP {code}); no message sent.')
+        else:
+            (run/SECRET_FILE).unlink(missing_ok=True)
+            print('Discord webhook removed. Hourly posts will fail until a new one is set.')
+        return 0
     if command == 'api':
         from control_api import dispatch
         response, code = dispatch(args.operation, args.request_id, args.limit)
@@ -226,7 +246,7 @@ def execute(args, colors=False):
 
 def shell(colors):
     print('\n'.join(status_lines(snapshot(), colors)))
-    print(color('\nModes: assist, spot, continue --mode full\nCommands: status, watch, items, logs, pause, continue, stop, plan --hours 8, export', 'gray', colors))
+    print(color('\nModes: assist, spot, continue --mode full\nCommands: status, watch, items, logs, pause, continue, stop, webhook, plan --hours 8, export', 'gray', colors))
     print('help shows options. exit closes this prompt and leaves the bot unchanged.\n')
     while True:
         try:
