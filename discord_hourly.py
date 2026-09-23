@@ -318,6 +318,31 @@ def request_webhook(url, payload=None, attachment=None):
         raise RuntimeError("Discord connection failed") from None
 
 
+def send_due(run, now=None):
+    """Send one due digest using the saved checkpoint, without touching Roblox."""
+    now = time.time() if now is None else now
+    state_path = run / STATE_FILE
+    state = read_json(state_path)
+    if not state:
+        state = {"created_at": now, "last_end_at": now, "reports_sent": 0}
+        atomic_json(state_path, state)
+    start = state["last_end_at"]
+    if now - start < WINDOW_SECONDS:
+        return {"sent": False, "reason": "not_due", "next_due_at": start + WINDOW_SECONDS}
+    summary = summarize(run, start, now, now)
+    inventory = inventory_snapshot(run)
+    payload = embed(summary, inventory[1] if inventory else None)
+    code, message_id = request_webhook(load_secret(run), payload, inventory[0] if inventory else None)
+    if code not in (200, 204):
+        raise RuntimeError(f"Unexpected Discord response: HTTP {code}")
+    state.update(last_end_at=now, reports_sent=state.get("reports_sent", 0) + 1,
+                 last_message_id=message_id)
+    atomic_json(state_path, state)
+    return {"sent": True, "at": now, "next_due_at": now + WINDOW_SECONDS,
+            "rewards": summary["rewards"], "inventory_at": inventory[1] if inventory else None,
+            "mythical": [r["name"] for r in summary["mythical"]], "stopped": summary["stopped"]}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_mutually_exclusive_group(required=True)
@@ -341,12 +366,15 @@ def main(argv=None):
             atomic_json(state_path, {"created_at": now, "last_end_at": now, "reports_sent": 0})
         print("Hourly report checkpoint ready.")
         return
+    if not state and args.send:
+        print(json.dumps(send_due(run)))
+        return
     if not state:
         raise RuntimeError("Run --init before preview or send")
     now = time.time()
     start = state["last_end_at"]
-    if args.send and now - start < WINDOW_SECONDS:
-        print(json.dumps({"sent": False, "reason": "not_due", "next_due_at": start + WINDOW_SECONDS}))
+    if args.send:
+        print(json.dumps(send_due(run, now)))
         return
     if args.send_now and not state.get("reports_sent"):
         start = min(start, now - WINDOW_SECONDS)

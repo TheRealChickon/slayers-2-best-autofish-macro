@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import discord_hourly as report
+from discord_service import DiscordReporter
 
 
 class DiscordHourlyTests(unittest.TestCase):
@@ -75,6 +76,28 @@ class DiscordHourlyTests(unittest.TestCase):
         state = report.read_json(self.run / report.STATE_FILE)
         self.assertEqual(state["last_end_at"], 3701)
         self.assertEqual(state["reports_sent"], 1)
+
+    def test_supervisor_reporter_uses_due_checkpoint_without_game_input(self):
+        (self.run / report.SECRET_FILE).write_bytes(b"encrypted")
+        (self.run / report.STATE_FILE).write_text(json.dumps({"last_end_at": 100, "reports_sent": 1}))
+        reporter = DiscordReporter(self.run)
+        with patch("discord_service.time.time", return_value=500), \
+             patch("discord_service.send_due", return_value={"sent": False, "next_due_at": 3700}) as send:
+            self.assertEqual(reporter.poll_once(), 60)
+            send.assert_called_once_with(self.run, 500)
+        with patch("discord_service.time.time", return_value=3701), \
+             patch("discord_service.send_due", return_value={"sent": True, "at": 3701,
+                                                               "next_due_at": 7301}) as send:
+            self.assertEqual(reporter.poll_once(), 60)
+            send.assert_called_once_with(self.run, 3701)
+        self.assertEqual(report.read_json(self.run / "discord-reporter-status.json")["state"], "sent")
+
+    def test_supervisor_reporter_retries_network_failure_without_stopping(self):
+        (self.run / report.SECRET_FILE).write_bytes(b"encrypted")
+        reporter = DiscordReporter(self.run)
+        with patch("discord_service.send_due", side_effect=RuntimeError("Discord connection failed")):
+            self.assertEqual(reporter.poll_once(), 300)
+        self.assertEqual(report.read_json(self.run / "discord-reporter-status.json")["state"], "retrying")
 
     def test_only_discord_webhook_hosts_accepted(self):
         self.assertTrue(report.valid_webhook("https://discord.com/api/webhooks/123/secret"))

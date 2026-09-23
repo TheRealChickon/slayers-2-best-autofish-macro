@@ -16,6 +16,7 @@ from faults import FaultRecorder, FishingFault, RecoveryPolicy, reason_code
 from performance import PerformanceRecorder
 from metrics import read as read_metrics
 import landmarks
+from discord_service import DiscordReporter
 from full_pause import InputGate, InputPaused, F8Toggle, PAUSE_FILE
 
 LAUNCH_URL='roblox://placeId='+str(load_config()['place_id'])
@@ -289,6 +290,7 @@ def main():
         if key==Key.f8:toggle.release()
     listener=Listener(on_press=emergency_key,on_release=released_key);listener.start()
     presence_stop=presence_watch.start()
+    discord_reporter=DiscordReporter(RUN);discord_reporter.start()
     def status(stage,**kw):
         if (RUN/PAUSE_FILE).exists():stage='paused_manual'
         performance.tick(stage,read_metrics('status.json'),read_metrics('totals.json'))
@@ -397,6 +399,7 @@ def main():
         driver.inp.gate.close()
         listener.stop()
         presence_stop.set()
+        discord_reporter.stop()
         ctypes.windll.kernel32.SetThreadExecutionState(0x80000000)
         (RUN/'supervisor.json').write_text(json.dumps({'running':False,'pid':os.getpid(),'updated':time.time(),'started':started,'stage':'stopped','recoveries':max(0,recoveries-1),'reason':last_error or 'session_limit'},indent=2))
     return exit_code

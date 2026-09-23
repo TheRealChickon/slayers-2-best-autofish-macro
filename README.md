@@ -280,15 +280,14 @@ Rejoin and relaunch are distinct counters. Rejoins count completed returns from 
 
 `discord_hourly.py` reads the saved fishing events and posts one color-coded Discord embed per hour. It reports new confirmed item names and quantities, casts and items per minute, minigame completions, empty rounds, pickup retries, and completed rejoins. It attaches the latest screenshot already saved by the bot's normal inventory scan and labels its capture time; reporting never opens Roblox or scans inventory. A clear Lost Set reward receives a Mythical highlight in that hour's report. Unreadable names are counted separately instead of being guessed.
 
-Configure a private webhook locally, then initialize its first hourly window:
+Configure a private webhook locally. The full farmer initializes its first hourly window automatically if needed:
 
 ```powershell
 autofish webhook set
 autofish webhook verify
-.\.venv\Scripts\python.exe .\discord_hourly.py --init
 ```
 
-The CLI's **Setup** page also lets you set, verify, or remove the webhook without showing its value. Run `python discord_hourly.py --send` once per hour from a scheduler; an early invocation exits without posting. `--send-now` posts immediately and moves the checkpoint; the first immediate report includes the preceding hour. A successful send advances the checkpoint, so later reports cover only new activity. `--preview` renders the next embed locally without sending or advancing the checkpoint. The webhook is encrypted for the current Windows user in the selected local data directory as `discord-webhook.dpapi`; it is never written to Git or the item logs. Keep that file and `discord-hourly-state.json` together when moving a run. A different Windows account must configure its own webhook.
+The CLI's **Setup** page also lets you set, verify, or remove the webhook without showing its value. While the full farmer is running, its supervisor sends each due report itself; no Codex automation or external scheduler is needed. Reporting runs in a background thread and a network failure cannot stop fishing. `discord-reporter-status.json` records whether the reporter is waiting, sent, or retrying. `--send-now` posts immediately and moves the checkpoint; the first immediate report includes the preceding hour. A successful send advances the checkpoint, so later reports cover only new activity. `--preview` renders the next embed locally without sending or advancing the checkpoint. The webhook is encrypted for the current Windows user in the selected local data directory as `discord-webhook.dpapi`; it is never written to Git or the item logs. Keep that file and `discord-hourly-state.json` together when moving a run. A different Windows account must configure its own webhook.
 
 | File or folder | Contents |
 | --- | --- |
