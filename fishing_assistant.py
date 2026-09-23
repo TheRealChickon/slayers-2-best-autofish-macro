@@ -20,6 +20,11 @@ ROOT = Path(__file__).resolve().parent
 USER = ctypes.windll.user32
 USER.SetProcessDPIAware()
 
+# Normal hooks arrive within about seven seconds in the observed sessions.
+# Two misses still tolerate a transient slow cast before restoring the spawn.
+BITE_WAIT_TIMEOUT_SECONDS = 15
+MISSED_CASTS_BEFORE_REJOIN = 2
+
 def move_pointer(x,y):
     # Both monitors are valid; coordinates are absolute virtual-desktop pixels.
     monitors=[entry[2] for entry in win32api.EnumDisplayMonitors()]
@@ -317,9 +322,11 @@ def main():
                         if now-since>.65:
                             inp.guard_press(True);move_pointer(*screen.point(*load_config()['cast_point']));stage='casting';since=now
                     elif stage=='waiting':
-                        if now-since>30:
+                        if now-since>BITE_WAIT_TIMEOUT_SECONDS:
                             missing_casts+=1;event('no_minigame',count=missing_casts);screenshot('missing')
-                            if missing_casts>=3:raise RuntimeError('Three casts without a recognized minigame')
+                            if missing_casts>=MISSED_CASTS_BEFORE_REJOIN:
+                                raise FishingFault('no_minigame','Two casts without a recognized minigame',
+                                    missed_casts=missing_casts,wait_seconds=BITE_WAIT_TIMEOUT_SECONDS)
                             stage='pickup_wait';since=now
                     elif stage=='pickup_wait':
                         if now-since>.4 and now-last_pickup_scan>.35:

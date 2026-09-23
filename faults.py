@@ -17,7 +17,7 @@ def reason_code(reason):
     for word, code in (('stopped by', 'manual_stop'), ('session_limit', 'session_limit'),
                        ('lost focus', 'focus'), ('pointer is outside', 'focus'), ('pointer did not reach', 'focus'), ('moved or resized', 'window'), ('window changed', 'window'),
                        ('disconnect', 'disconnect'), ('presence', 'disconnect'), ('non-fishing', 'pickup_other'),
-                       ('pickup prompt', 'pickup_timeout'), ('three casts', 'no_minigame'),
+                       ('pickup prompt', 'pickup_timeout'), ('casts without a recognized minigame', 'no_minigame'),
                        ('marker detection', 'tracking_lost'), ('alignment', 'alignment')):
         if word in text: return code
     return 'unexpected'
