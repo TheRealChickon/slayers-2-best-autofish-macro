@@ -26,10 +26,12 @@ try:
                 recovery_events.append(r)
 except OSError:pass
 result={'checked_at':now,'supervisor':supervisor,'worker':worker,'stop_requested':(RUN/'STOP').exists(),'supervisor_alive':psutil.pid_exists(supervisor.get('pid',0)),'worker_alive':psutil.pid_exists(worker.get('pid',0)),'recent_5min':{'minigames_started':sum(r.get('event')=='minigame' for r in events),'completed_100_percent':sum(r.get('event')=='minigame_ended' and r.get('percent')==100 for r in events),'failed_rounds':sum(r.get('event')=='minigame_ended' and r.get('percent') not in (None,100) for r in events),'reward_banners':sum(r.get('event')=='reward_observed' and is_reward_banner(r.get('text','')) for r in events),'errors':[r for r in events if r.get('event')=='stopped']}}
-result['recent_90min']={'no_minigame_recoveries':len(recovery_events)}
+current_recoveries=[r for r in recovery_events if r.get('at',0)>=supervisor.get('started',0)]
+result['recent_90min']={'no_minigame_recoveries':len(recovery_events),
+                         'current_supervisor_no_minigame_recoveries':len(current_recoveries)}
 issues=[]
-if len(recovery_events)>=2:
-    issues.append(f'{len(recovery_events)} no-minigame recovery decisions in 90 minutes; inspect saved fishing position and water-edge screenshots')
+if len(current_recoveries)>=2:
+    issues.append(f'{len(current_recoveries)} no-minigame recovery decisions in the current supervisor; inspect saved fishing position and water-edge screenshots')
 result['pause_requested']=(RUN/'PAUSE').exists() or (RUN/'F8_PAUSE').exists() or bool(supervisor.get('manual_paused'))
 result['focus_paused']=supervisor.get('stage')=='paused_focus' or (worker.get('running') and worker.get('stage')=='paused_focus')
 if not result['stop_requested'] and not result['pause_requested']:
