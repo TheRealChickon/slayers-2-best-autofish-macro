@@ -16,6 +16,7 @@ from faults import FaultRecorder, FishingFault, RecoveryPolicy, reason_code
 from performance import PerformanceRecorder
 from metrics import read as read_metrics
 import landmarks
+from title_manager import TitleManager
 from discord_service import DiscordReporter
 from full_pause import InputGate, InputPaused, F8Toggle, PAUSE_FILE
 
@@ -40,6 +41,7 @@ class Recovery:
         self.inp.gate=InputGate(self.inp,RUN,USER);self.inp.gate.start()
         self.stop=RUN/'STOP';self.log=RUN/'recovery.jsonl';self.last_action='';self.last_action_at=0;self.restarts=0;self.progress=lambda **kw:None
         self.diagnostics=FaultRecorder(RUN,'recovery-'+time.strftime('%Y%m%d-%H%M%S'))
+        self.last_screen_kind=''
     def event(self,event,**kw):
         row={'at':time.time(),'event':event,**kw}
         with self.log.open('a') as f:f.write(json.dumps(row)+'\n')
@@ -95,6 +97,16 @@ class Recovery:
         USER.keybd_event(ord(k.upper()),scan,0,0)
         try:self.sleep(seconds)
         finally:USER.keybd_event(ord(k.upper()),scan,2,0)
+    def release_camera_lock(self):
+        """Leave Roblox first person before moving the menu pointer."""
+        self.inp.gate.acknowledge()
+        self.key('M');self.sleep(.35)  # game menu -> world
+        for _ in range(16):
+            self.guard();USER.mouse_event(0x0800,0,0,-120,0);self.sleep(.035)
+        self.sleep(.4)
+        self.key('M');self.sleep(.45)  # world -> game menu
+        self.move(350,980)
+        self.event('camera_cursor_released')
     def capture(self,tag=None):
         self.guard();im=self.screen.capture(self.sct)
         if tag:
@@ -208,8 +220,9 @@ class Recovery:
             elif 'purchase' in text and len(cancel)==1:kind='vendor_dialog';target=cancel[0]['center']
             elif confirm_menu_button_visible(im) or 'go back to the main menu' in text:
                 kind='confirm_menu';target=(1208,797)
-            elif 'back to main menu' in text:
-                kind='game_menu';target=next(r['center'] for r in rows if 'back to main menu' in r['text'].lower())
+            elif any('backtomainmenu' in re.sub(r'[^a-z]','',r['text'].lower()) for r in rows):
+                kind='game_menu';target=next(r['center'] for r in rows
+                    if 'backtomainmenu' in re.sub(r'[^a-z]','',r['text'].lower()))
             elif ('privateserver' in re.sub(r'[^a-z]','',text) and 'join' in text):
                 kind='private_join'
                 # Full-screen downsampling can turn JOIN into J0IN. Read the
@@ -222,6 +235,7 @@ class Recovery:
             elif self.world_visible(im) and ('mistfall' in text.replace(' ','') or re.search(r'lv\.?\s*\d+',text)):
                 kind='world'
             else:kind='loading'
+            self.last_screen_kind=kind
             pacer.observe(kind,target,now)
             if kind!=last_class:self.event('screen',kind=kind);last_class=kind
             if kind=='disconnect' and pacer.ready(kind,now):
@@ -277,6 +291,8 @@ def main():
         write_metrics('bait.json',{'starting_stock':a.bait_stock if a.bait_stock>=0 else None,'bait_per_hook':1,'note':'One bait per hook. Fishing continues without bait.'})
     driver=Recovery();deadline=time.monotonic()+a.seconds if a.seconds>0 else float('inf');recoveries=0;last_error='';child=None;exit_code=0;started=time.time()
     policy=RecoveryPolicy();performance=PerformanceRecorder(read_metrics('totals.json').get('started'))
+    titles_checked=False
+    camera_unlock_attempts=0
     # Temporary: restored when this process exits. No persistent Windows setting is changed.
     ctypes.windll.kernel32.SetThreadExecutionState(0x80000003)
     def paused_changed(paused):
@@ -309,9 +325,34 @@ def main():
             status('recovering')
             try:
                 driver.recover(force_menu=force)
+                target_heading=load_config()['camera_heading']
+                if target_heading is not None and landmarks.profile() is None:
+                    landmarks.restore_heading(driver,target_heading)
+                    actual_heading=landmarks.heading(driver,driver.capture())
+                    difference=(actual_heading-target_heading+180)%360-180 if actual_heading is not None else 360
+                    if abs(difference)>8:
+                        raise FishingFault('alignment','Saved fishing heading could not be restored',
+                            target=target_heading,actual=actual_heading)
+                    driver.event('saved_heading_ready',heading=round(actual_heading,1))
                 landmarks.align(driver)
-            except InputPaused:
-                driver.inp.release();force=False;continue
+                if load_config()['auto_fishing_titles'] and not titles_checked:
+                    try:TitleManager(driver).run()
+                    except ValueError as title_error:
+                        driver.event('fishing_titles_unreadable',reason=str(title_error))
+                    titles_checked=True
+            except InputPaused as paused:
+                driver.inp.release();driver.event('recovery_input_paused',reason=str(paused),gate=driver.inp.gate.reason())
+                if (str(paused)=='paused_focus' and driver.inp.gate.reason() is None
+                        and driver.last_screen_kind=='game_menu'):
+                    left,top,right,bottom=driver.rect
+                    cursor=win32gui.GetCursorPos()
+                    if abs(cursor[0]-(left+right)/2)<12 and abs(cursor[1]-(top+bottom)/2)<12:
+                        if camera_unlock_attempts>=2:
+                            driver.event('camera_cursor_relaunch',reason='Two zoom-out attempts left the menu cursor locked')
+                            driver.launch(restart=True);camera_unlock_attempts=0;force=False;continue
+                        camera_unlock_attempts+=1
+                        driver.release_camera_lock();force=True;continue
+                force=False;continue
             except (RecoveryError,FishingFault) as ex:
                 driver.inp.release();last_error=str(ex);driver.event('recovery_retry',reason=last_error)
                 if 'lost focus' in last_error and driver.hwnd and win32gui.IsWindow(driver.hwnd):
@@ -341,6 +382,7 @@ def main():
                     driver.sleep(60,focus=False);driver.restarts=0
                 force=False;continue
             recoveries+=1;force=True
+            camera_unlock_attempts=0
             if time.monotonic()>=deadline:break
             remaining=max(1,int(deadline-time.monotonic())) if a.seconds>0 else 0;status('fishing');worker_started=time.time()
             with open(RUN/'worker-stdout.log','a') as stdout,open(RUN/'worker-stderr.log','a') as stderr:

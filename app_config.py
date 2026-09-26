@@ -12,7 +12,19 @@ CONFIG = ROOT / 'config.local.json'
 DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             'rod_slot': 5, 'auto_rod': True, 'reduced_motion': False, 'inventory_check': True,
             'place_id': 16205713724, 'mode': 'full', 'cast_point': list(DEFAULT_CAST_POINT),
-            'spawn_backstep_seconds': 0.0}
+            'spawn_backstep_seconds': 0.0, 'camera_mode': 'keep', 'camera_heading': None,
+            'auto_fishing_titles': False}
+
+
+def validate_options(values):
+    if values['camera_mode'] not in ('keep', 'first_person'):
+        raise ValueError('Camera mode must be keep or first_person')
+    if not isinstance(values['auto_fishing_titles'], bool):
+        raise ValueError('Auto fishing titles must be on or off')
+    if values['camera_heading'] is not None:
+        heading=float(values['camera_heading'])
+        if not 0<=heading<360:raise ValueError('Camera heading must be from 0 to 359 degrees')
+        values['camera_heading']=heading
 
 
 def load_config():
@@ -28,6 +40,7 @@ def load_config():
         raise ValueError('Spawn backstep must be between 0 and 0.35 seconds')
     if values['mode'] not in MODES:
         raise ValueError('Mode must be full, assist, or spot')
+    validate_options(values)
     if values['user_id'] is not None:
         values['user_id'] = int(values['user_id'])
         if values['user_id'] <= 0:raise ValueError('User ID must be positive')
@@ -45,6 +58,7 @@ def save_config(changes):
     values.update(changes)
     if values['mode'] not in MODES:
         raise ValueError('Mode must be full, assist, or spot')
+    validate_options(values)
     if not 1 <= int(values['rod_slot']) <= 9:raise ValueError('Rod slot must be between 1 and 9')
     values['cast_point'] = validate_cast_point(values['cast_point'])
     values['spawn_backstep_seconds'] = float(values['spawn_backstep_seconds'])

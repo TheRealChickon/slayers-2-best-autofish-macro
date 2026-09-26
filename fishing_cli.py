@@ -12,6 +12,7 @@ from status_view import snapshot, duration, estimate
 from live_feed import event_tone, state_tone
 import control_actions as actions
 from app_config import MODES
+from bait_warning import warning as bait_warning
 
 COLORS = {'gold': 33, 'green': 32, 'red': 31, 'cyan': 36, 'gray': 90, 'white': 97, 'text': 97}
 
@@ -43,7 +44,7 @@ def status_lines(data, colors=False):
     recent=data.get('recent')
     rates=(f"  Recent pace     {recent['hooks_per_minute']:.2f} hooks/min · {recent['items_per_minute']:.2f} items/min"
            + f" · {recent['window_seconds']/60:.0f}m window" + ('' if recent['fresh'] else ' (saved)')) if recent else '  Recent pace     Collecting a sample'
-    return [
+    lines = [
         c('FISHING', 'gold') + '  /  ' + c(data['state'].upper(), tone) + '  /  ' + MODES.get(data.get('mode'),'Full farmer'),
         c('  '+data['reason'], 'gold') if data.get('reason') else '',
         '',
@@ -56,12 +57,15 @@ def status_lines(data, colors=False):
         rates,
         ('  Phase time      '+', '.join(f'{key.replace("_"," ")} {value:.0f}s' for key,value in recent['phase_seconds'].items())) if recent else '',
         '',
-        f"  Bait estimate   {'~' + format(remain, ',') + ' left' if remain is not None else 'Starting stock unknown'}",
+        f"  Bait            {'~' + format(remain, ',') + ' left' if remain is not None else 'Unknown'} · {data.get('bait_source','unknown')}",
         f"  Consumption     ~{data['hooks_per_hour']:.0f} bait/hour" + (f' / ~{hours:.1f} hours left' if hours is not None else ''),
         c('                  One bait per hook; fishing continues without bait.', 'gray'),
         f"  Presence        {data['presence']}",
         c(f"  Item log        {data['logged_collections']:,} collections; {data['unread_items']} items with partial/unread names", 'gray'),
     ]
+    alert=bait_warning(data) if data.get('running') or data.get('starting') else None
+    if alert:lines.append(c('  '+alert,'red'))
+    return lines
 
 
 def parser(prog='autofish'):
