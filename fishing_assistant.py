@@ -235,7 +235,9 @@ def main():
         # The toast sits beside the avatar's right shoulder. A narrow OCR pass
         # avoids the player title and waterfall that can hide its small X1 in
         # the wide prompt scan. This only confirms a reward after a held T.
-        x,y,w,h=1240,670,310,180
+        # First person moves the toast toward screen center and long names can
+        # extend well past the third-person shoulder crop.
+        x,y,w,h=(1180,670,620,180) if first_person_active else (1240,670,310,180)
         im=screen.capture(sct,(x,y,w,h))
         results,_=ocr(cv2.resize(im,None,fx=1.5,fy=1.5))
         inp.guard_press(True)
