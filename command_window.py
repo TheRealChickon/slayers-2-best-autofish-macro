@@ -292,12 +292,17 @@ class Window:
         self.mode_var=tk.StringVar(value=MODES[config['mode']])
         ttk.Combobox(mode_row,textvariable=self.mode_var,values=tuple(MODES.values()),state='readonly',width=23).pack(side='left',ipady=5)
         tk.Label(form,text='Manual modes: F8 pauses / resumes.\nLosing focus pauses automatically.',bg=BG,fg=MUTED,font=(FONT,9),justify='left').pack(anchor='w',pady=(0,8))
-        for key,label in [('account_username','Roblox username'),('rod_slot','Rod slot')]:
+        camera_row=tk.Frame(form,bg=BG);camera_row.pack(fill='x',pady=(6,12))
+        tk.Label(camera_row,text='Full farmer camera',bg=BG,fg=MUTED,font=(FONT,10),width=18,anchor='w').pack(side='left')
+        self.camera_var=tk.StringVar(value='First person' if config['camera_mode']=='first_person' else 'Keep current')
+        ttk.Combobox(camera_row,textvariable=self.camera_var,values=('Keep current','First person'),state='readonly',width=23).pack(side='left',ipady=5)
+        tk.Label(form,text='First person zooms in after joining; save a clear water cast point.',bg=BG,fg=MUTED,font=(FONT,9),justify='left').pack(anchor='w',pady=(0,8))
+        for key,label in [('account_username','Roblox username'),('rod_slot','Rod slot'),('camera_heading','Fishing heading')]:
             row=tk.Frame(form,bg=BG);row.pack(fill='x',pady=(6,12))
             tk.Label(row,text=label,bg=BG,fg=MUTED,font=(FONT,10),width=18,anchor='w').pack(side='left')
-            var=tk.StringVar(value=str(config[key]));self.setting_vars[key]=var
+            var=tk.StringVar(value=str(config[key]) if config[key] is not None else 'Off');self.setting_vars[key]=var
             tk.Entry(row,textvariable=var,bg=PANEL,fg=TEXT,insertbackground=GOLD,relief='flat',highlightthickness=0,font=(FONT,11),width=25).pack(side='left',ipady=7)
-        for key,label in [('auto_rod','Auto equip rod'),('inventory_check','Identify unknown drops'),('reduced_motion','Reduce motion')]:
+        for key,label in [('auto_rod','Auto equip rod'),('auto_fishing_titles','Choose best owned fishing titles'),('inventory_check','Identify unknown drops'),('reduced_motion','Reduce motion')]:
             var=tk.BooleanVar(value=config[key]);self.setting_vars[key]=var
             tk.Checkbutton(options,text=label,variable=var,bg=BG,fg=TEXT,selectcolor=PANEL,activebackground=BG,activeforeground=TEXT,highlightthickness=0,borderwidth=0,font=(FONT,11)).pack(anchor='w',pady=7)
         self.button(form,'Save',self.save_settings,TEXT,PANEL).pack(anchor='w',pady=(16,8))
@@ -320,7 +325,10 @@ class Window:
             if mode!=load_config().get('mode','full') and (actions.alive() or actions.starting()):
                 raise ValueError('Pause before switching modes.')
             account=resolve_account(values['account_username'])
-            save_config(dict(account,rod_slot=int(values['rod_slot']),auto_rod=values['auto_rod'],reduced_motion=values['reduced_motion'],inventory_check=values['inventory_check'],mode=mode))
+            heading=None if values['camera_heading'].strip().lower() in ('off','none','') else float(values['camera_heading'])
+            save_config(dict(account,rod_slot=int(values['rod_slot']),auto_rod=values['auto_rod'],
+                auto_fishing_titles=values['auto_fishing_titles'],camera_mode='first_person' if self.camera_var.get()=='First person' else 'keep',camera_heading=heading,
+                reduced_motion=values['reduced_motion'],inventory_check=values['inventory_check'],mode=mode))
             return 'Settings saved'
         self.run_action(save)
 

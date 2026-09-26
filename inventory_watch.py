@@ -204,6 +204,37 @@ class InventoryScanner:
             readings.append(int(match[1]) if match and int(match[1])>0 else None)
         return readings[0] if readings[0] is not None and readings[0]==readings[1] else None
 
+    def read_equipped_bait(self):
+        """Read only the Fishing category's equipped bait badge, never the full inventory."""
+        d=self.driver
+        previous_deadline=d.deadline
+        d.deadline=time.monotonic()+10
+        try:
+            self.open()
+            d.click(810,577)
+            frame=d.capture()
+            selected=frame[548:606,725:892]
+            if np.mean(np.all(selected>180,axis=2))<.25:
+                raise ValueError('Fishing inventory filter was not selected')
+            # Up to ten Fishing items fit on the first row. The equipped bait
+            # has a Bait chip; a generic fish icon or quantity is insufficient.
+            for index in range(10):
+                x=round(GRID_X+index*STEP)
+                tile=frame[GRID_Y:GRID_Y+90,x:x+90]
+                if tile.shape!=(90,90,3):break
+                rows=d.text(cv2.resize(tile,None,fx=3,fy=3),min_confidence=.60)
+                labels=' '.join(row[1] for row in rows)
+                if not re.search(r'\bbait\b',labels,re.I):continue
+                amounts=[int(match.group(1)) for row in rows
+                         for match in [re.fullmatch(r'[xX]\s*(\d{1,6})',row[1].strip())]
+                         if match and row[2]>=.80]
+                if len(amounts)!=1:raise ValueError('Equipped bait quantity is unreadable')
+                return amounts[0]
+            return 0
+        finally:
+            d.deadline=previous_deadline
+            self.close()
+
     def scan(self,max_seconds=SCAN_BUDGET):
         d=self.driver
         previous_deadline=d.deadline
