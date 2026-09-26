@@ -4,7 +4,7 @@ from ctypes import wintypes
 from pathlib import Path
 import cv2, mss, numpy as np, psutil, win32gui, win32process, win32api
 from rapidocr_onnxruntime import RapidOCR
-from metrics import Ledger, write as write_metrics, RUN
+from metrics import Ledger, read as read_metrics, write as write_metrics, RUN
 from app_config import load_config
 from rod_detector import locate_rod, unselected_rod
 from fishing_vision import detect, ui_visible
@@ -92,6 +92,16 @@ class Input:
                 USER.keybd_event(ord('T'),scan,0 if down else 2,0); self.t=down
     def release(self): self.hold(False); self.grab(False)
 
+    def zoom_first_person(self):
+        """Use Roblox's zoom limit, with the same focus and pause guard as casts."""
+        self.release()
+        for _ in range(16):
+            self.guard_press(True)
+            if (RUN/'STOP').exists():raise RuntimeError('Stopped by stop file')
+            USER.mouse_event(0x0800,0,0,120,0)
+            time.sleep(.035)
+        self.cast_target=None
+
     def aim(self,x,y,after_menu=False):
         self.cast_target=None
         # Roblox can process its hotbar hover one frame behind the OS cursor.
@@ -154,10 +164,13 @@ def main():
     ocr=RapidOCR()
     exit_template=cv2.imread(str(ROOT/'assets'/'exit.png'))
     inp=Input(hwnd);started=time.monotonic();now=started;stage='casting';since=now;lastseen=now;ledger=Ledger();last_gui_scan=0;last_tracking_cast=None;last_game_activity=time.time()
-    inp.gate=InputGate(inp,RUN,USER,pointer=True);inp.gate.start()
+    # Roblox captures and recenters the cursor in first person. The foreground
+    # window remains the reliable guard there; a pointer hit test can flicker
+    # outside for a frame and livelock the worker before its first cast.
+    inp.gate=InputGate(inp,RUN,USER,pointer=load_config()['camera_mode']!='first_person');inp.gate.start()
     prev=None;velocity=0.;target_velocity=0.;cycles=0;casts=0;missing_casts=0;track_frames=0;inside_frames=0;laststate=0;lastimage=0;last_rod_check=0
     motion=ReelMotion()
-    completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
+    completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_toast_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
     cooldown_delay=1.0
     last_reference_check=0;reference_matcher=None;paused_at=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
@@ -261,6 +274,27 @@ def main():
                     if needs_inventory_start:
                         needs_inventory_start=False;inventory_open=True
                         inventory.start();inventory_open=False;now=time.monotonic();since=now
+                        supervisor_started=read_metrics('supervisor.json').get('started')
+                        observation=read_metrics('bait-observation.json')
+                        if not observation or observation.get('supervisor_started')!=supervisor_started:
+                            try:
+                                inventory_open=True
+                                bait_count=inventory.scanner.read_equipped_bait()
+                                inventory_open=False
+                                if not isinstance(bait_count,int) or bait_count<0:
+                                    raise ValueError('Equipped bait count is not readable')
+                                base_rounds=ledger.base.get('rounds',0)
+                                if not isinstance(base_rounds,int):
+                                    base_rounds=read_metrics('totals.json').get('rounds',0)
+                                if not isinstance(base_rounds,int):base_rounds=0
+                                write_metrics('bait-observation.json',{'at':time.time(),'count':bait_count,
+                                    'hooks':base_rounds+cycles,'supervisor_started':supervisor_started})
+                                event('bait_read',count=bait_count)
+                            except ValueError as error:
+                                event('bait_unreadable',message=str(error))
+                        if load_config()['camera_mode']=='first_person':
+                            inp.zoom_first_person();event('camera_zoom',mode='first_person');screenshot('camera-first-person')
+                            now=time.monotonic();since=now;cast_needs_settle=True
                     if (RUN/'RECOVER').exists():
                         (RUN/'RECOVER').unlink();raise RuntimeError('Roblox presence requested reconnect after stalled activity')
                     if any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):raise RuntimeError('Stopped by Escape/F9/F12')
@@ -313,7 +347,7 @@ def main():
                             if consecutive_failed>=5:raise RuntimeError('Five consecutive failed rounds; stopped for review')
                         elif now-lastseen>5:raise RuntimeError('Fishing UI visible but marker detection missing for five seconds')
                     elif stage=='casting':
-                        if now-last_rod_check>4 and load_config()['auto_rod']:
+                        if now-last_rod_check>12 and load_config()['auto_rod']:
                             frame=screen.capture(sct)
                             rod=locate_rod(frame);last_rod_check=now
                             if unselected_rod(rod):
@@ -341,13 +375,13 @@ def main():
                                     missed_casts=missing_casts,wait_seconds=BITE_WAIT_TIMEOUT_SECONDS)
                             stage='pickup_wait';since=now
                     elif stage=='pickup_wait':
-                        if now-since>.4 and now-last_pickup_scan>.35:
+                        if now-since>.2 and now-last_pickup_scan>.2:
                             evidence,stable=pickup_text();last_pickup_scan=time.monotonic();prompt_seen=evidence.kind=='collect' and stable
                             if evidence.kind=='reward' and stable:
                                 record_reward(evidence.text);screenshot('collected');start_cooldown(.45)
                             elif prompt_seen:
                                 last_prompt=evidence.text
-                                inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;screenshot('pickup');event('pickup_hold',attempt=pickup_tries,prompt_seen=True,text=evidence.text)
+                                inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;last_toast_scan=0;screenshot('pickup');event('pickup_hold',attempt=pickup_tries,prompt_seen=True,text=evidence.text)
                             elif now-since>3.5 and evidence.kind=='empty' and stable:
                                 event('empty_round',cycle=cycles,message='No pickup prompt after repeated wide scans; continuing without holding T')
                                 start_cooldown(.4)
@@ -357,10 +391,19 @@ def main():
                             elif now-since>7:
                                 raise FishingFault('pickup_timeout','Pickup prompt remained ambiguous after wide scans',evidence=last_pickup_evidence)
                     elif stage=='pickup':
-                        if now-since>.3 and now-last_pickup_scan>.3:
+                        if now-since>.25 and now-last_pickup_scan>.25:
                             evidence,stable=pickup_text();last_pickup_scan=time.monotonic()
-                            if now-since>1.8 and evidence.kind=='reward' and stable:
-                                record_reward(evidence.text);screenshot('collected');start_cooldown(.45);continue
+                            if now-since>1.35 and evidence.kind=='reward' and stable:
+                                record_reward(evidence.text);screenshot('collected');start_cooldown(.25);continue
+                        # Confirm the small toast twice while T is held. This
+                        # avoids waiting four seconds when wide OCR misses X1.
+                        if now-since>1.55 and now-last_toast_scan>.45:
+                            last_toast_scan=time.monotonic()
+                            first=pickup_toast()
+                            if first.kind=='reward':
+                                time.sleep(.08);second=pickup_toast()
+                                if same_reward(first,second):
+                                    record_reward(second.text);screenshot('collected');start_cooldown(.25);continue
                         if now-since>4.0:
                             inp.grab(False);evidence,stable=pickup_text()
                             # A banner can appear just as the T hold ends. Confirm
@@ -383,7 +426,7 @@ def main():
                             else:
                                 if evidence.kind=='reward' and stable:record_reward(evidence.text)
                                 elif prompt_seen:inventory.observe_unconfirmed(last_prompt,f'{session}:{cycles}:inventory')
-                                start_cooldown(.45 if evidence.kind=='reward' and stable else 1.0)
+                                start_cooldown(.25 if evidence.kind=='reward' and stable else 1.0)
                                 event('pickup_attempted',cycle=cycles,attempts=pickup_tries)
                             since=time.monotonic()
                     elif stage=='pickup_retry_wait':

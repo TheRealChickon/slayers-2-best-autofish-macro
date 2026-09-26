@@ -17,6 +17,7 @@ from item_journal import Journal
 from live_feed import LiveFeed, event_tone, state_tone
 from metrics import read, write
 from status_view import duration, estimate, snapshot
+from bait_warning import warning as bait_warning
 
 ESC = '\033['
 RESET = ESC + '0m'
@@ -50,10 +51,23 @@ class Terminal:
         'spot': ('cyan', 'You pick the spot  ·  bot casts + collects'),
         'full': ('gold', 'Saved spawn  ·  bot rejoins + fishes'),
     }
-    settings_keys = ('Username', 'Rod slot', 'Auto rod', 'Motion', 'Bait left',
-                     'Plan hours', 'Mode', 'Cast point', 'Capture pointer',
-                     'Position correction', 'Save reference', 'Disable reference',
-                     'Discord webhook', 'Test webhook', 'Remove webhook')
+    settings_keys = ('Username', 'Mode', 'Rod slot', 'Auto rod', 'Camera', 'Heading',
+                     'Fishing titles', 'Cast point', 'Capture pointer',
+                     'Position correction', 'Save reference', 'Disable reference', 'Motion')
+    setting_help = {
+        'Username':'Roblox account for presence and reconnect checks.',
+        'Mode':'Full rejoins; Fish here stays at your spot; Minigame only reels.',
+        'Rod slot':'Hotbar number of your fishing rod (1–9).',
+        'Auto rod':'Full farmer checks the hotbar and equips an unselected rod.',
+        'Camera':'Keep your view, or zoom fully in. At rails, the avatar may block first person.',
+        'Heading':'Compass direction to restore after rejoining. Off disables it.',
+        'Fishing titles':'Auto best checks completed Fishing titles once at startup; unreadable sets stay put.',
+        'Cast point':'Full farmer water target in 2560×1440 reference coordinates.',
+        'Capture pointer':'In four seconds, save the current mouse position as cast point.',
+        'Position correction':'Use a saved scene reference to fix small spawn drift.',
+        'Save reference':'Capture your current fishing scene while the farmer is paused.',
+        'Disable reference':'Turn off camera and position correction.',
+        'Motion':'Reduce terminal effects and animations.'}
 
     def __init__(self):
         self.journal, self.feed = Journal(), LiveFeed()
@@ -125,6 +139,9 @@ class Terminal:
                     save_config(resolve_account(value)); return 'Account saved'
                 self.job(account)
             elif key == 'Rod slot': save_config({'rod_slot': int(value)})
+            elif key == 'Heading':
+                save_config({'camera_heading':None if value.lower() in ('off','none','') else float(value)})
+                self.toast('Saved fishing heading')
             elif key == 'Cast point':
                 save_config({'cast_point': validate_cast_point(value)})
                 self.toast('Full farmer cast point saved')
@@ -195,11 +212,15 @@ class Terminal:
                 modes=list(MODES)
                 save_config({'mode':modes[(modes.index(self.config['mode'])+1)%len(modes)]})
                 self.config=load_config();return
-            if key in ('Auto rod', 'Motion'):
-                option = 'auto_rod' if key == 'Auto rod' else 'reduced_motion'
+            if key in ('Auto rod', 'Motion', 'Fishing titles'):
+                option = {'Auto rod':'auto_rod','Motion':'reduced_motion','Fishing titles':'auto_fishing_titles'}[key]
                 save_config({option: not self.config[option]}); self.config = load_config()
+            elif key=='Camera':
+                save_config({'camera_mode':'first_person' if self.config['camera_mode']=='keep' else 'keep'})
+                self.config=load_config()
             else:
                 value = {'Username': self.config['account_username'], 'Rod slot': self.config['rod_slot'],
+                         'Heading':self.config['camera_heading'] if self.config['camera_heading'] is not None else 'Off',
                          'Bait left': self.data.get('bait_remaining_estimate') or 0,
                          'Plan hours': self.hours,
                          'Cast point': ', '.join(map(str, self.config['cast_point']))}[key]
@@ -247,8 +268,10 @@ class Terminal:
             rows = [tint(f"{d['items']:,} items", 'gold') + f"       {d['hooks']:,} hooks       {duration(d['active_seconds'])}", '',
                     f"{d['server_rejoins']} rejoins     {d['game_launches']} game launches     {d['failed_rounds']} failed rounds",
                     tint('Last catch  ', 'dim') + (d['last_item'] or '—'), '',
-                    f"Bait ~{d['bait_remaining_estimate']:,}" if d['bait_remaining_estimate'] is not None else 'Bait —',
+                    f"Bait ~{d['bait_remaining_estimate']:,}  ·  {d.get('bait_source','unknown')}" if d['bait_remaining_estimate'] is not None else 'Bait —',
                     tint(f"~{d['hooks_per_hour']:.0f} / hour   •   {self.hours:g}h plan: " + (f'~{amount:,} bait' if amount is not None else 'collecting a sample'), 'dim'), '']
+            alert=bait_warning(d) if d.get('running') or d.get('starting') else None
+            if alert:rows += [tint(alert,'red'),'']
             recent=d.get('recent')
             if recent:
                 rows[4:4]=[tint(f"{recent['hooks_per_minute']:.2f} hooks/min   {recent['items_per_minute']:.2f} items/min   {recent['recovery_seconds']:.0f}s recovery / {recent['window_seconds']/60:.0f}m",'cyan')]
@@ -286,17 +309,19 @@ class Terminal:
                        tint(r['text'],event_tone(r))
                        for r in rows[self.scroll:self.scroll+visible]]
             return result
-        settings = [('Username', self.config['account_username'] or 'Not set'), ('Rod slot', self.config['rod_slot']),
-                    ('Auto equip rod', 'On' if self.config['auto_rod'] else 'Off'), ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On'),
-                    ('Bait left', d['bait_remaining_estimate'] if d['bait_remaining_estimate'] is not None else 'Unknown'), ('Plan hours', f'{self.hours:g}'),
-                    ('Mode',MODES[self.config['mode']]),
+        settings = [('Username', self.config['account_username'] or 'Not set'),
+                    ('Mode',MODES[self.config['mode']]), ('Rod slot', self.config['rod_slot']),
+                    ('Auto equip rod', 'On' if self.config['auto_rod'] else 'Off'),
+                    ('Camera', 'First person' if self.config['camera_mode']=='first_person' else 'Keep current'),
+                    ('Heading', f"{self.config['camera_heading']:g}°" if self.config['camera_heading'] is not None else 'Off'),
+                    ('Fishing titles', 'Auto best' if self.config['auto_fishing_titles'] else 'Keep equipped'),
                     ('Cast point', f"{self.config['cast_point'][0]}, {self.config['cast_point'][1]}  ·  Full farmer"),
                     ('Capture pointer', 'Reads Roblox pointer in 4 seconds'),
                     ('Position correction','On' if self.reference_position else 'Off'),
                     ('Save fishing reference','Enter while paused'),('Disable reference','Enter while paused'),
-                    ('Discord webhook','Configured' if (data_directory()/'discord-webhook.dpapi').exists() else 'Not set'),
-                    ('Test webhook','Check connection · no post'),('Remove webhook','Delete local webhook')]
-        return [tint(f"{'›' if i == self.selection else ' '}  {label:<23} {value}", 'selected' if i==self.selection else 'text') for i,(label,value) in enumerate(settings)]
+                    ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On')]
+        rows=[tint(f"{'›' if i == self.selection else ' '}  {label:<23} {value}", 'selected' if i==self.selection else 'text') for i,(label,value) in enumerate(settings)]
+        return rows+['',tint(self.setting_help[self.settings_keys[self.selection]],'dim')]
 
     def render(self, width, height):
         self.height = height
