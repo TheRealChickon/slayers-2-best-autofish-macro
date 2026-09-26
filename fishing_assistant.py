@@ -102,6 +102,16 @@ class Input:
             time.sleep(.035)
         self.cast_target=None
 
+    def zoom_out(self,ticks=8):
+        """Back away from an obstructed first-person view without moving the character."""
+        self.release()
+        for _ in range(ticks):
+            self.guard_press(True)
+            if (RUN/'STOP').exists():raise RuntimeError('Stopped by stop file')
+            USER.mouse_event(0x0800,0,0,-120,0)
+            time.sleep(.035)
+        self.cast_target=None
+
     def aim(self,x,y,after_menu=False):
         self.cast_target=None
         # Roblox can process its hotbar hover one frame behind the OS cursor.
@@ -169,6 +179,7 @@ def main():
     # outside for a frame and livelock the worker before its first cast.
     inp.gate=InputGate(inp,RUN,USER,pointer=load_config()['camera_mode']!='first_person');inp.gate.start()
     prev=None;velocity=0.;target_velocity=0.;cycles=0;casts=0;missing_casts=0;track_frames=0;inside_frames=0;laststate=0;lastimage=0;last_rod_check=0
+    first_person_active=False
     motion=ReelMotion()
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_toast_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
     cooldown_delay=1.0
@@ -294,6 +305,7 @@ def main():
                                 event('bait_unreadable',message=str(error))
                         if load_config()['camera_mode']=='first_person':
                             inp.zoom_first_person();event('camera_zoom',mode='first_person');screenshot('camera-first-person')
+                            first_person_active=True
                             now=time.monotonic();since=now;cast_needs_settle=True
                     if (RUN/'RECOVER').exists():
                         (RUN/'RECOVER').unlink();raise RuntimeError('Roblox presence requested reconnect after stalled activity')
@@ -360,7 +372,9 @@ def main():
                         # OCR and rod detection can delay this iteration substantially.
                         if not inp.mouse:
                             inventory.begin_round()
-                            inp.aim_cast(*screen.point(*load_config()['cast_point']),after_menu=cast_needs_settle);cast_needs_settle=False
+                            if not first_person_active:
+                                inp.aim_cast(*screen.point(*load_config()['cast_point']),after_menu=cast_needs_settle)
+                            cast_needs_settle=False
                             inp.hold(True);cast_press_started=time.monotonic()
                         elif cast_press_started is not None and time.monotonic()-cast_press_started>=.16:
                             inp.hold(False);cast_press_started=None;casts+=1;event('cast',cast=casts);stage='waiting';since=time.monotonic()
@@ -370,6 +384,11 @@ def main():
                     elif stage=='waiting':
                         if now-since>BITE_WAIT_TIMEOUT_SECONDS:
                             missing_casts+=1;event('no_minigame',count=missing_casts);screenshot('missing')
+                            if first_person_active:
+                                inp.zoom_out();first_person_active=False;missing_casts=0
+                                cast_needs_settle=True;stage='casting';since=time.monotonic()
+                                event('camera_fallback',reason='No minigame from the first-person cast')
+                                continue
                             if missing_casts>=MISSED_CASTS_BEFORE_REJOIN:
                                 raise FishingFault('no_minigame','Three casts without a recognized minigame',
                                     missed_casts=missing_casts,wait_seconds=BITE_WAIT_TIMEOUT_SECONDS)
