@@ -1,6 +1,7 @@
 """Read the game's combo indicator and the C skill's cooldown overlay."""
 
 import re
+from pathlib import Path
 
 import cv2
 
@@ -9,6 +10,8 @@ import cv2
 # sits at the left of the ornamental ring, so the ring is excluded from OCR.
 COMBO_BOX = (490, 680, 160, 120)
 C_ICON_BOX = (1205, 1280, 45, 45)
+B_ICON_BOX = (1315, 1280, 45, 45)
+B_READY_REFERENCE = cv2.imread(str(Path(__file__).resolve().parent/'assets'/'b-ready.png'), cv2.IMREAD_GRAYSCALE)
 
 
 def hotbar_visible(frame):
@@ -51,16 +54,17 @@ def combo_count(frame, ocr):
     return max(numbers, default=None)
 
 
-def c_icon(frame):
-    return cv2.cvtColor(crop(frame, C_ICON_BOX), cv2.COLOR_BGR2GRAY)
+def c_icon(frame, box=C_ICON_BOX):
+    return cv2.cvtColor(crop(frame, box), cv2.COLOR_BGR2GRAY)
 
 
 class SkillReady:
-    def __init__(self):
-        self.reference = None
+    def __init__(self, box=C_ICON_BOX, reference=None):
+        self.reference = reference.copy() if reference is not None else None
+        self.box = box
 
     def observe(self, frame):
-        icon = c_icon(frame)
+        icon = c_icon(frame, self.box)
         if icon.shape != (45, 45):
             return False
         bright = float((icon > 180).mean())

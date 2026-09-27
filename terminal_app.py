@@ -51,7 +51,7 @@ class Terminal:
         'assist': ('green', 'you cast / auto reel'),
         'spot': ('cyan', 'cast / reel / collect'),
         'full': ('gold', 'spawn / rejoin'),
-        'damage': ('ore', 'C / five M1 / combo guard'),
+        'damage': ('ore', '5 M1 / two moves / ready ultimate'),
     }
     settings_keys = ('Username', 'Mode', 'Rod slot', 'Auto rod', 'Camera', 'Heading',
                      'Fishing titles', 'Cast point', 'Capture pointer',
@@ -290,10 +290,11 @@ class Terminal:
                         tint('COMBO', 'dim')+f"  {damage.get('combo') or '—'}    "+
                         tint('HITS', 'dim')+f"  {damage.get('observed_hits', 0):,}",
                         tint('M1', 'dim')+f"  {damage.get('m1_clicks', 0):,}    "+
-                        tint('C', 'dim')+f"  {damage.get('c_casts', 0):,}    "+
+                        tint('FIRST / FIFTH', 'dim')+f"  {damage.get('first_m1_damage') or '—'} / {damage.get('fifth_m1_damage') or '—'}",
+                        tint('TITLE', 'dim')+f"  {damage.get('title_progress', 0):,} / {damage.get('title_target', 0):,}    "+
                         tint('RESETS', 'dim')+f"  {damage.get('resets', 0)}",
-                        tint('PACE', 'dim')+f"  {damage.get('estimated_dps') or '—'} est. damage/s    "+
-                        tint('5M', 'dim')+f"  {damage.get('five_million_hours') or '—'}h", '']
+                        tint('PACE', 'dim')+f"  {damage.get('estimated_dps') or '—'} observed damage/s    "+
+                        tint('ETA', 'dim')+f"  {damage.get('eta_hours') if damage.get('eta_hours') is not None else '—'}h", '']
                 rows += [tint('› ' if self.selection == i else '  ', 'selected')+
                          tint(MODES[mode]+'  /  '+self.mode_details[mode][1], 'gold' if self.selection==i else 'dim')
                          for i,mode in enumerate(self.run_modes)]

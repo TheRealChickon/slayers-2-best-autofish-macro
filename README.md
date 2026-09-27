@@ -27,7 +27,7 @@ autofish status
 autofish pause
 autofish continue
 autofish continue --mode full --until 22:00  # Stop at 22:00 local time today
-autofish damage        # Stationary statue: C, then five M1s
+autofish damage        # Measured statue damage with configured rotation
 autofish stop
 autofish logs --activity --follow
 autofish wiki             # Open your local item wiki, if captured
@@ -114,7 +114,7 @@ If you move the installation folder, run `Setup.cmd` again to refresh the shortc
 | **Full farmer** (`full`) | Saved spawn and initial setup | Rod, casts, minigame, collection, inventory checks, local repairs and reconnects |
 | **Minigame only** (`assist`) | Spot, rod, casts and pickups | Minigame mouse hold/release |
 | **Fish here** (`spot`) | Spot, camera, mouse and rod; F8 starts | Click, reel, collect, repeat |
-| **Statue damage** (`damage`) | Saved spawn inside statue and gauntlet in hotbar slot 1 | C when ready, five M1s, combo checks and bounded respawn attempts |
+| **Statue damage** (`damage`) | Saved spawn inside statue and gauntlet in hotbar slot 1 | Five M1s, configured moves, title-progress checks and bounded respawn attempts |
 
 ### Statue damage
 
@@ -124,11 +124,23 @@ This mode is for the stationary statue setup. It has passed offline tests but ne
 autofish damage
 ```
 
-The worker waits for Roblox to be foreground with your pointer inside it. It checks the action bar before touching slot 1, then presses C when its icon looks ready and follows with five M1 clicks. It watches combo growth. After three poor M1 strings it opens Roblox's Respawn menu, verifies the confirmation dialog, and resets to your saved spawn; repeated failures pause it for inspection. A menu, missing hotbar, lost focus, F8 pause, Stop, or an uncertain reset blocks attacks. F9/F12 stop while Roblox is foreground. It does not rejoin servers or move your character.
+The default rotation is five M1 clicks, a 0.75-second wait, Shock Wave (`C`), a 1-second wait, follow-up (`Z`), then a 1-second wait. Only when the `B` icon looks ready **and** its configured cooldown has elapsed, the worker taps `X` for 0.025 seconds and immediately holds `B` for its configured skill duration. `X` is never tapped alone. `V` is not used. Every key, move label, wait, cooldown, hold duration and progress-check interval can be changed. Only Shock Wave has been tested in-game; the other move timings and icon check require a supervised manual test.
+
+```powershell
+autofish damage --show-config
+autofish damage --key shock_wave=Q --key followup=E --key ultimate_prep=R --key ultimate=T --timing post_m1_wait=0.8 --timing ultimate_hold_seconds=2.5 --title Annihilator --target 5000000 --configure-only
+autofish damage
+```
+
+Use `--moves shock_wave,followup,ultimate` to choose moves (`--moves none` runs M1 only); X and B are always one coupled ultimate move. Use `--name shock_wave=NAME`, `--name followup=NAME`, and `--name ultimate=NAME` to change labels. Other timing fields shown by `--show-config` can be set with `--timing FIELD=SECONDS`. `--configure-only` saves settings without starting input. The title category defaults to Combat and can be changed with `--category`. The exact title detail must display one readable `current / target` damage figure; an unreadable or changed detail pauses attacks for inspection.
+
+At startup, the worker reads the configured in-game title, then measures a one-click, four-click and five-click M1 trial. The first M1 is measured directly; fifth M1 damage is the difference between the five-click and four-click trials. It samples Shock Wave and the follow-up separately, and samples the `X`+`B` special ultimate as one pair. It reopens the title every three minutes by default to update verified damage gain, observed pace and remaining time. The worker pauses if a measurement fails; it never fills gaps with fixed M1 damage or inventory-build estimates. These measurements use the visible title counter, not the separate read-only `autofish build` projections.
+
+The worker waits for Roblox to be foreground with your pointer inside it. It checks the action bar before touching slot 1 and watches combo growth. A five-hit combo gain is healthy and never triggers a reset. If two consecutive five-M1 strings have stable but insufficient combo reads, it checks the in-game title; any title increase cancels the reset. Only a still-unchanged title allows a bounded Respawn attempt after verifying Roblox's confirmation dialog. Unreadable combo or title evidence withholds reset and, if needed, pauses for inspection. A menu, missing hotbar, lost focus, F8 pause, Stop, or an uncertain reset blocks attacks. F9/F12 stop while Roblox is foreground. It does not rejoin servers, move your character, or switch to fishing after the title completes.
 
 F8 and CLI Pause/Continue keep the damage counters. CLI Stop ends that sample; the next start begins a fresh sample. The worker does not take over Roblox focus when another app is in front.
 
-`autofish status` and the terminal Run page show combo, M1/C counts, resets and a rough 5-million-damage time. Damage is estimated from observed combo growth using 70 per M1 and 38 per extra C tick; the in-game Titles progress is the source for your actual total. The first live test confirmed M1 combo growth, but C timing and the Respawn dialog still need validation.
+`autofish status` and the terminal Run page show combo, M1 counts, measured first/fifth hits, title progress, resets and an ETA derived from verified title progress. The first live test confirmed M1 combo growth; title OCR, the new move rotation and Respawn dialog still need manual validation before any unattended run.
 
 ### Fish here
 
