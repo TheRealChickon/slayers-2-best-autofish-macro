@@ -71,13 +71,14 @@
 
   function build() {
     const profile = data.profile || {}, c = damage.calibration || {};
+    const haori = damage.haori_comparison;
     const loadout = [damage.weapon,...(damage.stat_items || [])].filter(Boolean);
     const hud = profile.equipped_hud_image;
     return `<div class="build-layout"><section class="loadout"><div class="section-line"><h2>Measured loadout</h2><span>Gauntlet mastery ${esc(c.mastery || '—')}</span></div>
       <div class="gear-list">${loadout.map(gearItem).join('')}</div></section>
       <aside class="damage-readout"><div class="readout-label">M1 DAMAGE · SAME GEAR</div><div class="readout-number">${esc(c.m1 || '—')}</div><div class="readout-meta">${esc(c.damage_factor || '—')}× factor <span>·</span> +${esc(c.additional_damage || '—')} additional damage</div>
       <div class="comparison"><span>Horns II / measured</span><b>64.15</b><span>Flame Amigasa / measured</span><b>62.57</b></div></aside></div>
-      <div class="build-followup"><div><h2>Still worth testing</h2><p>Serpent Haori and Flame Haori Style 1 each show a 1.07× factor. Neither was measured as a one-item swap against Stone Haori. A displayed factor alone cannot rank their real hit damage.</p></div>
+      <div class="build-followup"><div><h2>Haori damage math</h2>${haori ? `<p>At mastery ${esc(haori.mastery)}, keep Stone Haori for M1: <b>${num(haori.measured_m1)}</b> measured. ${haori.swaps.map(swap=>`${esc(swap.name)} calculates to <b>${num(swap.projected_m1)}</b> (${num(swap.difference)} M1)`).join('; ')}.</p><p>Each swap loses +2 damage while raising the total factor from ${esc(haori.measured_factor)}× to ${esc(haori.swaps[0]?.damage_factor)}×. (${num(haori.measured_m1)} ÷ ${esc(haori.measured_factor)} − 2) × ${esc(haori.swaps[0]?.damage_factor)} = ${num(haori.swaps[0]?.projected_m1)}. Calculated from displayed stats; class effects remain unmeasured.</p>` : '<p>No saved same-slot comparison.</p>'}</div>
       <div><h2>Mastery and skills</h2><p>At mastery 202, the recording shows a 64.78 M1 hit with the same gear. Shockwave ticks shown at mastery 206 were 37.57 and 38.23; total skill damage depends on how many ticks land.</p></div></div>
       ${hud ? `<details class="capture-details"><summary>Show captured HUD</summary><img class="profile-shot" data-image="${esc(hud)}" src="${asset(hud)}" alt="Captured equipped HUD"></details>` : ''}
       <button type="button" class="text-jump" data-go="bosses">Boss fight timings →</button>`;

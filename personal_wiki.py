@@ -17,7 +17,7 @@ import cv2
 from rapidocr_onnxruntime import RapidOCR
 
 from metrics import RUN
-from damage_build import load_profile as load_damage_profile
+from damage_build import haori_comparison, load_profile as load_damage_profile
 
 
 def snapshot_root():
@@ -190,8 +190,14 @@ def markdown(data):
         lines += [f"- {name}" for name in build.get('stat_items',[])]
         lines += ['',f"Separate weapon: {build.get('weapon','unknown')}",'']
         lines += [f"- {test}" for test in build.get('tests',[])]
-        lines += ['', 'Owned but untested against Stone Haori in a same-mastery M1 swap: Serpent Haori and Flame Haori Style 1 each display a 1.07x Additional Damage Factor. Their higher displayed factor is not proof of higher actual damage.', '']
-        lines += ['', 'The 0.025 base M1 per Gauntlet mastery level is inferred from measured levels 183–186; changing gear requires another measurement.', '']
+        comparison=build.get('haori_comparison')
+        if comparison:
+            lines += ['', '## Haori swap: calculated M1 at saved mastery', '',
+                      f"Stone Haori: {comparison['measured_m1']:.2f} M1 at mastery {comparison['mastery']} (measured)."]
+            for swap in comparison['swaps']:
+                lines.append(f"{swap['name']}: about {swap['projected_m1']:.2f} M1 ({swap['difference']:+.2f} versus Stone).")
+            lines += ['', comparison['method'], comparison['limit'], '']
+        lines += ['', 'The 0.025 base M1 per Gauntlet mastery level is inferred from measured levels 183–186.', '']
         lines += [f"- {limit}" for limit in build.get('limits',[])]
         lines += ['']
     if data.get('boss_analysis'):
@@ -251,6 +257,12 @@ def build(root=None,open_site=False):
     profile=json.loads(profile_file.read_text(encoding='utf-8')) if profile_file.exists() else None
     damage_root=root.parent if root.name=='wiki-snapshot' else root
     damage_profile=load_damage_profile(damage_root)
+    if damage_profile:
+        comparison=haori_comparison(damage_profile,{r['name']:r for r in owned})
+        damage_profile['haori_comparison']=comparison
+        if comparison and profile:
+            profile['damage_assessment']=[note for note in profile.get('damage_assessment',[])
+                                          if not note.startswith('For a damage-only haori,')]
     boss_file=root/'boss-analysis.json'
     boss_analysis=json.loads(boss_file.read_text(encoding='utf-8')) if boss_file.exists() else None
     data={'captured_at':time.strftime('%Y-%m-%d %H:%M %Z'),'counts':{'inventory':len(owned),'inventory_grid':len(grid),'archive_only':len(archive_only),'archive_total':len(archive_all)},
