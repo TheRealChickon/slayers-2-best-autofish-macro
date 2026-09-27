@@ -17,12 +17,14 @@ from item_journal import Journal
 from live_feed import LiveFeed, event_tone, state_tone
 from metrics import read, write
 from status_view import duration, estimate, snapshot
+from bait_warning import warning as bait_warning
+import damage_build
 
 ESC = '\033['
 RESET = ESC + '0m'
-TONES = {'text': '234;236;226', 'dim': '128;142;137', 'gold': '232;186;64',
-         'green': '156;219;112', 'red': '226;146;135', 'cyan': '111;193;207',
-         'ore': '194;150;106', 'selected': '245;224;165'}
+TONES = {'text': '223;228;212', 'dim': '126;151;146', 'gold': '220;177;103',
+         'green': '159;202;157', 'red': '221;120;103', 'cyan': '106;187;193',
+         'ore': '186;145;107', 'selected': '255;223;158'}
 ANSI = re.compile(r'\x1b\[[0-9;]*m')
 
 
@@ -42,18 +44,31 @@ def clip(line, width):
 
 
 class Terminal:
-    pages = ('Run', 'Items', 'Live log', 'Setup')
+    pages = ('Run', 'Items', 'Live log', 'Setup', 'Build')
     categories = ('All', 'Catches', 'Recovery', 'Warnings')
     run_modes = ('assist', 'spot', 'full')
     mode_details = {
-        'assist': ('green', 'You cast + collect  ·  bot reels'),
-        'spot': ('cyan', 'You pick the spot  ·  bot casts + collects'),
-        'full': ('gold', 'Saved spawn  ·  bot rejoins + fishes'),
+        'assist': ('green', 'you cast / auto reel'),
+        'spot': ('cyan', 'cast / reel / collect'),
+        'full': ('gold', 'spawn / rejoin'),
     }
-    settings_keys = ('Username', 'Rod slot', 'Auto rod', 'Motion', 'Bait left',
-                     'Plan hours', 'Mode', 'Cast point', 'Capture pointer',
-                     'Position correction', 'Save reference', 'Disable reference',
-                     'Discord webhook', 'Test webhook', 'Remove webhook')
+    settings_keys = ('Username', 'Mode', 'Rod slot', 'Auto rod', 'Camera', 'Heading',
+                     'Fishing titles', 'Cast point', 'Capture pointer',
+                     'Position correction', 'Save reference', 'Disable reference', 'Motion')
+    setting_help = {
+        'Username':'Roblox account for presence and reconnect checks.',
+        'Mode':'Full rejoins; Fish here stays at your spot; Minigame only reels.',
+        'Rod slot':'Hotbar number of your fishing rod (1–9).',
+        'Auto rod':'Full farmer checks the hotbar and equips an unselected rod.',
+        'Camera':'Keep your view, or zoom fully in. At rails, the avatar may block first person.',
+        'Heading':'Compass direction to restore after rejoining. Off disables it.',
+        'Fishing titles':'Auto best checks completed Fishing titles once at startup; unreadable sets stay put.',
+        'Cast point':'Full farmer water target in 2560×1440 reference coordinates.',
+        'Capture pointer':'In four seconds, save the current mouse position as cast point.',
+        'Position correction':'Use a saved scene reference to fix small spawn drift.',
+        'Save reference':'Capture your current fishing scene while the farmer is paused.',
+        'Disable reference':'Turn off camera and position correction.',
+        'Motion':'Reduce terminal effects and animations.'}
 
     def __init__(self):
         self.journal, self.feed = Journal(), LiveFeed()
@@ -74,6 +89,8 @@ class Terminal:
         self.last_lines = []
         self.changed_at = time.monotonic()
         self.effects = CatchEffects()
+        self.build_report = {}
+        self.build_at = 0
         import landmark_controls
         self.reference_position=landmark_controls.status()['position_enabled']
 
@@ -86,6 +103,9 @@ class Terminal:
         self.config = load_config()
         self.effects.observe(self.journal.items, self.data['started'], time.time(), time.monotonic())
         self.feed.update(self.data['started'], self.data['state'])
+        if self.page == 4 and time.monotonic() - self.build_at >= 5:
+            self.build_report = damage_build.report()
+            self.build_at = time.monotonic()
         if self.page == 1:
             self.selection = min(self.selection, max(0, len(self.item_rows())-1))
 
@@ -111,6 +131,9 @@ class Terminal:
         self.selection = self.scroll = 0
         self.query = ''
         self.changed_at = time.monotonic()
+        if self.page == 4:
+            self.build_report = damage_build.report()
+            self.build_at = time.monotonic()
 
     def edit(self, key, value=''):
         self.editing, self.buffer = key, str(value)
@@ -125,6 +148,9 @@ class Terminal:
                     save_config(resolve_account(value)); return 'Account saved'
                 self.job(account)
             elif key == 'Rod slot': save_config({'rod_slot': int(value)})
+            elif key == 'Heading':
+                save_config({'camera_heading':None if value.lower() in ('off','none','') else float(value)})
+                self.toast('Saved fishing heading')
             elif key == 'Cast point':
                 save_config({'cast_point': validate_cast_point(value)})
                 self.toast('Full farmer cast point saved')
@@ -142,6 +168,10 @@ class Terminal:
                 from discord_hourly import configure_secret
                 configure_secret(data_directory(), value)
                 self.toast('Discord webhook saved')
+            elif key == 'Gauntlet mastery':
+                damage_build.save_mastery(value)
+                self.build_report = damage_build.report()
+                self.toast('Gauntlet mastery saved')
         except (ValueError, OSError) as error: self.toast(error, False)
 
     def activate(self):
@@ -195,11 +225,15 @@ class Terminal:
                 modes=list(MODES)
                 save_config({'mode':modes[(modes.index(self.config['mode'])+1)%len(modes)]})
                 self.config=load_config();return
-            if key in ('Auto rod', 'Motion'):
-                option = 'auto_rod' if key == 'Auto rod' else 'reduced_motion'
+            if key in ('Auto rod', 'Motion', 'Fishing titles'):
+                option = {'Auto rod':'auto_rod','Motion':'reduced_motion','Fishing titles':'auto_fishing_titles'}[key]
                 save_config({option: not self.config[option]}); self.config = load_config()
+            elif key=='Camera':
+                save_config({'camera_mode':'first_person' if self.config['camera_mode']=='keep' else 'keep'})
+                self.config=load_config()
             else:
                 value = {'Username': self.config['account_username'], 'Rod slot': self.config['rod_slot'],
+                         'Heading':self.config['camera_heading'] if self.config['camera_heading'] is not None else 'Off',
                          'Bait left': self.data.get('bait_remaining_estimate') or 0,
                          'Plan hours': self.hours,
                          'Cast point': ', '.join(map(str, self.config['cast_point']))}[key]
@@ -217,7 +251,7 @@ class Terminal:
         if key.lower() == 'q': self.alive = False
         elif key in ('RIGHT', 'TAB'): self.switch(self.page+1)
         elif key in ('LEFT', 'BACKTAB'): self.switch(self.page-1)
-        elif key in ('1', '2', '3', '4'): self.switch(int(key)-1)
+        elif key in ('1', '2', '3', '4', '5'): self.switch(int(key)-1)
         elif key == 'ENTER': self.activate()
         elif key == '/' and self.page in (1, 2): self.edit('Search', self.query)
         elif key.lower() == 'c': self.job(actions.resume)
@@ -226,6 +260,8 @@ class Terminal:
             # Stop must remain available even while another command is pending.
             try: self.toast(actions.stop())
             except Exception as error: self.toast(error, False)
+        elif self.page == 4 and key.lower() == 'm':
+            self.edit('Gauntlet mastery', self.build_report.get('mastery') or '')
         elif self.page == 2 and key.lower() == 'f': self.follow = not self.follow
         elif self.page == 2 and key.lower() == 'g': self.category = (self.category+1) % 4; self.scroll = 0
         elif key in ('UP', 'DOWN', 'PGUP', 'PGDN', 'HOME', 'END'):
@@ -236,6 +272,10 @@ class Terminal:
                 if self.follow: self.scroll = limit
                 self.follow = key == 'END'
                 self.scroll = 0 if key == 'HOME' else limit if key == 'END' else max(0, min(limit, self.scroll+step))
+            elif self.page == 4:
+                count = len(damage_build.text_lines(self.build_report))
+                limit = max(0, count-max(1, self.height-12))
+                self.scroll = 0 if key == 'HOME' else limit if key == 'END' else max(0, min(limit, self.scroll+step))
             else:
                 count = len(self.run_modes)+3 if self.page == 0 else len(self.settings_keys) if self.page == 3 else len(self.item_rows())
                 self.selection = 0 if key == 'HOME' else max(0, count-1) if key == 'END' else max(0, min(count-1, self.selection+step))
@@ -244,29 +284,35 @@ class Terminal:
         d = self.data
         if self.page == 0:
             amount = estimate(d, self.hours)
-            rows = [tint(f"{d['items']:,} items", 'gold') + f"       {d['hooks']:,} hooks       {duration(d['active_seconds'])}", '',
-                    f"{d['server_rejoins']} rejoins     {d['game_launches']} game launches     {d['failed_rounds']} failed rounds",
-                    tint('Last catch  ', 'dim') + (d['last_item'] or '—'), '',
-                    f"Bait ~{d['bait_remaining_estimate']:,}" if d['bait_remaining_estimate'] is not None else 'Bait —',
-                    tint(f"~{d['hooks_per_hour']:.0f} / hour   •   {self.hours:g}h plan: " + (f'~{amount:,} bait' if amount is not None else 'collecting a sample'), 'dim'), '']
+            rows = [tint('CATCH', 'dim') + '  ' + tint(f"{d['items']:,}", 'gold') +
+                    tint('     HOOK', 'dim') + f"  {d['hooks']:,}" +
+                    tint('     TIME', 'dim') + f"  {duration(d['active_seconds'])}",
+                    tint('LAST ', 'dim') + '  ' + (d['last_item'] or '—')]
             recent=d.get('recent')
             if recent:
-                rows[4:4]=[tint(f"{recent['hooks_per_minute']:.2f} hooks/min   {recent['items_per_minute']:.2f} items/min   {recent['recovery_seconds']:.0f}s recovery / {recent['window_seconds']/60:.0f}m",'cyan')]
+                rows.append(tint('PACE ', 'dim') + '  ' +
+                            tint(f"{recent['hooks_per_minute']:.2f} hooks/min   ·   {recent['items_per_minute']:.2f} items/min",'cyan'))
+            bait=(f"~{d['bait_remaining_estimate']:,} left" if d['bait_remaining_estimate'] is not None else 'unknown')
+            rows += [tint(f"BAIT   {bait}   /   {self.hours:g}h needs " + (f'~{amount:,}' if amount is not None else 'a rate sample'),'dim'), '']
+            alert=bait_warning(d) if d.get('running') or d.get('starting') else None
+            if alert:rows += [tint(alert,'red')]
             if d.get('reason'):rows[0:0]=[tint(d['reason'], 'gold'), '']
+            rows += [tint('CHOOSE THE HAND ON THE ROD', 'dim')]
             action_start=len(rows)
             for i, mode in enumerate(self.run_modes):
                 accent, detail = self.mode_details[mode]
                 marker = '› ' if self.selection == i else '  '
-                active = '  ● LIVE' if d['running'] and d.get('mode') == mode else ''
-                rows.append(tint(marker + MODES[mode], 'selected' if self.selection == i else accent)
-                            + tint('  /  ' + detail + active, accent if self.selection == i else 'dim'))
+                active = '  ◉' if d['running'] and d.get('mode') == mode else ''
+                rows.append(tint(marker + f'{MODES[mode]:<17}', 'selected' if self.selection == i else accent)
+                            + tint(detail + active, accent if self.selection == i else 'dim'))
             rows += [tint('› ' + label, 'selected') if self.selection == i else '  ' + label
                      for i, label in enumerate(('Pause', 'Stop', 'Export log'), start=len(self.run_modes))]
             # Keep the chosen mode/control visible in a short terminal.
             start=max(0,action_start+self.selection-available+1)
             rows=rows[start:]
-            rows += ['', tint('Recent', 'dim')]
-            rows += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+tint(r['text'],event_tone(r)) for r in self.feed.rows[-max(0, available-len(rows)):]] if available > len(rows) else []
+            if available > len(rows)+2:
+                rows += ['', tint('RECENT', 'dim')]
+                rows += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+tint(r['text'],event_tone(r)) for r in self.feed.rows[-max(0, available-len(rows)):]]
             return rows
         if self.page == 1:
             rows = self.item_rows()
@@ -286,17 +332,31 @@ class Terminal:
                        tint(r['text'],event_tone(r))
                        for r in rows[self.scroll:self.scroll+visible]]
             return result
-        settings = [('Username', self.config['account_username'] or 'Not set'), ('Rod slot', self.config['rod_slot']),
-                    ('Auto equip rod', 'On' if self.config['auto_rod'] else 'Off'), ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On'),
-                    ('Bait left', d['bait_remaining_estimate'] if d['bait_remaining_estimate'] is not None else 'Unknown'), ('Plan hours', f'{self.hours:g}'),
-                    ('Mode',MODES[self.config['mode']]),
+        if self.page == 4:
+            report = self.build_report or damage_build.report()
+            raw = damage_build.text_lines(report)
+            rows = []
+            for line in raw:
+                tone = ('gold' if line.startswith(('DAMAGE', 'BEST KNOWN', 'WEAPON', 'LIVE COMPARISON'))
+                        else 'cyan' if line.startswith(('Same gear', 'Measured'))
+                        else 'red' if '[NOT IN SNAPSHOT]' in line else 'dim' if line.startswith(('-', 'Mastery estimate', 'A weapon', 'This is'))
+                        else 'text')
+                rows.append(tint(line, tone))
+            self.scroll = min(self.scroll, max(0, len(rows)-available))
+            return rows[self.scroll:self.scroll+available]
+        settings = [('Username', self.config['account_username'] or 'Not set'),
+                    ('Mode',MODES[self.config['mode']]), ('Rod slot', self.config['rod_slot']),
+                    ('Auto equip rod', 'On' if self.config['auto_rod'] else 'Off'),
+                    ('Camera', 'First person' if self.config['camera_mode']=='first_person' else 'Keep current'),
+                    ('Heading', f"{self.config['camera_heading']:g}°" if self.config['camera_heading'] is not None else 'Off'),
+                    ('Fishing titles', 'Auto best' if self.config['auto_fishing_titles'] else 'Keep equipped'),
                     ('Cast point', f"{self.config['cast_point'][0]}, {self.config['cast_point'][1]}  ·  Full farmer"),
                     ('Capture pointer', 'Reads Roblox pointer in 4 seconds'),
                     ('Position correction','On' if self.reference_position else 'Off'),
                     ('Save fishing reference','Enter while paused'),('Disable reference','Enter while paused'),
-                    ('Discord webhook','Configured' if (data_directory()/'discord-webhook.dpapi').exists() else 'Not set'),
-                    ('Test webhook','Check connection · no post'),('Remove webhook','Delete local webhook')]
-        return [tint(f"{'›' if i == self.selection else ' '}  {label:<23} {value}", 'selected' if i==self.selection else 'text') for i,(label,value) in enumerate(settings)]
+                    ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On')]
+        rows=[tint(f"{'›' if i == self.selection else ' '}  {label:<23} {value}", 'selected' if i==self.selection else 'text') for i,(label,value) in enumerate(settings)]
+        return rows+['',tint(self.setting_help[self.settings_keys[self.selection]],'dim')]
 
     def render(self, width, height):
         self.height = height
@@ -307,9 +367,15 @@ class Terminal:
         spin = '●' if self.config['reduced_motion'] or not active else '◐◓◑◒'[int(time.monotonic()*5)%4]
         state = tint(spin+' '+d['state'],state_tone(d['state'],active))
         mode = '  /  '+MODES.get(d.get('mode'),'Full farmer')
-        lines = ['', '  '+tint('FISHING'+mode, 'gold')+'     '+state+'     '+tint(d['presence'], 'dim'), '',
-                 '  '+'     '.join(tint(f'{i+1} {name}', 'gold' if i==self.page else 'dim') for i,name in enumerate(self.pages)), '',
-                 '  '+tint('─'*min(width-4, 110), 'dim'), '']
+        signal_width = min(width-4, 106)
+        marker = signal_width//2 if self.config['reduced_motion'] or not active else int(time.monotonic()*7) % signal_width
+        signal = ''.join('◆' if i == marker else '≈' if i % 5 == 0 else '─' for i in range(signal_width))
+        tab_names = ('RUN', 'CATCHES', 'RADIO', 'RIG', 'DAMAGE') if width >= 90 else ('RUN', 'CATCH', 'LOG', 'RIG', 'M1')
+        tab_gap = '    ' if width >= 90 else '  '
+        lines = ['', '  '+tint('AUTOFISH  /  FIELD TERMINAL', 'gold')+'    '+tint(time.strftime('%H:%M'), 'dim'),
+                 '  '+state+mode+'    '+tint(d['presence'], 'dim'), '',
+                 '  '+tab_gap.join(tint(f'{i+1:02d} {name}', 'gold' if i==self.page else 'dim') for i,name in enumerate(tab_names)),
+                 '  '+tint(signal, 'cyan'), '']
         effect_rows = self.effects.rows(width-4, time.monotonic(), self.config['reduced_motion'])
         if effect_rows:
             lines[4:7] = ['  '+''.join(tint(text, tone) for text, tone in row) for row in effect_rows]
@@ -323,7 +389,10 @@ class Terminal:
             help_text = 'Enter save   Ctrl+G cancel'
         else:
             lines.append('  '+(self.notice if time.monotonic()<self.notice_until else tint('Working…', 'gold') if self.busy else ''))
-            help_text = '← → tabs   ↑ ↓ select   Enter open' if self.page in (0,3) else '↑ ↓ scroll   / search   Enter inspect' if self.page==1 else '↑ ↓ scroll   / search   F follow   G filter'
+            help_text = ('← → pages   ↑ ↓ choose   Enter select' if self.page in (0,3)
+                         else '↑ ↓ scroll   / search   Enter inspect' if self.page==1
+                         else '↑ ↓ scroll   / search   F follow   G filter' if self.page==2
+                         else 'M set mastery   ↑ ↓ scroll   1–5 pages')
         lines += ['  '+tint(help_text, 'dim'), '  '+tint('C continue   P pause   S stop   Q close view', 'dim'), '']
         return [clip(line, width-1) for line in lines[:height-1]]
 

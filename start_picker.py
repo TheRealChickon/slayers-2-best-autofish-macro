@@ -10,12 +10,13 @@ def choose(title, options, colors=False):
         raise ValueError('Use an interactive terminal, or specify --game and --mode.')
     selected=0
     def draw(first=False):
-        if not first:sys.stdout.write(f'\033[{len(options)+2}A')
-        lines=[title]+[f"{'>' if i==selected else ' '} {i+1}. {label}" for i,(_,label) in enumerate(options)]
-        lines+=['Up/Down select   Enter choose   Q cancel']
+        if not first:sys.stdout.write(f'\033[{len(options)+3}A')
+        lines=['AUTOFISH / '+title.upper(), '≈───◆────────────────────']
+        lines += [f"{'▶' if i==selected else ' '} {i+1:02d}  {label}" for i,(_,label) in enumerate(options)]
+        lines += ['↑ ↓ select   Enter choose   Q cancel']
         for index,line in enumerate(lines):
-            focused=index==selected+1
-            ink='\033[33m' if colors and focused else ''
+            focused=index==selected+2
+            ink='\033[38;2;220;177;103m' if colors and focused else ''
             reset='\033[0m' if ink else ''
             sys.stdout.write('\033[2K'+ink+line+reset+'\n')
         sys.stdout.flush()

@@ -16,8 +16,8 @@ def duration(seconds):
 
 def snapshot(journal=None):
     journal = journal if journal is not None else Journal()
-    totals, supervisor, worker, bait, presence = [read(name + '.json') for name in
-        ('totals', 'supervisor', 'status', 'bait', 'presence')]
+    totals, supervisor, worker, bait, presence, bait_observation = [read(name + '.json') for name in
+        ('totals', 'supervisor', 'status', 'bait', 'presence', 'bait-observation')]
     journal.update(totals.get('started'))
     live = actions.alive()
     starting = actions.starting() and not live
@@ -52,6 +52,12 @@ def snapshot(journal=None):
     rate = rounds * 3600 / seconds if seconds > 0 else 0
     stock = bait.get('starting_stock')
     remaining = max(0, stock - rounds) if stock is not None else None
+    bait_source='manual estimate' if remaining is not None else 'unknown'
+    if (bait_observation.get('supervisor_started')==supervisor.get('started')
+            and isinstance(bait_observation.get('count'),int)
+            and isinstance(bait_observation.get('hooks'),int)):
+        remaining=max(0,bait_observation['count']-max(0,rounds-bait_observation['hooks']))
+        bait_source='inventory read'
     fresh = presence.get('ok') and time.time() - presence.get('checked_at', 0) < 120
     unknown = sum(qty for name, qty in journal.counts.items()
                   if name == 'Unidentified item' or name.endswith('(partial)'))
@@ -64,7 +70,7 @@ def snapshot(journal=None):
         'hooks': rounds, 'casts': totals.get('casts', 0), 'failed_rounds': totals.get('failed', 0),
         'server_rejoins': max(0, journal.joins - 1), 'game_launches': journal.launches,
         'active_seconds': seconds, 'last_item': journal.items[-1]['item'] if journal.items else None,
-        'bait_remaining_estimate': remaining, 'hooks_per_hour': rate,
+        'bait_remaining_estimate': remaining, 'bait_source': bait_source, 'hooks_per_hour': rate,
         'bait_hours_remaining_estimate': remaining / rate if remaining is not None and rate else None,
         'presence': 'Not configured' if presence.get('disabled') else presence.get('state', 'Unknown') if fresh else
                     'Not polled while stopped' if not live else 'Checking',

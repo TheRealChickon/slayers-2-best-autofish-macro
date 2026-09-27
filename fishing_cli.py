@@ -12,6 +12,7 @@ from status_view import snapshot, duration, estimate
 from live_feed import event_tone, state_tone
 import control_actions as actions
 from app_config import MODES
+from bait_warning import warning as bait_warning
 
 COLORS = {'gold': 33, 'green': 32, 'red': 31, 'cyan': 36, 'gray': 90, 'white': 97, 'text': 97}
 
@@ -43,7 +44,7 @@ def status_lines(data, colors=False):
     recent=data.get('recent')
     rates=(f"  Recent pace     {recent['hooks_per_minute']:.2f} hooks/min · {recent['items_per_minute']:.2f} items/min"
            + f" · {recent['window_seconds']/60:.0f}m window" + ('' if recent['fresh'] else ' (saved)')) if recent else '  Recent pace     Collecting a sample'
-    return [
+    lines = [
         c('FISHING', 'gold') + '  /  ' + c(data['state'].upper(), tone) + '  /  ' + MODES.get(data.get('mode'),'Full farmer'),
         c('  '+data['reason'], 'gold') if data.get('reason') else '',
         '',
@@ -56,12 +57,15 @@ def status_lines(data, colors=False):
         rates,
         ('  Phase time      '+', '.join(f'{key.replace("_"," ")} {value:.0f}s' for key,value in recent['phase_seconds'].items())) if recent else '',
         '',
-        f"  Bait estimate   {'~' + format(remain, ',') + ' left' if remain is not None else 'Starting stock unknown'}",
+        f"  Bait            {'~' + format(remain, ',') + ' left' if remain is not None else 'Unknown'} · {data.get('bait_source','unknown')}",
         f"  Consumption     ~{data['hooks_per_hour']:.0f} bait/hour" + (f' / ~{hours:.1f} hours left' if hours is not None else ''),
         c('                  One bait per hook; fishing continues without bait.', 'gray'),
         f"  Presence        {data['presence']}",
         c(f"  Item log        {data['logged_collections']:,} collections; {data['unread_items']} items with partial/unread names", 'gray'),
     ]
+    alert=bait_warning(data) if data.get('running') or data.get('starting') else None
+    if alert:lines.append(c('  '+alert,'red'))
+    return lines
 
 
 def parser(prog='autofish'):
@@ -93,6 +97,7 @@ def parser(prog='autofish'):
     sub.add_parser('pause', help='Release game input and retain counters')
     resume=sub.add_parser('continue', aliases=['resume'], help='Explicitly start the selected mode')
     resume.add_argument('--mode',choices=('full','assist','spot'),help='Full farmer, minigame only, or fish here')
+    resume.add_argument('--until',help='Stop Full farmer at HH:MM local time today')
     sub.add_parser('assist',help='Start minigame only; you cast and collect manually')
     sub.add_parser('spot',help='Click, reel and collect; F8 starts/pauses/resumes, losing focus pauses automatically')
     reference=sub.add_parser('reference',help='Save a local fishing view while paused')
@@ -102,10 +107,18 @@ def parser(prog='autofish'):
     sub.add_parser('diagnostics',help='Show the last eight failure reports and local screenshot paths')
     sub.add_parser('stop', help='Stop game input and retain counters')
     sub.add_parser('export', help='Save the complete item log and totals as CSV')
+    wiki=sub.add_parser('wiki', help='Build and open the local item wiki from saved captures')
+    wiki.add_argument('--no-open', action='store_true', help='Build files without opening the browser')
+    wiki.add_argument('--site', action='store_true', help='Open your configured private ChatGPT Site')
+    build=sub.add_parser('build', aliases=['gear'], help='Show your saved damage loadout and mastery estimate')
+    mastery=build.add_mutually_exclusive_group()
+    mastery.add_argument('--mastery', type=int, help='Preview this mastery without saving it')
+    mastery.add_argument('--save-mastery', type=int, metavar='LEVEL', help='Save your current Gauntlet mastery')
+    build.add_argument('--json', action='store_true', help='Machine-readable report')
     webhook=sub.add_parser('webhook', help='Set or inspect the hourly Discord webhook')
     webhook.add_argument('operation', choices=('status','set','verify','remove'), nargs='?', default='status')
     tui=sub.add_parser('tui', help='Keyboard interface with live logs and settings')
-    tui.add_argument('--page', choices=('run','items','log','setup'), default='run')
+    tui.add_argument('--page', choices=('run','items','log','setup','build'), default='run')
     sub.add_parser('shell', help='Interactive command prompt; does not start fishing')
     from control_api import COMMANDS
     api = sub.add_parser('api', help='Versioned JSON interface for local integrations')
@@ -173,6 +186,31 @@ def execute(args, colors=False):
         print(path)
         print(path.read_text() if path.exists() else 'No failure reports saved')
         return 0
+    if command=='wiki':
+        if args.site:
+            import webbrowser
+            from app_config import data_directory
+            path = data_directory() / 'wiki-hosted-url.txt'
+            if not path.exists():
+                raise ValueError('No hosted wiki configured for this account.')
+            url = path.read_text(encoding='utf-8').strip()
+            if not url.startswith('https://'):
+                raise ValueError('Hosted wiki URL must use HTTPS.')
+            webbrowser.open(url)
+            print('Opening private wiki: ' + url)
+            return 0
+        from personal_wiki import build
+        path,counts=build(open_site=not args.no_open)
+        print(f'Wiki: {path}')
+        print(f"{counts['inventory']} owned variants · {counts['archive_only']} archive-only entries")
+        return 0
+    if command in ('build', 'gear'):
+        from damage_build import report, save_mastery, text_lines
+        if args.save_mastery is not None:
+            save_mastery(args.save_mastery)
+        data = report(mastery=args.mastery)
+        print(json.dumps(data, indent=2, ensure_ascii=False) if args.json else '\n'.join(text_lines(data)))
+        return 0
     if command=='webhook':
         from app_config import data_directory
         from discord_hourly import SECRET_FILE, configure_secret, load_secret, request_webhook
@@ -197,15 +235,15 @@ def execute(args, colors=False):
         return code
     if command in ('pause', 'stop', 'continue', 'resume', 'assist', 'spot'):
         action = {'pause': actions.pause, 'stop': actions.stop,
-                  'continue':lambda:actions.resume(getattr(args,'mode',None)),
-                  'resume':lambda:actions.resume(getattr(args,'mode',None)),
+                  'continue':lambda:actions.resume(getattr(args,'mode',None),getattr(args,'until',None)),
+                  'resume':lambda:actions.resume(getattr(args,'mode',None),getattr(args,'until',None)),
                   'assist':lambda:actions.resume('assist'),
                   'spot':lambda:actions.resume('spot')}[command]
         print(color(action(), 'green' if command in ('continue', 'resume') else 'gold', colors))
         return 0
     if command == 'tui':
         from terminal_app import Terminal
-        client=Terminal();client.switch(('run','items','log','setup').index(args.page))
+        client=Terminal();client.switch(('run','items','log','setup','build').index(args.page))
         return client.run()
     if command == 'shell':
         return shell(colors)
@@ -246,7 +284,7 @@ def execute(args, colors=False):
 
 def shell(colors):
     print('\n'.join(status_lines(snapshot(), colors)))
-    print(color('\nModes: assist, spot, continue --mode full\nCommands: status, watch, items, logs, pause, continue, stop, webhook, plan --hours 8, export', 'gray', colors))
+    print(color('\nModes: assist, spot, continue --mode full\nCommands: status, watch, items, logs, build, wiki, pause, continue, stop, plan --hours 8, export', 'gray', colors))
     print('help shows options. exit closes this prompt and leaves the bot unchanged.\n')
     while True:
         try:

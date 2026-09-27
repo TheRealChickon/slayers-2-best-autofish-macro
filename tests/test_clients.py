@@ -1,4 +1,5 @@
 import collections
+import datetime
 import json
 import sys
 import tempfile
@@ -131,6 +132,22 @@ class IsolatedState(unittest.TestCase):
         spawn.assert_not_called()
         self.assertTrue((self.root/'STOP').exists())
 
+    def test_timed_full_farmer_stops_at_local_clock_today(self):
+        fixed=datetime.datetime(2026,9,27,3,50,tzinfo=datetime.timezone(datetime.timedelta(hours=2)))
+        class Clock(datetime.datetime):
+            @classmethod
+            def now(cls,tz=None):return fixed
+        with patch.object(control_actions.datetime,'datetime',Clock):
+            self.assertEqual(control_actions.seconds_until_local_clock('22:00'),18*3600+10*60)
+            with self.assertRaisesRegex(ValueError,'later today'):
+                control_actions.seconds_until_local_clock('03:00')
+            with self.assertRaisesRegex(ValueError,'HH:MM'):
+                control_actions.seconds_until_local_clock('tomorrow')
+        parsed=fishing_cli.parser().parse_args(['continue','--mode','full','--until','22:00'])
+        self.assertEqual(parsed.until,'22:00')
+        with self.assertRaisesRegex(ValueError,'Full farmer only'):
+            control_actions.resume('assist','22:00')
+
     def test_terminal_stop_remains_available_when_busy(self):
         app=terminal_app.Terminal(); app.busy=True
         with patch.object(control_actions,'stop',return_value='Stopped') as stop:
@@ -154,7 +171,7 @@ class IsolatedState(unittest.TestCase):
         normal='\n'.join(app.render(100,32))
         for text in ('Minigame only','Fish here','Full farmer','Stopped by F12 in Roblox'):
             self.assertIn(text,normal)
-        for text in ('You cast + collect', 'You pick the spot', 'Saved spawn'):
+        for text in ('reel', 'cast', 'collect', 'rejoin'):
             self.assertIn(text,normal)
         for index,label in enumerate(('Minigame only','Fish here','Full farmer','Pause','Stop','Export log')):
             app.selection=index

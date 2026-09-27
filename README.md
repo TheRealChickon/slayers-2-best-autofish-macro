@@ -26,8 +26,13 @@ autofish start --game project-slayers-2 --mode assist --no-ui
 autofish status
 autofish pause
 autofish continue
+autofish continue --mode full --until 22:00  # Stop at 22:00 local time today
 autofish stop
 autofish logs --activity --follow
+autofish wiki             # Open your local item wiki, if captured
+autofish wiki --site      # Open your configured private ChatGPT Site
+autofish build            # Best known owned M1 gear and measured mastery anchor
+autofish build --save-mastery 200
 ```
 
 The command points to this application folder and preserves its settings and saved run. Keep the folder in place; if you move it, rerun Install-CLI.cmd from the new location. To remove only the global command, run `Install-CLI.cmd -Uninstall`; the app and fishing data remain. `Setup.ps1 -NoCLI` skips command installation.
@@ -77,7 +82,9 @@ The account is configurable. Each account must own a fishing rod, have it in a v
 - Keep the game visible and foreground. Opening another app releases input and waits; Continue returns focus to Roblox and recovery resumes. It cannot fish through a minimized window, lock screen, or sleeping PC. A second monitor is useful for viewing status.
 - The rod is located in the visible hotbar and selected only when its selection ring is absent. If it cannot be recognized during a rejoin, the configured slot is used. Moving the rod to another visible slot is supported; an unequipped rod in the backpack must first be placed in the hotbar.
 - In CLI **Setup → Cast point**, enter an X, Y target in the 2560 × 1440 reference view for Full farmer. The default is `1650, 800`. **Capture pointer** gives you four seconds to place the mouse over the Roblox game world, then saves its position without clicking or changing focus. This target scales with the Roblox window. Fish here continues to use the pointer position you choose in-game; Minigame only never casts.
-- Bait is optional. Equip it in-game if desired. There is no purchasing automation.
+- **Camera** in Setup can keep your current zoom (default) or zoom into first person automatically when Full farmer starts. First person may slowly pitch toward a nearby railing; a missed cast then triggers a rejoin to restore the view. Keep the third-person view for a spot where first person does not consistently reach water. **Heading** is an optional compass direction for a saved spawn, restored after a rejoin when no fishing reference is saved. Set it while facing a working cast. A saved fishing reference takes precedence over the heading.
+- **Fishing titles** defaults to keeping your loadout. **Auto best** checks the visible Fishing titles once when Full farmer starts, reads completed requirements, and equips the three strongest known fishing titles. It leaves an unreadable or unfamiliar loadout alone. This game's observed order is Legendary Fisherman, Salvager, Leviathan Hunter, Deep Water Angler, then Angler; luck takes priority for rare drops. It does not scan titles every round.
+- Bait is optional. Equip it in-game if desired. Full farmer reads the equipped bait once at startup and estimates how many hooks remain. The CLI warns on a nighttime start when the observed stock is under about 30 minutes at the recent pace. Fishing continues after bait runs out. There is no purchasing automation.
 
 ## Resolution notes
 
@@ -177,7 +184,15 @@ The **Run** tab has direct **Minigame only**, **Fish here**, and **Full farmer**
 
 Use Ctrl+G to cancel an edit; Escape remains a global stop key in Full farmer. In Setup, **Motion** toggles animations. Use a terminal at least 65 columns × 22 rows; 100 × 32 or larger is more comfortable.
 
-The Run tab shows current state, items, hooks, time, rejoins, game launch attempts, recent events, and a bait plan. Items can be opened directly into a filtered live log. Live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
+The field-terminal view has Run, Catches, Radio (live log), Rig (setup), and Damage pages. Run keeps the current state, pace, last catch, bait estimate and three mode choices together. Detailed recovery history is in Radio, where Catches can also open a filtered catch history. The live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
+
+## Personal item wiki
+
+`autofish wiki` builds and opens a local, searchable field ledger from saved inventory and archive captures. `autofish wiki --no-open` only rebuilds the files. The resulting `site/index.html` has Field (damage build and current character), Satchel (owned items), Archive (unowned reference items), and Bosses (when a reviewed `boss-analysis.json` is present beside the captures). The Field page includes the captured HUD, measured M1 build and recommended owned Stats pieces. `site/context.md` is the plain-text version to attach to an AI conversation; `site/items.json` provides the same snapshot as structured data. Open an item detail image to check its captured in-game text. If this account has a private hosted Site URL saved locally, `autofish wiki --site` opens it; rebuilding the local wiki does not automatically update that hosted snapshot.
+
+`autofish build` shows a local damage profile beside the captured owned item cards. The profile records a measured M1 anchor, the five best known Stats-slot pieces, a separate weapon, and live swap tests. `autofish build --save-mastery N` stores your current Gauntlet mastery in the ignored run-data directory; `--mastery N` previews without saving, and `--json` exports the report for another tool. The fifth terminal page shows the same build; press **M** there to update mastery. The 0.025 base-M1-per-mastery estimate is inferred from four measured levels with unchanged gear, and predictions are suppressed if a recommended piece is missing from the captured inventory. Gear swaps or class effects need a fresh in-game measurement.
+
+The wiki keeps live inventory stats and archive base stats separate, especially when an owned item has a `+N` refinement. Owned entries take priority, so an item also present in the archive does not appear twice in the main listings. Captures and generated pages are local account data and stay out of Git. The wiki is a snapshot, not a live inventory sync: rebuild it after changing equipment, refining items or collecting new gear. Item names and quantities come from UI OCR and may need checking against their attached screenshots.
 
 Recovery actions are cyan, retries and warnings amber, failures red, and catches green. The Run tab's recent events use the same colors as Live log. Rapid screen/OCR observations stay in the raw logs rather than filling the live feed; individual menu actions and Join attempts remain visible.
 
@@ -266,7 +281,7 @@ For a saved spawn right on a ledge, `spawn_backstep_seconds` in `config.local.js
 Menu actions wait for repeated observations of a stable target. Each action has its own retry delay, so a completed menu transition does not inherit a previous button's wait. The private Join button is checked again after the cursor settles; holding ends when its panel changes, with a 4.5-second limit. A short quiet period after Join lets the game transition before another attempt; repeated rejected joins back off. Recovery still requires three continuous seconds of the loaded world before equipping the rod and starting fishing.
 
 Cast and rod clicks allow a brief cursor settle before pressing, with stop and focus checks throughout. The first cast after loading or selecting the rod uses a longer settle to let Roblox update its hover target after the menu; subsequent casts retain their normal timing. The minigame tracking loop is unchanged.
-When a reward is confirmed, the next cast uses a shorter cooldown and skips repeated cursor-settling movements if the pointer is still at the known cast point. Menus, rod changes, focus pauses, pointer movement and uncertain pickups keep the longer checks.
+When a reward is confirmed, the next cast uses a shorter cooldown and skips repeated cursor-settling movements if the pointer is still at the known cast point. Collection checks a focused reward toast twice while T is held, then falls back to the wider prompt scan if needed. Menus, rod changes, focus pauses, pointer movement and uncertain pickups keep the longer checks.
 
 On the primary monitor, mouse moves use primary-screen absolute coordinates; targets on other monitors use virtual-desktop coordinates. The actual cursor position is checked before clicking. This avoids the primary-screen hit-test mismatch observed on the tested two-monitor desktop.
 
