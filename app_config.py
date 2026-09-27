@@ -5,6 +5,7 @@ import re
 import urllib.request
 from pathlib import Path
 from cast_point import DEFAULT as DEFAULT_CAST_POINT, validate as validate_cast_point
+from damage_plan import DEFAULT_ROTATION, validate_rotation
 
 ROOT = Path(__file__).resolve().parent
 MODES = {'full': 'Full farmer', 'assist': 'Minigame only', 'spot': 'Fish here',
@@ -14,10 +15,24 @@ DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             'rod_slot': 5, 'auto_rod': True, 'reduced_motion': False, 'inventory_check': True,
             'place_id': 16205713724, 'mode': 'full', 'cast_point': list(DEFAULT_CAST_POINT),
             'spawn_backstep_seconds': 0.0, 'camera_mode': 'keep', 'camera_heading': None,
-            'auto_fishing_titles': False}
+            'auto_fishing_titles': False, 'damage_rotation': DEFAULT_ROTATION,
+            'damage_title': 'Annihilator', 'damage_title_category': 'Combat',
+            'damage_target': 5000000, 'damage_check_seconds': 180}
 
 
 def validate_options(values):
+    values['damage_rotation'] = validate_rotation(values['damage_rotation'])
+    for name in ('damage_title', 'damage_title_category'):
+        value = values[name]
+        if not isinstance(value, str) or len(value.strip()) > 60:
+            raise ValueError(f'{name} must be a title-menu label of at most 60 characters')
+        values[name] = value.strip()
+    if not values['damage_title_category']:
+        raise ValueError('Damage title category is required')
+    values['damage_target'] = int(values['damage_target'])
+    values['damage_check_seconds'] = int(values['damage_check_seconds'])
+    if values['damage_target'] <= 0 or not 30 <= values['damage_check_seconds'] <= 3600:
+        raise ValueError('Damage target must be positive; recheck must be 30–3600 seconds')
     if values['camera_mode'] not in ('keep', 'first_person'):
         raise ValueError('Camera mode must be keep or first_person')
     if not isinstance(values['auto_fishing_titles'], bool):

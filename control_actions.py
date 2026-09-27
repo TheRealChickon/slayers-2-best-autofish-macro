@@ -104,6 +104,8 @@ def resume(mode=None,until=None):
     global _starting
     mode = mode or load_config().get('mode','full')
     if mode not in MODES:raise ValueError('Mode must be full, assist, spot, or damage')
+    if mode == 'damage' and not load_config()['damage_title']:
+        raise ValueError('Configure the exact in-game damage title first: autofish damage --title NAME --configure-only')
     if until and mode!='full':raise ValueError('--until is available for Full farmer only')
     seconds=seconds_until_local_clock(until) if until else 0
     with guard():
@@ -147,7 +149,7 @@ def resume(mode=None,until=None):
         except Exception:
             (RUN / 'STOP').write_text('Continue failed; input stopped')
             raise
-        message = ('Statue damage started. Bring Roblox forward; F8 pauses/resumes C and five M1s.' if mode=='damage' else
+        message = ('Statue damage started. Bring Roblox forward; F8 pauses/resumes the configured rotation.' if mode=='damage' else
                    'Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.' if mode=='assist' else
                    'Fish here is active. Equip your rod, position the mouse, then press F8; losing focus pauses input.' if mode=='spot' else
                    ('Continuing the saved run until '+until+' local time. Rejoining and equipping the rod...' if until else

@@ -9,7 +9,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from damage_cycle import DamageCycle, ProgressGuard
-from damage_vision import SkillReady, gauntlet_selected, hotbar_visible
+from damage_vision import B_ICON_BOX, B_READY_REFERENCE, SkillReady, gauntlet_selected, hotbar_visible
 from damage_farmer import reset_character
 from item_journal import Journal
 
@@ -66,6 +66,16 @@ class DamagePolicy(unittest.TestCase):
         dark[1280:1325, 1205:1250] = 0
         self.assertFalse(skill.observe(dark))
         self.assertTrue(skill.observe(frame))
+
+    def test_ultimate_requires_known_ready_icon_art(self):
+        self.assertIsNotNone(B_READY_REFERENCE)
+        frame = np.zeros((1440, 2560, 3), dtype=np.uint8)
+        x, y, w, h = B_ICON_BOX
+        frame[y:y+h, x:x+w] = B_READY_REFERENCE[:, :, None]
+        skill = SkillReady(B_ICON_BOX, B_READY_REFERENCE)
+        self.assertTrue(skill.observe(frame))
+        frame[y:y+h, x:x+w] = 0
+        self.assertFalse(skill.observe(frame))
 
     def test_respawn_does_not_confirm_original_menu(self):
         class Input:
