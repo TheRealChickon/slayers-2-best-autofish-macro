@@ -132,6 +132,30 @@ class IsolatedState(unittest.TestCase):
         spawn.assert_not_called()
         self.assertTrue((self.root/'STOP').exists())
 
+    def test_damage_continue_retains_counters_only_after_damage_pause(self):
+        (self.root/'PAUSE').write_text('Paused by user')
+        (self.root/'STOP').write_text('Paused by user')
+        metrics.write('supervisor.json', {'mode':'damage'})
+        with patch.object(control_actions,'alive',return_value=False), \
+             patch.object(control_actions,'starting',return_value=False), \
+             patch.object(control_actions.subprocess,'Popen') as spawn, \
+             patch.object(control_actions.psutil,'Process') as process:
+            spawn.return_value.pid = 123
+            process.return_value.create_time.return_value = 10.
+            control_actions.resume('damage')
+        self.assertIn('--resume-counters', spawn.call_args.args[0])
+
+        (self.root/'STOP').write_text('Stopped by user')
+        metrics.write('supervisor.json', {'mode':'full'})
+        with patch.object(control_actions,'alive',return_value=False), \
+             patch.object(control_actions,'starting',return_value=False), \
+             patch.object(control_actions.subprocess,'Popen') as spawn, \
+             patch.object(control_actions.psutil,'Process') as process:
+            spawn.return_value.pid = 124
+            process.return_value.create_time.return_value = 11.
+            control_actions.resume('damage')
+        self.assertNotIn('--resume-counters', spawn.call_args.args[0])
+
     def test_timed_full_farmer_stops_at_local_clock_today(self):
         fixed=datetime.datetime(2026,9,27,3,50,tzinfo=datetime.timezone(datetime.timedelta(hours=2)))
         class Clock(datetime.datetime):
@@ -156,10 +180,10 @@ class IsolatedState(unittest.TestCase):
     def test_run_page_launches_each_explicit_mode_without_changing_focus_itself(self):
         app=terminal_app.Terminal()
         with patch.object(app,'job',side_effect=lambda fn:fn()), patch.object(control_actions,'resume') as resume:
-            for index,mode in enumerate(('assist','spot','full')):
+            for index,mode in enumerate(('assist','spot','full','damage')):
                 app.selection=index;app.key('ENTER')
                 resume.assert_called_with(mode)
-            app.key('END');self.assertEqual(app.selection,5)
+            app.key('END');self.assertEqual(app.selection,6)
 
     def test_run_modes_and_stop_reason_are_visible_with_keyboard_scrolling(self):
         (self.root/'STOP').write_text('Stopped by F12 in Roblox')
@@ -169,11 +193,11 @@ class IsolatedState(unittest.TestCase):
         self.assertIn('Stopped by F12 in Roblox','\n'.join(fishing_cli.status_lines(data)))
         app=terminal_app.Terminal();app.data=data
         normal='\n'.join(app.render(100,32))
-        for text in ('Minigame only','Fish here','Full farmer','Stopped by F12 in Roblox'):
+        for text in ('Minigame only','Fish here','Full farmer','Statue damage','Stopped by F12 in Roblox'):
             self.assertIn(text,normal)
         for text in ('reel', 'cast', 'collect', 'rejoin'):
             self.assertIn(text,normal)
-        for index,label in enumerate(('Minigame only','Fish here','Full farmer','Pause','Stop','Export log')):
+        for index,label in enumerate(('Minigame only','Fish here','Full farmer','Statue damage','Pause','Stop','Export log')):
             app.selection=index
             self.assertIn('› '+label,'\n'.join(app.render(65,22)))
 
