@@ -193,6 +193,14 @@ def markdown(data):
         lines += ['', 'The 0.025 base M1 per Gauntlet mastery level is inferred from measured levels 183–186; changing gear requires another measurement.', '']
         lines += [f"- {limit}" for limit in build.get('limits',[])]
         lines += ['']
+    if data.get('boss_analysis'):
+        boss=data['boss_analysis']; summary=boss.get('summary',{})
+        lines+=['## Boss fights measured from recording','',
+                f"{summary.get('solo_fights',0)} solo-credit fights; median {summary.get('overall_median_seconds','unknown')} seconds, mean {summary.get('overall_mean_seconds','unknown')} seconds of engaged combat. All shown boss bars are 3,000 HP.",
+                'Times are approximate because the video was sampled every three seconds. Travel, respawn waits and menus are excluded. Shared-damage and incomplete fights were excluded.','']
+        for row in boss.get('bosses',[]):
+            lines.append(f"- {row['name']}: median {row['median_seconds']}s, observed {row['min_seconds']}–{row['max_seconds']}s across {row['count']} clean fights")
+        lines+=['','Video damage anchors: 64.78 Gauntlet M1 at mastery 202 with displayed +35.888 Additional Damage and 1.461x factor; Shockwave ticks of 37.57 and 38.23 at Shockwave mastery 206. Other visible hits range roughly 60–78 but cannot be assigned confidently to named skills from the sampled recording. Earlier same-gear M1 tests at mastery 183–186 imply about +0.0365 displayed M1 per Gauntlet mastery level.','']
     if data.get('profile'):
         profile=data['profile']
         lines+=['## Earlier capture damage notes','']
@@ -221,53 +229,7 @@ def markdown(data):
     return '\n'.join(lines)
 
 
-HTML='''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Field Notes — Item Archive</title>
-<style>
-:root{color-scheme:dark;--ink:#101714;--panel:#19231e;--panel2:#223027;--line:#344039;--text:#e5e8dc;--muted:#a6b1a4;--gold:#d9b970;--mint:#91c4a9}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 80% -20%,#2b382b 0,transparent 45%),#101714;color:var(--text);font:15px/1.45 system-ui,Segoe UI,sans-serif}button,input{font:inherit}button{cursor:pointer}header{padding:34px clamp(20px,4vw,64px) 20px;border-bottom:1px solid var(--line)}header .eyebrow{color:var(--gold);font-size:11px;letter-spacing:.25em;text-transform:uppercase}h1{font:500 clamp(30px,4vw,52px)/1.05 Georgia,serif;margin:8px 0 11px}header p{margin:0;color:var(--muted);max-width:750px}.shell{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,390px);gap:20px;padding:24px clamp(20px,4vw,64px)}.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:20px}.toolbar input{min-width:200px;flex:1;background:#19231e;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:11px 14px;outline:none}.toolbar input:focus{border-color:var(--mint)}.tab{border:0;background:transparent;color:var(--muted);padding:10px 12px;border-bottom:2px solid transparent}.tab.active{color:var(--gold);border-color:var(--gold)}.count{color:var(--muted);font-size:13px;margin-left:auto}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}.card{border:1px solid var(--line);background:linear-gradient(145deg,#222e26,#18221d);border-radius:9px;padding:13px;text-align:left;color:var(--text);transition:transform .16s,border-color .16s,background .16s}.card:hover,.card.active{transform:translateY(-2px);border-color:var(--gold);background:#283629}.card img{display:block;width:72px;height:72px;object-fit:cover;border-radius:5px;margin-bottom:13px}.card strong{display:block;font-weight:600;min-height:42px}.card small{display:block;color:var(--muted);margin-top:5px}.badge{color:var(--mint)}aside{position:sticky;top:18px;height:calc(100vh - 36px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:24px}aside .hero{width:88px;height:88px;object-fit:cover;border-radius:8px}aside h2{font:500 29px/1.1 Georgia,serif;margin:15px 0 8px}.rarity{color:var(--gold);font-size:12px;letter-spacing:.1em;text-transform:uppercase}h3{font-size:11px;color:var(--muted);letter-spacing:.18em;text-transform:uppercase;margin:26px 0 9px}aside p{margin:8px 0;color:var(--text)}.stat{padding:8px 0;border-bottom:1px solid var(--line)}.source{color:var(--muted)}.links{display:flex;gap:14px;flex-wrap:wrap;margin-top:22px}.links a{color:var(--mint);text-decoration:none}.links a:hover{text-decoration:underline}footer{padding:20px clamp(20px,4vw,64px);color:var(--muted);border-top:1px solid var(--line)}footer a{color:var(--gold)}@media(max-width:850px){.shell{display:block}aside{position:static;height:auto;margin-top:24px}.grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}}
-</style><header><div class="eyebrow">Private field notes · local snapshot</div><h1>Item archive</h1><p>Owned items use the stats shown in your inventory. Archive entries provide the base reference for everything else, with refined values kept separate.</p></header><main class="shell"><section><div class="toolbar"><input id="search" type="search" placeholder="Find an item or stat…" aria-label="Search items"><button class="tab active" data-tab="inventory">Inventory</button><button class="tab" data-tab="archive">Archive only</button><button class="tab" data-tab="equipped">Equipped</button><span class="count" id="count"></span></div><div class="grid" id="grid"></div></section><aside id="detail"><div class="eyebrow">Select an item</div></aside></main><footer><span id="stamp"></span> · <a href="context.md">AI context</a> · <a href="items.json">Structured JSON</a> · Values transcribed from game UI; open each detail image to check OCR.</footer><script src="data.js"></script><script>
-const data=window.WIKI_DATA;let tab='inventory',chosen=null;const $=id=>document.getElementById(id);const safe=s=>String(s??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));const path=s=>s?'assets/'+encodeURI(s):'';const list=()=>tab==='inventory'?data.inventory:tab==='archive'?data.archive_only:data.inventory.filter(x=>x.equipped);function render(){let q=$('search').value.trim().toLowerCase(),items=list().filter(x=>(x.name+' '+(x.stats||[]).join(' ')).toLowerCase().includes(q));$('count').textContent=items.length+' shown';$('grid').innerHTML=items.map((x,i)=>`<button class="card ${chosen===x?'active':''}" data-index="${i}"><img src="${path(x.icon)}" alt=""><strong>${safe(x.name)}${x.refinement?' <span class="badge">+'+x.refinement+'</span>':''}</strong><small>${safe(x.rarity||'Unknown')} · ${x.source==='inventory'?'×'+x.quantity:'archive'}</small></button>`).join('');for(const b of $('grid').children)b.onclick=()=>{chosen=items[+b.dataset.index];detail(chosen);render()};if(chosen&&!items.includes(chosen)){chosen=null;$('detail').innerHTML='<div class="eyebrow">Select an item</div>'}}function detail(x){let stats=x.stats||[],base=x.archive_stats||[],desc=x.description||[],source=x.source_info||[];$('detail').innerHTML=`<img class="hero" src="${path(x.icon)}" alt=""><div class="rarity">${safe(x.rarity||'Unknown')} · ${x.source==='inventory'?'Owned ×'+x.quantity:'Archive'}</div><h2>${safe(x.name)}${x.refinement?' +'+x.refinement:''}</h2>${x.equipped?'<div class="badge">Equipped now</div>':''}<p>${safe(desc.join(' '))}</p><h3>${x.source==='inventory'?'Current inventory stats':'Archive stats'}</h3>${stats.length?stats.map(s=>`<div class="stat">${safe(s)}</div>`).join(''):'<p class="source">No stats shown</p>'}${base.length?'<h3>Archive base stats</h3>'+base.map(s=>`<div class="stat source">${safe(s)}</div>`).join(''):''}${source.length?'<h3>Source</h3>'+source.map(s=>`<p class="source">${safe(s)}</p>`).join(''):''}<div class="links"><a href="${path(x.detail_image)}" target="_blank">View captured detail ↗</a>${x.archive_detail_image?`<a href="${path(x.archive_detail_image)}" target="_blank">View base detail ↗</a>`:''}</div>`}document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;chosen=null;document.querySelectorAll('.tab').forEach(c=>c.classList.toggle('active',c===b));render()});$('search').oninput=render;$('stamp').textContent='Captured '+data.captured_at;render();
-</script></html>'''
-
-
-PROFILE_STYLE='''
-[hidden]{display:none!important}.shell.character-open{display:block}.shell.character-open aside{display:none}
-.profile{max-width:1180px}.profile-heading{display:flex;justify-content:space-between;gap:20px;align-items:end;flex-wrap:wrap;margin:4px 0 25px}.profile h2{font:500 34px/1.1 Georgia,serif;margin:3px 0}.profile small{color:var(--muted)}
-.profile-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.profile-stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}.profile-stat b{display:block;font-size:22px;color:var(--gold);font-weight:500}.profile-stat span{color:var(--muted);font-size:12px}
-.profile h3{font-size:11px;color:var(--gold);letter-spacing:.19em;text-transform:uppercase;margin:31px 0 13px}.title-list{display:flex;gap:9px;flex-wrap:wrap}.title-list span{background:#233228;color:var(--text);padding:6px 10px;border-radius:5px}.snapshots{display:grid;grid-template-columns:1fr 1fr;gap:15px}.snapshot{display:block;color:var(--muted);text-decoration:none}.snapshot img{display:block;width:100%;max-height:275px;object-fit:cover;object-position:bottom left;border:1px solid var(--line);border-radius:8px;margin-bottom:6px}.snapshot:hover{color:var(--mint)}.assessment{margin:0;padding-left:22px;max-width:880px}.assessment li{padding:0 0 12px 5px}.assessment-limit{color:var(--muted);font-size:13px}@media(max-width:700px){.snapshots{display:block}.snapshot{margin-bottom:14px}}
-'''
-
-PROFILE_SCRIPT='''
-const originalRender=render;
-render=function(){
-  const active=tab==='character',p=$('profile'),g=$('grid'),a=$('detail');
-  p.hidden=!active;g.hidden=active;a.hidden=active;
-  document.querySelector('.shell').classList.toggle('character-open',active);
-  $('search').hidden=active;
-  if(!active){originalRender();return}
-  const c=data.profile||{},b=data.baseline||{},s=c.naked_hud_summary||{};
-  $('count').textContent='snapshot';
-  const stat=(value,label)=>`<div class="profile-stat"><b>${safe(value||'—')}</b><span>${safe(label)}</span></div>`;
-  const title=(c.equipped_titles||[]).map(x=>`<span>${safe(x)}</span>`).join('');
-  const shots=[['Stat gear unequipped',b.image],['Current loadout',c.equipped_hud_image]].filter(x=>x[1]).map(([label,file])=>`<a class="snapshot" href="${path(file)}" target="_blank"><img src="${path(file)}" alt="${safe(label)} HUD capture">${safe(label)} ↗</a>`).join('');
-  p.innerHTML=`<div class="profile-heading"><div><small>${safe(c.player||'Character')} · ${safe(c.clan||'')}</small><h2>Lv ${safe(c.level||'?')} ${safe(c.race||'')}</h2></div><small>Captured loadout · ${safe(data.captured_at)}</small></div>
-    <div class="profile-stats">${stat(s.health,'Health without stat gear')}${stat(s.additional_damage,'Additional Damage without stat gear')}${stat(s.additional_damage_factor,'Damage factor without stat gear')}${stat((data.equipped||[]).length,'Items currently equipped')}</div>
-    <h3>Equipped titles</h3><div class="title-list">${title}</div>
-    <h3>Bottom-left HUD</h3><div class="snapshots">${shots}</div><p class="assessment-limit">${safe(b.label||'')} · Remaining unlabeled HUD values, in display order: ${safe((s.other_displayed_values_in_hud_order||[]).join(' · '))}</p>
-    <h3>Damage notes</h3><ol class="assessment">${(c.damage_assessment||[]).map(x=>`<li>${safe(x)}</li>`).join('')}</ol><p class="assessment-limit">${safe(c.assessment_limit||'')}</p>`;
-  const m=data.damage_build;
-  if(m){const a=m.calibration||{};
-    p.innerHTML+=`<h3>Later measured M1 build</h3><p>Five Stats slots: ${safe((m.stat_items||[]).join(' · '))}. Weapon: ${safe(m.weapon||'unknown')} in a separate slot.</p><p>${safe(a.m1||'—')} M1 at Gauntlet mastery ${safe(a.mastery||'—')} with ${safe(a.damage_factor||'—')}x damage factor. This later live test takes priority over earlier estimates above.</p><ol class="assessment">${(m.tests||[]).map(x=>`<li>${safe(x)}</li>`).join('')}</ol><p class="assessment-limit">Mastery adds about 0.025 base M1 per level in the observed 183–186 range. Changed equipment needs another live calibration.</p>`;
-  }
-};
-'''
-
-HTML=HTML.replace('</style>','</style><style>'+PROFILE_STYLE+'</style>')
-HTML=HTML.replace('<button class="tab" data-tab="equipped">Equipped</button>',
-                  '<button class="tab" data-tab="equipped">Equipped</button><button class="tab" data-tab="character">Character</button>')
-HTML=HTML.replace('<div class="grid" id="grid"></div>',
-                  '<div class="profile" id="profile" hidden></div><div class="grid" id="grid"></div>')
-HTML=HTML.replace('</script></html>',PROFILE_SCRIPT+'</script></html>')
+HTML=(Path(__file__).with_name('wiki_template.html')).read_text(encoding='utf-8')
 
 
 def build(root=None,open_site=False):
@@ -282,13 +244,16 @@ def build(root=None,open_site=False):
     profile=json.loads(profile_file.read_text(encoding='utf-8')) if profile_file.exists() else None
     damage_root=root.parent if root.name=='wiki-snapshot' else root
     damage_profile=load_damage_profile(damage_root)
+    boss_file=root/'boss-analysis.json'
+    boss_analysis=json.loads(boss_file.read_text(encoding='utf-8')) if boss_file.exists() else None
     data={'captured_at':time.strftime('%Y-%m-%d %H:%M %Z'),'counts':{'inventory':len(owned),'inventory_grid':len(grid),'archive_only':len(archive_only),'archive_total':len(archive_all)},
           'inventory':[public_record(r) for r in owned],
           'archive_only':[public_record(r) for r in archive_only],
           'equipped':[public_record(r) for r in equipped],
           'baseline':baseline,
           'profile':profile,
-          'damage_build':damage_profile or None}
+          'damage_build':damage_profile or None,
+          'boss_analysis':boss_analysis}
     site=root/'site';site.mkdir(exist_ok=True)
     assets=site/'assets'
     for record in data['inventory']+data['archive_only']+data['equipped']:
@@ -305,7 +270,13 @@ def build(root=None,open_site=False):
                      profile.get('equipped_hud_image') if profile else None):
         if relative and (root/relative).exists():
             shutil.copy2(root/relative,assets/relative)
+    for relative in (['field-banner.jpg'] + [x.get('file') for x in (boss_analysis or {}).get('evidence',[])]):
+        if relative and (root/relative).exists():
+            (assets/relative).parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(root/relative,assets/relative)
     (site/'index.html').write_text(HTML,encoding='utf-8')
+    shutil.copy2(Path(__file__).with_name('wiki_site.css'),site/'site.css')
+    shutil.copy2(Path(__file__).with_name('wiki_site.js'),site/'site.js')
     (site/'data.js').write_text('window.WIKI_DATA='+json.dumps(data,ensure_ascii=False).replace('</','<\\/')+';',encoding='utf-8')
     (site/'items.json').write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8')
     (site/'context.md').write_text(markdown(data),encoding='utf-8')
