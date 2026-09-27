@@ -277,7 +277,7 @@ def build(root=None,open_site=False):
                      profile.get('equipped_hud_image') if profile else None):
         if relative and (root/relative).exists():
             shutil.copy2(root/relative,assets/relative)
-    for relative in (['field-banner.jpg'] + [x.get('file') for x in (boss_analysis or {}).get('evidence',[])]):
+    for relative in (['field-banner.jpg','world-probe.jpg'] + [x.get('file') for x in (boss_analysis or {}).get('evidence',[])]):
         if relative and (root/relative).exists():
             (assets/relative).parent.mkdir(parents=True,exist_ok=True)
             shutil.copy2(root/relative,assets/relative)

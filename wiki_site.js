@@ -4,13 +4,15 @@
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const asset = file => file ? 'assets/' + String(file).split('/').map(encodeURIComponent).join('/') : '';
-  const first = (name) => (data.inventory || []).find(x => x.name === name);
-  const pageNames = {field:'Build',satchel:'Inventory',archive:'Archive',bosses:'Bosses'};
-  let page = pageNames[location.hash.slice(1)] ? location.hash.slice(1) : 'field', query = '', chosen = null;
+  const num = value => Number.isFinite(Number(value)) ? Number(value).toLocaleString('en-US',{maximumFractionDigits:1}) : '—';
+  const first = name => (data.inventory || []).find(item => item.name === name);
+  const pageNames = {satchel:'Inventory',archive:'Archive',field:'Build',bosses:'Bosses'};
   const damage = data.damage_build || {};
   const bosses = data.boss_analysis || {};
   const economy = bosses.economy || {};
-  const num = n => Number.isFinite(Number(n)) ? Number(n).toLocaleString('en-US', {maximumFractionDigits:1}) : '—';
+  let page = pageNames[location.hash.slice(1)] ? location.hash.slice(1) : 'satchel';
+  let query = '', filter = 'all', chosen = page === 'satchel' ? (data.inventory || [])[0] || null : null;
+  let detailOpen = false;
 
   function showImage(file) {
     if (!file) return;
@@ -18,83 +20,133 @@
     $('image-dialog').showModal();
   }
 
-  function itemButton(x, index) {
-    const rarity = esc(x.rarity || 'Unknown');
-    return `<button class="item-tile ${chosen === x ? 'active' : ''}" data-index="${index}" title="${esc(x.name)} · ${rarity}">
-      <img loading="lazy" src="${asset(x.icon)}" alt=""><span class="name">${esc(x.name)}</span>
-      ${x.quantity > 1 ? `<span class="qty">×${num(x.quantity)}</span>` : ''}
-      ${x.refinement ? `<span class="ref">+${num(x.refinement)}</span>` : ''}</button>`;
+  function collectionItems() { return page === 'archive' ? data.archive_only || [] : data.inventory || []; }
+  function shownItems() {
+    return collectionItems().filter(item =>
+      (filter !== 'equipped' || item.equipped) &&
+      `${item.name} ${(item.stats || []).join(' ')} ${item.rarity || ''}`.toLowerCase().includes(query.toLowerCase()));
   }
 
-  function detail(x) {
-    if (!x) return '<div class="detail-empty">Select an item to see its stats.</div>';
-    const owned = x.source === 'inventory';
-    const list = (values, className='') => (values || []).map(y => `<div class="stat-row ${className}"><span>${esc(y)}</span></div>`).join('') || '<p>None shown</p>';
-    return `<div class="detail-head"><img src="${asset(x.icon)}" alt=""><div><div class="detail-kicker">${owned ? `In satchel${x.equipped ? ' / equipped' : ''}` : 'Archive reference'} · ${esc(x.rarity || 'unknown')}</div><h3>${esc(x.name)}${x.refinement ? ` +${num(x.refinement)}` : ''}</h3></div></div>
-      <p>${esc((x.description || []).join(' '))}</p>
-      <h4>${owned ? 'Your displayed stats' : 'Archive base stats'}</h4>${list(x.stats)}
-      ${x.archive_stats?.length ? `<h4>Unrefined archive reference</h4>${list(x.archive_stats, 'base')}` : ''}
-      ${x.source_info?.length ? `<h4>Source</h4><p>${esc(x.source_info.join(' · '))}</p>` : ''}
-      <div class="detail-actions"><button data-image="${esc(x.detail_image || '')}">DETAIL CAPTURE ↗</button>${x.archive_detail_image ? `<button data-image="${esc(x.archive_detail_image)}">BASE CAPTURE ↗</button>` : ''}</div>`;
+  function itemButton(item,index) {
+    const rarity = String(item.rarity || 'common').toLowerCase().replace(/[^a-z]/g,'');
+    const label = `${item.name}${item.refinement ? ` +${item.refinement}` : ''}${item.quantity > 1 ? `, quantity ${item.quantity}` : ''}${item.equipped ? ', equipped' : ''}`;
+    return `<button type="button" class="item-tile rarity-${rarity}${chosen === item ? ' active' : ''}" data-index="${index}" aria-label="${esc(label)}" title="${esc(label)}">
+      <img loading="lazy" src="${asset(item.icon)}" alt="">${item.equipped ? '<span class="equipped-mark" aria-hidden="true">✓</span>' : ''}</button>`;
   }
 
-  function inventory(archive=false) {
-    const items = archive ? data.archive_only || [] : data.inventory || [];
-    const result = items.filter(x => `${x.name} ${(x.stats||[]).join(' ')} ${x.rarity||''}`.toLowerCase().includes(query.toLowerCase()));
-    if (chosen && !result.includes(chosen)) chosen = null;
-    return `<div class="intro"><div><span class="eyebrow">${archive ? 'UNOWNED · BASE STATS' : 'OWNED · YOUR STATS'}</span><h2>${archive ? 'Items you have not found' : 'Your items'}</h2></div><p>${archive ? 'Archive entries shown only when the item was absent from your inventory capture.' : 'Select an item for its captured stats, refinement, and original screenshot.'}</p></div>
-      <div class="summary-strip"><div class="summary-stat"><b>${num(items.length)}</b><span>${archive ? 'Archive entries' : 'Item variants'}</span></div>${archive ? '' : `<div class="summary-stat"><b>${num((data.inventory||[]).filter(x=>x.equipped).length)}</b><span>Equipped</span></div>`}</div>
-      <div class="inventory-layout"><section><label class="search-bar"><span aria-hidden="true">⌕</span><input id="item-search" type="search" placeholder="Search names, stats, rarity" value="${esc(query)}" autocomplete="off"></label><div class="inventory-meta"><span>${num(result.length)} SHOWN</span><span>${archive ? 'BASE REFERENCE' : 'LIVE INVENTORY'}</span></div><div class="item-grid" id="item-grid">${result.map(itemButton).join('')}</div></section><aside class="detail-panel" id="detail-panel">${detail(chosen)}</aside></div>`;
+  function detail(item) {
+    if (!item) return '<div class="detail-empty">Select an item.</div>';
+    const owned = item.source === 'inventory';
+    const list = values => (values || []).map(value => `<div class="stat-row">${esc(value)}</div>`).join('') || '<div class="stat-empty">No stat line shown</div>';
+    return `<button type="button" class="detail-close" aria-label="Close item details">×</button>
+      <div class="detail-title"><img src="${asset(item.icon)}" alt=""><div><h2>${esc(item.name)}${item.refinement ? ` +${num(item.refinement)}` : ''}</h2><div class="rarity-label rarity-text-${String(item.rarity||'common').toLowerCase().replace(/[^a-z]/g,'')}">${esc(item.rarity || 'Unknown')}${item.equipped ? ' · Equipped' : ''}</div></div></div>
+      <p class="item-description">${esc((item.description || []).join(' '))}</p>
+      <div class="detail-section"><h3>${owned ? 'Your stats' : 'Archive base stats'}</h3>${list(item.stats)}</div>
+      ${item.archive_stats?.length ? `<div class="detail-section base-stats"><h3>Unrefined archive stats</h3>${list(item.archive_stats)}</div>` : ''}
+      ${item.source_info?.length ? `<div class="detail-section"><h3>Source</h3><p>${esc(item.source_info.join(' · '))}</p></div>` : ''}
+      <div class="detail-actions"><button type="button" data-image="${esc(item.detail_image || '')}">View item capture ↗</button>${item.archive_detail_image ? `<button type="button" data-image="${esc(item.archive_detail_image)}">View base capture ↗</button>` : ''}</div>`;
   }
 
-  function slot(name) {
-    const x = first(name);
-    return `<div class="slot"><div class="slot-icon">${x ? `<img src="${asset(x.icon)}" alt="">` : ''}</div><div class="slot-name">${esc(name)}</div></div>`;
+  function inventory() {
+    const archive = page === 'archive';
+    const items = collectionItems();
+    const shown = shownItems();
+    if (chosen && !shown.includes(chosen)) { chosen = null; detailOpen = false; }
+    return `<div class="collection-tools">
+      <div class="collection-filters">
+        <button type="button" data-filter="all" class="${filter === 'all' ? 'selected' : ''}" aria-pressed="${filter === 'all'}">${archive ? 'Archive only' : 'All'} <span>${num(items.length)}</span></button>
+        ${archive ? '' : `<button type="button" data-filter="equipped" class="${filter === 'equipped' ? 'selected' : ''}" aria-pressed="${filter === 'equipped'}">Equipped <span>${num(items.filter(x=>x.equipped).length)}</span></button>`}
+      </div>
+      <label class="search-bar"><span aria-hidden="true">⌕</span><input id="item-search" type="search" placeholder="Item name or stat" value="${esc(query)}" autocomplete="off" aria-label="Search items"></label>
+    </div>
+    <div class="collection-caption">${archive ? 'Unowned items · unrefined base values' : 'Your captured inventory · refined values shown separately'} <span>${num(shown.length)} shown</span></div>
+    <div class="inventory-layout"><div class="item-grid" id="item-grid">${shown.map(itemButton).join('') || '<p class="no-results">No matching items.</p>'}</div><aside class="detail-panel${detailOpen ? ' open' : ''}" id="detail-panel">${detail(chosen)}</aside></div>
+    ${detailOpen ? '<button type="button" class="detail-scrim" aria-label="Close item details"></button>' : ''}`;
   }
 
-  function field() {
-    const c = damage.calibration || {}, p = data.profile || {};
-    const statItems = damage.stat_items || [];
-    const weapon = first(damage.weapon);
-    const summary = bosses.summary || {};
-    const top = (bosses.bosses || []).slice(0,5);
-    return `<div class="intro"><div><span class="eyebrow">${esc(p.clan||'CHARACTER')} · DAMAGE</span><h2>Best tested M1 setup</h2></div><p>Measured from your recording and the gear you own.</p></div>
-      <div class="field-grid"><section class="featured"><div class="featured-top"><span class="eyebrow">M1 HIT · RECORDED</span><span class="micro">GAUNTLET MASTERY ${esc(c.mastery||'—')}</span></div><h3>${esc(damage.weapon || 'Gauntlet')} ${weapon?.refinement ? '+'+num(weapon.refinement) : ''}</h3><p>Best M1 result among the gear combinations tested.</p><div class="hit">${esc(c.m1||'—')}<small> damage</small></div><div class="micro">${esc(c.damage_factor||'—')}× factor · +${esc(c.additional_damage||'—')} additional damage</div><div class="slot-list">${statItems.map(slot).join('')}</div></section>
-      <section><span class="eyebrow">BOSS FIGHTS · 32 MIN RECORDING</span><h2 style="font-size:24px;margin:5px 0 12px">Time to kill</h2><table class="ledger-table"><thead><tr><th>Boss</th><th>Median</th></tr></thead><tbody>${top.map(x=>`<tr><td>${esc(x.name)}</td><td>${num(x.median_seconds)}s</td></tr>`).join('')}</tbody></table><div class="field-note"><strong>${summary.overall_median_seconds ? `${num(summary.overall_median_seconds)}s typical fight` : 'Timed boss fights'}</strong><p>${num(summary.solo_fights)} clean solo-credit kills. Fight times exclude travel and waiting.</p>${economy.estimated_wen_per_hour_min ? `<p><b>≈${num(economy.estimated_wen_per_hour_min)}–${num(economy.estimated_wen_per_hour_max)} Wen/hour</b> at the full recorded pace, with ${num(economy.coin_pouches_per_boss_min)}–${num(economy.coin_pouches_per_boss_max)} redeemed pouches per boss and without 2× Wen.</p>` : ''}</div></section></div>
-      <div class="rule"></div><div class="intro"><div><span class="eyebrow">OWNED GEAR</span><h2>Measured loadout</h2></div></div>
-      <div class="field-grid"><section>${[damage.weapon,...statItems].filter(Boolean).map((name,i)=>{const x=first(name);return `<div class="loadout-row">${x?`<img src="${asset(x.icon)}" alt="">`:''}<div><small>${i===0?'WEAPON':'STATS SLOT '+i}</small><strong>${esc(name)}${x?.refinement?' +'+num(x.refinement):''}</strong></div></div>`}).join('')}</section><aside class="field-note"><strong>Why this set</strong><p>${esc((damage.tests||[])[0]||'Measured M1 comparisons favor this owned set.')}</p><p>Serpent Haori and Flame Haori Style 1 each display a 1.07× factor, but neither has a controlled M1 swap test against Stone Haori. A higher displayed factor alone does not prove higher damage.</p><details class="build-details"><summary>Mastery and Shockwave notes</summary><p>At mastery 202 the recording shows a 64.78 M1 hit with the same displayed +35.888 damage and 1.461× factor. Earlier 183–186 tests showed roughly +0.0365 displayed M1 per mastery level. Keep the same gear when using that projection.</p><p>Shockwave shows 37.57 and 38.23 per-hit examples at Shockwave mastery 206. Total damage depends on how many hits connect.</p></details></aside></div>
-      ${p.equipped_hud_image ? `<details class="capture-details"><summary>View captured HUD</summary><img class="profile-shot" data-image="${esc(p.equipped_hud_image)}" src="${asset(p.equipped_hud_image)}" alt="Captured equipped HUD"></details>` : ''}`;
+  function gearItem(name,index) {
+    const item = first(name);
+    return `<div class="gear-item">${item ? `<img src="${asset(item.icon)}" alt="">` : '<div class="gear-missing"></div>'}<div><span>${index === 0 ? 'Weapon' : `Stats ${index}`}</span><strong>${esc(name)}${item?.refinement ? ` +${num(item.refinement)}` : ''}</strong></div></div>`;
+  }
+
+  function build() {
+    const profile = data.profile || {}, c = damage.calibration || {};
+    const loadout = [damage.weapon,...(damage.stat_items || [])].filter(Boolean);
+    const hud = profile.equipped_hud_image;
+    return `<div class="build-layout"><section class="loadout"><div class="section-line"><h2>Measured loadout</h2><span>Gauntlet mastery ${esc(c.mastery || '—')}</span></div>
+      <div class="gear-list">${loadout.map(gearItem).join('')}</div></section>
+      <aside class="damage-readout"><div class="readout-label">M1 DAMAGE · SAME GEAR</div><div class="readout-number">${esc(c.m1 || '—')}</div><div class="readout-meta">${esc(c.damage_factor || '—')}× factor <span>·</span> +${esc(c.additional_damage || '—')} additional damage</div>
+      <div class="comparison"><span>Horns II / measured</span><b>64.15</b><span>Flame Amigasa / measured</span><b>62.57</b></div></aside></div>
+      <div class="build-followup"><div><h2>Still worth testing</h2><p>Serpent Haori and Flame Haori Style 1 each show a 1.07× factor. Neither was measured as a one-item swap against Stone Haori. A displayed factor alone cannot rank their real hit damage.</p></div>
+      <div><h2>Mastery and skills</h2><p>At mastery 202, the recording shows a 64.78 M1 hit with the same gear. Shockwave ticks shown at mastery 206 were 37.57 and 38.23; total skill damage depends on how many ticks land.</p></div></div>
+      ${hud ? `<details class="capture-details"><summary>Show captured HUD</summary><img class="profile-shot" data-image="${esc(hud)}" src="${asset(hud)}" alt="Captured equipped HUD"></details>` : ''}
+      <button type="button" class="text-jump" data-go="bosses">Boss fight timings →</button>`;
   }
 
   function bossPage() {
     const rows = bosses.bosses || [];
     const summary = bosses.summary || {};
-    const maximum = Math.max(50, ...rows.map(x=>x.median_seconds||0));
-    return `<div class="intro"><div><span class="eyebrow">RECORDED FIGHTS</span><h2>Boss times and Wen</h2></div><p>3,000 HP per boss. Times run from engagement to despawn; shared-damage fights were excluded.</p></div>
-      <div class="summary-strip"><div class="summary-stat"><b>${num(summary.overall_median_seconds)}s</b><span>Typical clean kill</span></div><div class="summary-stat"><b>${num(summary.solo_fights)}</b><span>Solo-credit kills</span></div><div class="summary-stat"><b>${economy.estimated_wen_per_hour_min ? Math.round(economy.estimated_wen_per_hour_min/1000)+'–'+Math.round(economy.estimated_wen_per_hour_max/1000)+'k' : '—'}</b><span>Wen/hour · no 2×</span></div></div>
-      <div class="boss-layout"><section><div class="eyebrow">MEDIAN ENGAGED TIME / SHORTER IS FASTER</div>${rows.map(x=>`<div class="boss-row"><div><div class="boss-name">${esc(x.name)}</div><div class="boss-range">${num(x.count)} clean ${x.count===1?'kill':'kills'}</div></div><div class="boss-track"><div class="boss-fill" style="width:${Math.max(2,100*(x.median_seconds||0)/maximum)}%"></div></div><div class="boss-time">${num(x.median_seconds)}s</div></div>`).join('')}${economy.estimated_wen_per_hour_min ? `<div class="field-note"><strong>${num(economy.estimated_wen_per_hour_min)}–${num(economy.estimated_wen_per_hour_max)} Wen/hour without 2×</strong><p>${num(economy.base_wen_per_boss)} base Wen + ${num(economy.coin_pouches_per_boss_min)}–${num(economy.coin_pouches_per_boss_max)} pouches worth ${num(economy.coin_pouch_wen_each)} Wen each = ${num(economy.wen_per_boss_without_2x_min)}–${num(economy.wen_per_boss_without_2x_max)} Wen per kill. ${num(economy.clean_kills)} clean kills over ${num(economy.recording_seconds/60)} minutes gives ${num(economy.clean_kills_per_hour)} kills/hour. This is gross pouch value if redeemed; the full video includes travel, menus, and waits. Pouch count is your reported range, not a measured average.</p></div>` : ''}<div class="field-note"><strong>What the numbers mean</strong><p>These are your observed kills, not a promise for every attempt. Knockback, skill misses, terrain, mastery, and another player can change the result. Video timing is sampled every three seconds, so each time is approximate.</p></div></section>
-      <aside class="boss-side"><div class="eyebrow">DAMAGE READOUT</div><h3>Per-hit anchors</h3><p><b>Gauntlet M1</b> 64.78 at mastery 202 in the recording.</p><p><b>Shockwave</b> examples of 37.57 and 38.23 per tick at Shockwave mastery 206. Total depends on landed ticks.</p><p><b>Other visible hits</b> vary from about 60 to 78; the video does not reliably identify a named skill for each.</p><p>Kill pace combines these attacks, movement and recovery. Dividing 3,000 HP by M1 alone would overstate the time.</p><div class="evidence">${(bosses.evidence||[]).map(x=>`<button data-image="${esc(x.file)}" title="Open capture at ${esc(x.time)}"><img src="${asset(x.file)}" alt="Boss fight at ${esc(x.time)}"><span>${esc(x.time)}</span></button>`).join('')}</div><div class="micro">Click a frame for the original capture.</div></aside></div>`;
+    return `<div class="boss-overview"><div><span>Typical clean fight</span><strong>${num(summary.overall_median_seconds)}s</strong></div><div><span>Solo-credit kills</span><strong>${num(summary.solo_fights)}</strong></div><div><span>Wen/hour · no 2×</span><strong>${economy.estimated_wen_per_hour_min ? `${num(economy.estimated_wen_per_hour_min)}–${num(economy.estimated_wen_per_hour_max)}` : '—'}</strong></div></div>
+      <div class="boss-layout"><section class="boss-list"><div class="boss-list-head"><span>Boss</span><span>Clean kills</span><span>Median fight</span></div>${rows.map(row=>`<div class="boss-row"><strong>${esc(row.name)}</strong><span>${num(row.count)}</span><b>${num(row.median_seconds)}s</b></div>`).join('')}</section>
+      <aside class="boss-notes"><h2>Wen calculation</h2><p>${num(economy.base_wen_per_boss)} Wen reward + ${num(economy.coin_pouches_per_boss_min)}–${num(economy.coin_pouches_per_boss_max)} pouches at ${num(economy.coin_pouch_wen_each)} Wen each = <b>${num(economy.wen_per_boss_without_2x_min)}–${num(economy.wen_per_boss_without_2x_max)} Wen per boss.</b></p>
+      <p>${num(economy.clean_kills)} clean kills in ${num(economy.recording_seconds/60)} minutes. The hourly range assumes that pace and that every pouch is redeemed. The 2–5 pouch count is your report, not a measured average.</p>
+      <details><summary>Timing method and damage notes</summary><p>All recorded bosses have 3,000 HP. Fight time runs from first engagement to despawn. Shared-damage and incomplete fights were excluded. Video sampling was every three seconds, so timings are approximate.</p><p>Gauntlet M1 was 64.78 at mastery 202. Shockwave examples were 37.57 and 38.23 per tick at mastery 206; other hit numbers could not be assigned confidently to named skills.</p></details>
+      <details class="evidence-details"><summary>Video frames</summary><div class="evidence">${(bosses.evidence || []).map(frame=>`<button type="button" data-image="${esc(frame.file)}" title="Frame at ${esc(frame.time)}"><img src="${asset(frame.file)}" alt="Boss fight at ${esc(frame.time)}"><span>${esc(frame.time)}</span></button>`).join('')}</div></details></aside></div>`;
   }
 
-  function bindImages(root=$('view')) {
-    root.querySelectorAll('[data-image]').forEach(node => node.addEventListener('click', () => showImage(node.dataset.image)));
+  function closeDetails() {
+    detailOpen=false;
+    render();
+    const index=shownItems().indexOf(chosen);
+    if (index >= 0) $('item-grid')?.querySelector(`[data-index="${index}"]`)?.focus({preventScroll:true});
   }
 
   function render() {
     $('page-title').textContent = pageNames[page];
-    document.querySelectorAll('.nav-link').forEach(button => {button.classList.toggle('active',button.dataset.page===page);button.setAttribute('aria-current',button.dataset.page===page?'page':'false')});
-    $('view').innerHTML = page==='satchel'?inventory(false):page==='archive'?inventory(true):page==='bosses'?bossPage():field();
-    bindImages();
-    if(page==='satchel'||page==='archive') {
-      const input=$('item-search');
-      input.addEventListener('input', () => {query=input.value;chosen=null;const start=input.selectionStart;render();$('item-search').focus();$('item-search').setSelectionRange(start,start)});
-      $('item-grid').querySelectorAll('.item-tile').forEach(button=>button.addEventListener('click',()=>{const source=page==='archive'?data.archive_only:data.inventory;const found=source.filter(x=>`${x.name} ${(x.stats||[]).join(' ')} ${x.rarity||''}`.toLowerCase().includes(query.toLowerCase()));chosen=found[Number(button.dataset.index)];render()}));
+    document.title = `${pageNames[page]} · Grofheyse3729`;
+    document.querySelectorAll('.nav-link').forEach(button => {
+      const active = button.dataset.page === page;
+      button.classList.toggle('active',active);
+      button.setAttribute('aria-current',active ? 'page' : 'false');
+    });
+    $('view').innerHTML = page === 'satchel' || page === 'archive' ? inventory() : page === 'field' ? build() : bossPage();
+    $('view').querySelectorAll('[data-image]').forEach(button => button.addEventListener('click',() => showImage(button.dataset.image)));
+    $('view').querySelectorAll('[data-go]').forEach(button => button.addEventListener('click',() => navigate(button.dataset.go)));
+    if (page === 'satchel' || page === 'archive') {
+      const search = $('item-search');
+      search.addEventListener('input',() => {
+        query = search.value; detailOpen = false;
+        const cursor = search.selectionStart;
+        render(); $('item-search').focus();
+        if (cursor !== null) $('item-search').setSelectionRange(cursor,cursor);
+      });
+      $('view').querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click',() => {filter=button.dataset.filter;detailOpen=false;render();}));
+      const shown = shownItems();
+      $('item-grid').querySelectorAll('[data-index]').forEach(button => button.addEventListener('click',() => {chosen=shown[Number(button.dataset.index)];detailOpen=true;render();}));
+      $('view').querySelector('.detail-close')?.addEventListener('click',closeDetails);
+      $('view').querySelector('.detail-scrim')?.addEventListener('click',closeDetails);
+      if (detailOpen && window.matchMedia('(max-width:760px)').matches) {
+        const panel=$('detail-panel');
+        panel.setAttribute('role','dialog');
+        panel.setAttribute('aria-modal','true');
+        panel.setAttribute('aria-label',`${chosen?.name || 'Item'} details`);
+        panel.querySelector('.detail-close')?.focus({preventScroll:true});
+      }
     }
   }
-  document.querySelectorAll('.nav-link').forEach(button=>button.addEventListener('click',()=>{page=button.dataset.page;location.hash=page;query='';chosen=null;render();window.scrollTo({top:0,behavior:'smooth'})}));
-  window.addEventListener('hashchange',()=>{const target=location.hash.slice(1);if(pageNames[target]&&target!==page){page=target;query='';chosen=null;render()}});
+
+  function navigate(target) {
+    if (!pageNames[target]) return;
+    page=target;query='';filter='all';detailOpen=false;
+    chosen=target === 'satchel' ? (data.inventory || [])[0] || null : null;
+    location.hash=target;render();window.scrollTo(0,0);
+  }
+
+  document.querySelectorAll('.nav-link').forEach(button=>button.addEventListener('click',()=>navigate(button.dataset.page)));
+  window.addEventListener('hashchange',()=>{const target=location.hash.slice(1);if(pageNames[target] && target !== page) navigate(target);});
+  document.addEventListener('keydown',event=>{if(event.key === 'Escape' && detailOpen) closeDetails();});
   $('close-image').addEventListener('click',()=>$('image-dialog').close());
-  $('image-dialog').addEventListener('click',event=>{if(event.target===$('image-dialog'))$('image-dialog').close()});
-  $('capture-stamp').textContent='UPDATED '+String(data.captured_at||'').slice(0,16);
+  $('image-dialog').addEventListener('click',event=>{if(event.target===$('image-dialog'))$('image-dialog').close();});
+  $('capture-stamp').textContent='NOTES UPDATED '+String(data.captured_at||'').slice(0,16);
   render();
 })();
