@@ -30,6 +30,9 @@ autofish continue --mode full --until 22:00  # Stop at 22:00 local time today
 autofish stop
 autofish logs --activity --follow
 autofish wiki             # Open your local item wiki, if captured
+autofish wiki --site      # Open your configured private ChatGPT Site
+autofish build            # Best known owned M1 gear and measured mastery anchor
+autofish build --save-mastery 200
 ```
 
 The command points to this application folder and preserves its settings and saved run. Keep the folder in place; if you move it, rerun Install-CLI.cmd from the new location. To remove only the global command, run `Install-CLI.cmd -Uninstall`; the app and fishing data remain. `Setup.ps1 -NoCLI` skips command installation.
@@ -181,11 +184,13 @@ The **Run** tab has direct **Minigame only**, **Fish here**, and **Full farmer**
 
 Use Ctrl+G to cancel an edit; Escape remains a global stop key in Full farmer. In Setup, **Motion** toggles animations. Use a terminal at least 65 columns × 22 rows; 100 × 32 or larger is more comfortable.
 
-The Run tab keeps the current state, pace, last catch, bait estimate and three mode choices together. Detailed recovery history is in Live log, where Items can also open a filtered catch history. Live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
+The field-terminal view has Run, Catches, Radio (live log), Rig (setup), and Damage pages. Run keeps the current state, pace, last catch, bait estimate and three mode choices together. Detailed recovery history is in Radio, where Catches can also open a filtered catch history. The live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
 
 ## Personal item wiki
 
-`autofish wiki` builds and opens a local, searchable website from saved inventory and archive captures. `autofish wiki --no-open` only rebuilds the files. The resulting `site/index.html` has Inventory, Archive only, Equipped and Character views. The Character view includes the active titles, a bottom-left HUD capture with stat gear unequipped, and damage comparisons based on the captured values. `site/context.md` is the plain-text version to attach to an AI conversation; `site/items.json` provides the same snapshot as structured data. Open either detail image from an item to check its captured in-game text.
+`autofish wiki` builds and opens a local, searchable website from saved inventory and archive captures. `autofish wiki --no-open` only rebuilds the files. The resulting `site/index.html` has Inventory, Archive only, Equipped and Character views. The Character view includes the active titles, a bottom-left HUD capture with stat gear unequipped, and damage comparisons based on the captured values. `site/context.md` is the plain-text version to attach to an AI conversation; `site/items.json` provides the same snapshot as structured data. Open either detail image from an item to check its captured in-game text. If this account has a private hosted Site URL saved locally, `autofish wiki --site` opens it; rebuilding the local wiki does not automatically update that hosted snapshot.
+
+`autofish build` shows a local damage profile beside the captured owned item cards. The profile records a measured M1 anchor, the five best known Stats-slot pieces, a separate weapon, and live swap tests. `autofish build --save-mastery N` stores your current Gauntlet mastery in the ignored run-data directory; `--mastery N` previews without saving, and `--json` exports the report for another tool. The fifth terminal page shows the same build; press **M** there to update mastery. The 0.025 base-M1-per-mastery estimate is inferred from four measured levels with unchanged gear, and predictions are suppressed if a recommended piece is missing from the captured inventory. Gear swaps or class effects need a fresh in-game measurement.
 
 The wiki keeps live inventory stats and archive base stats separate, especially when an owned item has a `+N` refinement. Owned entries take priority, so an item also present in the archive does not appear twice in the main listings. Captures and generated pages are local account data and stay out of Git. The wiki is a snapshot, not a live inventory sync: rebuild it after changing equipment, refining items or collecting new gear. Item names and quantities come from UI OCR and may need checking against their attached screenshots.
 
