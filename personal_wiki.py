@@ -165,7 +165,7 @@ def public_record(record):
 
 def markdown(data):
     lines=['# Personal fishing-game inventory context','',
-           f"Captured {data['captured_at']}. This is a UI/OCR snapshot; verify unclear text against linked detail images.",'',
+           f"Wiki generated {data['captured_at']} from saved UI/OCR captures; verify unclear text against linked detail images.",'',
            f"Inventory: {data['counts']['inventory']} distinct variants across {data['counts']['inventory_grid']} grid entries. Archive-only: {data['counts']['archive_only']}. Equipped: {len(data['equipped'])}.",'',
            'Inventory stats below are the current displayed values, including refinement. Archive stats are unrefined reference values and are never substituted for owned stats.','']
     if data.get('baseline'):
@@ -190,6 +190,7 @@ def markdown(data):
         lines += [f"- {name}" for name in build.get('stat_items',[])]
         lines += ['',f"Separate weapon: {build.get('weapon','unknown')}",'']
         lines += [f"- {test}" for test in build.get('tests',[])]
+        lines += ['', 'Owned but untested against Stone Haori in a same-mastery M1 swap: Serpent Haori and Flame Haori Style 1 each display a 1.07x Additional Damage Factor. Their higher displayed factor is not proof of higher actual damage.', '']
         lines += ['', 'The 0.025 base M1 per Gauntlet mastery level is inferred from measured levels 183–186; changing gear requires another measurement.', '']
         lines += [f"- {limit}" for limit in build.get('limits',[])]
         lines += ['']
@@ -203,8 +204,8 @@ def markdown(data):
         economy=boss.get('economy') or {}
         if economy:
             lines+=['','## Boss farming income without 2x Wen','',
-                    f"Normal reward {economy['base_wen_per_boss']} Wen + one coin pouch worth {economy['coin_pouch_wen_per_boss']} Wen = {economy['wen_per_boss_without_2x']} Wen per boss.",
-                    f"{economy['clean_kills']} clean kills in {round(economy['recording_seconds']/60,1)} minutes = {economy['clean_kills_per_hour']} kills/hour and about {economy['estimated_wen_per_hour']:,} Wen/hour gross, including redeemed pouches.",
+                    f"Normal reward {economy['base_wen_per_boss']} Wen + {economy['coin_pouches_per_boss_min']}–{economy['coin_pouches_per_boss_max']} coin pouches worth {economy['coin_pouch_wen_each']} Wen each = {economy['wen_per_boss_without_2x_min']:,}–{economy['wen_per_boss_without_2x_max']:,} Wen per boss.",
+                    f"{economy['clean_kills']} clean kills in {round(economy['recording_seconds']/60,1)} minutes = {economy['clean_kills_per_hour']} kills/hour and about {economy['estimated_wen_per_hour_min']:,}–{economy['estimated_wen_per_hour_max']:,} Wen/hour gross, including redeemed pouches.",
                     economy['assumption'],'']
         lines+=['','Video damage anchors: 64.78 Gauntlet M1 at mastery 202 with displayed +35.888 Additional Damage and 1.461x factor; Shockwave ticks of 37.57 and 38.23 at Shockwave mastery 206. Other visible hits range roughly 60–78 but cannot be assigned confidently to named skills from the sampled recording. Earlier same-gear M1 tests at mastery 183–186 imply about +0.0365 displayed M1 per Gauntlet mastery level.','']
     if data.get('profile'):
