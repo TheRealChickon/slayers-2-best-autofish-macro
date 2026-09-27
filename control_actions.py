@@ -1,7 +1,10 @@
 """Explicit controls shared by the window and CLI; serialized across processes."""
 import ctypes
+import datetime
 import hashlib
 import json
+import math
+import re
 import subprocess
 import sys
 import threading
@@ -86,15 +89,29 @@ def focus_game():
     win32gui.SetForegroundWindow(h)
 
 
-def resume(mode=None):
+def seconds_until_local_clock(value):
+    if not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',value or ''):
+        raise ValueError('--until must be HH:MM in local time')
+    now=datetime.datetime.now().astimezone()
+    hour,minute=map(int,value.split(':'))
+    end=now.replace(hour=hour,minute=minute,second=0,microsecond=0)
+    remaining=math.ceil((end-now).total_seconds())
+    if remaining<=0:raise ValueError('--until must be later today')
+    return remaining
+
+
+def resume(mode=None,until=None):
     global _starting
     mode = mode or load_config().get('mode','full')
     if mode not in MODES:raise ValueError('Mode must be full, assist, or spot')
+    if until and mode!='full':raise ValueError('--until is available for Full farmer only')
+    seconds=seconds_until_local_clock(until) if until else 0
     with guard():
         if alive('calibration-pid.json'):
             return 'Reference setup is running. Stop cancels it.'
         live, pending = alive(), starting()
         if live or pending:
+            if until:return 'Already running. Pause first to set a timed stop, then Continue again.'
             if (RUN / 'PAUSE').exists() or (RUN / 'STOP').exists():
                 return 'Pause/stop is still finishing. Try Continue in a moment.'
             if not live:
@@ -114,7 +131,7 @@ def resume(mode=None):
         (RUN / 'STOP').unlink(missing_ok=True)
         (RUN / 'F8_PAUSE').unlink(missing_ok=True)
         args = ([sys.executable,str(ROOT/'minigame_assist.py'),'--respect-stop','--mode',mode] if mode in ('assist','spot') else
-                [sys.executable, str(ROOT / 'recovery.py'), '--seconds', '0', '--rejoin',
+                [sys.executable, str(ROOT / 'recovery.py'), '--seconds', str(seconds), '--rejoin',
                  '--focus', '--resume-counters', '--respect-stop'])
         try:
             with (RUN / 'supervisor-stdout.log').open('a') as out, (RUN / 'supervisor-stderr.log').open('a') as err:
@@ -126,6 +143,7 @@ def resume(mode=None):
             raise
         message = ('Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.' if mode=='assist' else
                    'Fish here is active. Equip your rod, position the mouse, then press F8; losing focus pauses input.' if mode=='spot' else
-                   'Continuing the saved run. Rejoining and equipping the rod...')
+                   ('Continuing the saved run until '+until+' local time. Rejoining and equipping the rod...' if until else
+                    'Continuing the saved run. Rejoining and equipping the rod...'))
         event('continue',message)
         return message
