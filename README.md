@@ -28,6 +28,7 @@ autofish pause
 autofish continue
 autofish stop
 autofish logs --activity --follow
+autofish wiki             # Open your local item wiki, if captured
 ```
 
 The command points to this application folder and preserves its settings and saved run. Keep the folder in place; if you move it, rerun Install-CLI.cmd from the new location. To remove only the global command, run `Install-CLI.cmd -Uninstall`; the app and fishing data remain. `Setup.ps1 -NoCLI` skips command installation.
@@ -179,7 +180,13 @@ The **Run** tab has direct **Minigame only**, **Fish here**, and **Full farmer**
 
 Use Ctrl+G to cancel an edit; Escape remains a global stop key in Full farmer. In Setup, **Motion** toggles animations. Use a terminal at least 65 columns × 22 rows; 100 × 32 or larger is more comfortable.
 
-The Run tab shows current state, items, hooks, time, rejoins, game launch attempts, recent events, and a bait plan. Items can be opened directly into a filtered live log. Live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
+The Run tab keeps the current state, pace, last catch, bait estimate and three mode choices together. Detailed recovery history is in Live log, where Items can also open a filtered catch history. Live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
+
+## Personal item wiki
+
+`autofish wiki` builds and opens a local, searchable website from saved inventory and archive captures. `autofish wiki --no-open` only rebuilds the files. The resulting `site/index.html` has Inventory, Archive only, Equipped and Character views. The Character view includes the active titles, a bottom-left HUD capture with stat gear unequipped, and damage comparisons based on the captured values. `site/context.md` is the plain-text version to attach to an AI conversation; `site/items.json` provides the same snapshot as structured data. Open either detail image from an item to check its captured in-game text.
+
+The wiki keeps live inventory stats and archive base stats separate, especially when an owned item has a `+N` refinement. Owned entries take priority, so an item also present in the archive does not appear twice in the main listings. Captures and generated pages are local account data and stay out of Git. The wiki is a snapshot, not a live inventory sync: rebuild it after changing equipment, refining items or collecting new gear. Item names and quantities come from UI OCR and may need checking against their attached screenshots.
 
 Recovery actions are cyan, retries and warnings amber, failures red, and catches green. The Run tab's recent events use the same colors as Live log. Rapid screen/OCR observations stay in the raw logs rather than filling the live feed; individual menu actions and Join attempts remain visible.
 

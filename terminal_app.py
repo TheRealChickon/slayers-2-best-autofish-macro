@@ -47,9 +47,9 @@ class Terminal:
     categories = ('All', 'Catches', 'Recovery', 'Warnings')
     run_modes = ('assist', 'spot', 'full')
     mode_details = {
-        'assist': ('green', 'You cast + collect  ·  bot reels'),
-        'spot': ('cyan', 'You pick the spot  ·  bot casts + collects'),
-        'full': ('gold', 'Saved spawn  ·  bot rejoins + fishes'),
+        'assist': ('green', 'reel'),
+        'spot': ('cyan', 'cast · reel · collect'),
+        'full': ('gold', 'fish · rejoin'),
     }
     settings_keys = ('Username', 'Mode', 'Rod slot', 'Auto rod', 'Camera', 'Heading',
                      'Fishing titles', 'Cast point', 'Capture pointer',
@@ -265,31 +265,31 @@ class Terminal:
         d = self.data
         if self.page == 0:
             amount = estimate(d, self.hours)
-            rows = [tint(f"{d['items']:,} items", 'gold') + f"       {d['hooks']:,} hooks       {duration(d['active_seconds'])}", '',
-                    f"{d['server_rejoins']} rejoins     {d['game_launches']} game launches     {d['failed_rounds']} failed rounds",
-                    tint('Last catch  ', 'dim') + (d['last_item'] or '—'), '',
-                    f"Bait ~{d['bait_remaining_estimate']:,}  ·  {d.get('bait_source','unknown')}" if d['bait_remaining_estimate'] is not None else 'Bait —',
-                    tint(f"~{d['hooks_per_hour']:.0f} / hour   •   {self.hours:g}h plan: " + (f'~{amount:,} bait' if amount is not None else 'collecting a sample'), 'dim'), '']
-            alert=bait_warning(d) if d.get('running') or d.get('starting') else None
-            if alert:rows += [tint(alert,'red'),'']
+            rows = [tint(f"{d['items']:,} items", 'gold') + f"     {d['hooks']:,} hooks     {duration(d['active_seconds'])}",
+                    tint('Last  ', 'dim') + (d['last_item'] or '—')]
             recent=d.get('recent')
             if recent:
-                rows[4:4]=[tint(f"{recent['hooks_per_minute']:.2f} hooks/min   {recent['items_per_minute']:.2f} items/min   {recent['recovery_seconds']:.0f}s recovery / {recent['window_seconds']/60:.0f}m",'cyan')]
+                rows.append(tint(f"{recent['hooks_per_minute']:.2f} hooks/min   {recent['items_per_minute']:.2f} items/min",'cyan'))
+            bait=(f"~{d['bait_remaining_estimate']:,} left" if d['bait_remaining_estimate'] is not None else 'unknown')
+            rows += [tint(f"Bait  {bait}   ·   {self.hours:g}h needs " + (f'~{amount:,}' if amount is not None else 'a rate sample'),'dim'), '']
+            alert=bait_warning(d) if d.get('running') or d.get('starting') else None
+            if alert:rows += [tint(alert,'red')]
             if d.get('reason'):rows[0:0]=[tint(d['reason'], 'gold'), '']
             action_start=len(rows)
             for i, mode in enumerate(self.run_modes):
                 accent, detail = self.mode_details[mode]
                 marker = '› ' if self.selection == i else '  '
-                active = '  ● LIVE' if d['running'] and d.get('mode') == mode else ''
-                rows.append(tint(marker + MODES[mode], 'selected' if self.selection == i else accent)
-                            + tint('  /  ' + detail + active, accent if self.selection == i else 'dim'))
+                active = '  ●' if d['running'] and d.get('mode') == mode else ''
+                rows.append(tint(marker + f'{MODES[mode]:<16}', 'selected' if self.selection == i else accent)
+                            + tint(detail + active, accent if self.selection == i else 'dim'))
             rows += [tint('› ' + label, 'selected') if self.selection == i else '  ' + label
                      for i, label in enumerate(('Pause', 'Stop', 'Export log'), start=len(self.run_modes))]
             # Keep the chosen mode/control visible in a short terminal.
             start=max(0,action_start+self.selection-available+1)
             rows=rows[start:]
-            rows += ['', tint('Recent', 'dim')]
-            rows += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+tint(r['text'],event_tone(r)) for r in self.feed.rows[-max(0, available-len(rows)):]] if available > len(rows) else []
+            if available > len(rows)+2:
+                rows += ['', tint('RECENT', 'dim')]
+                rows += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+tint(r['text'],event_tone(r)) for r in self.feed.rows[-max(0, available-len(rows)):]]
             return rows
         if self.page == 1:
             rows = self.item_rows()
