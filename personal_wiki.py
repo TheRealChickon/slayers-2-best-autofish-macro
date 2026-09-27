@@ -17,6 +17,7 @@ import cv2
 from rapidocr_onnxruntime import RapidOCR
 
 from metrics import RUN
+from damage_build import load_profile as load_damage_profile
 
 
 def snapshot_root():
@@ -178,8 +179,23 @@ def markdown(data):
         profile=data['profile']
         lines+=['## Character','',f"{profile['player']} · Lv {profile['level']} {profile['race']} · {profile['clan']}",
                 f"Equipped titles: {', '.join(profile['equipped_titles'])}",
-                f"Equipped HUD image: assets/{profile['equipped_hud_image']}",'',
-                '## Damage assessment','']
+                f"Equipped HUD image: assets/{profile['equipped_hud_image']}",'']
+    if data.get('damage_build'):
+        build=data['damage_build']; anchor=build.get('calibration',{})
+        lines+=['## Later measured M1 build','',
+                'This later in-game M1 calibration supersedes older heuristic build suggestions below. The weapon uses a separate slot from five Stats items.',
+                '',f"Saved Gauntlet mastery: {build.get('mastery','unknown')}",
+                f"Measured M1: {anchor.get('m1','unknown')} at mastery {anchor.get('mastery','unknown')}",
+                f"Damage factor at measurement: {anchor.get('damage_factor','unknown')}x",'']
+        lines += [f"- {name}" for name in build.get('stat_items',[])]
+        lines += ['',f"Separate weapon: {build.get('weapon','unknown')}",'']
+        lines += [f"- {test}" for test in build.get('tests',[])]
+        lines += ['', 'The 0.025 base M1 per Gauntlet mastery level is inferred from measured levels 183–186; changing gear requires another measurement.', '']
+        lines += [f"- {limit}" for limit in build.get('limits',[])]
+        lines += ['']
+    if data.get('profile'):
+        profile=data['profile']
+        lines+=['## Earlier capture damage notes','']
         lines += [f"- {note}" for note in profile['damage_assessment']]
         lines+=['',profile['assessment_limit'],'']
     lines+=['## Currently equipped','']
@@ -239,6 +255,10 @@ render=function(){
     <h3>Equipped titles</h3><div class="title-list">${title}</div>
     <h3>Bottom-left HUD</h3><div class="snapshots">${shots}</div><p class="assessment-limit">${safe(b.label||'')} · Remaining unlabeled HUD values, in display order: ${safe((s.other_displayed_values_in_hud_order||[]).join(' · '))}</p>
     <h3>Damage notes</h3><ol class="assessment">${(c.damage_assessment||[]).map(x=>`<li>${safe(x)}</li>`).join('')}</ol><p class="assessment-limit">${safe(c.assessment_limit||'')}</p>`;
+  const m=data.damage_build;
+  if(m){const a=m.calibration||{};
+    p.innerHTML+=`<h3>Later measured M1 build</h3><p>Five Stats slots: ${safe((m.stat_items||[]).join(' · '))}. Weapon: ${safe(m.weapon||'unknown')} in a separate slot.</p><p>${safe(a.m1||'—')} M1 at Gauntlet mastery ${safe(a.mastery||'—')} with ${safe(a.damage_factor||'—')}x damage factor. This later live test takes priority over earlier estimates above.</p><ol class="assessment">${(m.tests||[]).map(x=>`<li>${safe(x)}</li>`).join('')}</ol><p class="assessment-limit">Mastery adds about 0.025 base M1 per level in the observed 183–186 range. Changed equipment needs another live calibration.</p>`;
+  }
 };
 '''
 
@@ -260,12 +280,15 @@ def build(root=None,open_site=False):
     baseline=json.loads(baseline_file.read_text(encoding='utf-8')) if baseline_file.exists() else None
     profile_file=root/'profile.json'
     profile=json.loads(profile_file.read_text(encoding='utf-8')) if profile_file.exists() else None
+    damage_root=root.parent if root.name=='wiki-snapshot' else root
+    damage_profile=load_damage_profile(damage_root)
     data={'captured_at':time.strftime('%Y-%m-%d %H:%M %Z'),'counts':{'inventory':len(owned),'inventory_grid':len(grid),'archive_only':len(archive_only),'archive_total':len(archive_all)},
           'inventory':[public_record(r) for r in owned],
           'archive_only':[public_record(r) for r in archive_only],
           'equipped':[public_record(r) for r in equipped],
           'baseline':baseline,
-          'profile':profile}
+          'profile':profile,
+          'damage_build':damage_profile or None}
     site=root/'site';site.mkdir(exist_ok=True)
     assets=site/'assets'
     for record in data['inventory']+data['archive_only']+data['equipped']:

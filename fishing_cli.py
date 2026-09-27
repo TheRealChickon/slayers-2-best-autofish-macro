@@ -109,10 +109,16 @@ def parser(prog='autofish'):
     sub.add_parser('export', help='Save the complete item log and totals as CSV')
     wiki=sub.add_parser('wiki', help='Build and open the local item wiki from saved captures')
     wiki.add_argument('--no-open', action='store_true', help='Build files without opening the browser')
+    wiki.add_argument('--site', action='store_true', help='Open your configured private ChatGPT Site')
+    build=sub.add_parser('build', aliases=['gear'], help='Show your saved damage loadout and mastery estimate')
+    mastery=build.add_mutually_exclusive_group()
+    mastery.add_argument('--mastery', type=int, help='Preview this mastery without saving it')
+    mastery.add_argument('--save-mastery', type=int, metavar='LEVEL', help='Save your current Gauntlet mastery')
+    build.add_argument('--json', action='store_true', help='Machine-readable report')
     webhook=sub.add_parser('webhook', help='Set or inspect the hourly Discord webhook')
     webhook.add_argument('operation', choices=('status','set','verify','remove'), nargs='?', default='status')
     tui=sub.add_parser('tui', help='Keyboard interface with live logs and settings')
-    tui.add_argument('--page', choices=('run','items','log','setup'), default='run')
+    tui.add_argument('--page', choices=('run','items','log','setup','build'), default='run')
     sub.add_parser('shell', help='Interactive command prompt; does not start fishing')
     from control_api import COMMANDS
     api = sub.add_parser('api', help='Versioned JSON interface for local integrations')
@@ -181,10 +187,29 @@ def execute(args, colors=False):
         print(path.read_text() if path.exists() else 'No failure reports saved')
         return 0
     if command=='wiki':
+        if args.site:
+            import webbrowser
+            from app_config import data_directory
+            path = data_directory() / 'wiki-hosted-url.txt'
+            if not path.exists():
+                raise ValueError('No hosted wiki configured for this account.')
+            url = path.read_text(encoding='utf-8').strip()
+            if not url.startswith('https://'):
+                raise ValueError('Hosted wiki URL must use HTTPS.')
+            webbrowser.open(url)
+            print('Opening private wiki: ' + url)
+            return 0
         from personal_wiki import build
         path,counts=build(open_site=not args.no_open)
         print(f'Wiki: {path}')
         print(f"{counts['inventory']} owned variants · {counts['archive_only']} archive-only entries")
+        return 0
+    if command in ('build', 'gear'):
+        from damage_build import report, save_mastery, text_lines
+        if args.save_mastery is not None:
+            save_mastery(args.save_mastery)
+        data = report(mastery=args.mastery)
+        print(json.dumps(data, indent=2, ensure_ascii=False) if args.json else '\n'.join(text_lines(data)))
         return 0
     if command=='webhook':
         from app_config import data_directory
@@ -218,7 +243,7 @@ def execute(args, colors=False):
         return 0
     if command == 'tui':
         from terminal_app import Terminal
-        client=Terminal();client.switch(('run','items','log','setup').index(args.page))
+        client=Terminal();client.switch(('run','items','log','setup','build').index(args.page))
         return client.run()
     if command == 'shell':
         return shell(colors)
@@ -259,7 +284,7 @@ def execute(args, colors=False):
 
 def shell(colors):
     print('\n'.join(status_lines(snapshot(), colors)))
-    print(color('\nModes: assist, spot, continue --mode full\nCommands: status, watch, items, logs, pause, continue, stop, webhook, plan --hours 8, export', 'gray', colors))
+    print(color('\nModes: assist, spot, continue --mode full\nCommands: status, watch, items, logs, build, wiki, pause, continue, stop, plan --hours 8, export', 'gray', colors))
     print('help shows options. exit closes this prompt and leaves the bot unchanged.\n')
     while True:
         try:
