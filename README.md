@@ -1,6 +1,6 @@
 # Fishing
 
-A Windows fishing assistant for the Project Slayers 2 / Ouwland fishing minigame. Includes a game-inspired inventory window, a keyboard terminal app, item history, live events, bait estimates, and reconnect recovery.
+A Windows assistant for Project Slayers 2 fishing and stationary statue damage practice. It includes a game-inspired inventory window, a keyboard terminal app, item history, live events, bait estimates, and fishing reconnect recovery.
 
 ## Launch it
 
@@ -12,7 +12,7 @@ Setup installs the **`autofish`** command for your Windows account. Open a new t
 autofish start
 ```
 
-Choose the game, then **Minigame only**, **Fish here**, or **Full farmer**, with arrows and Enter. The dashboard opens after starting. Only Project Slayers 2 / Ouwland is supported currently; future supported games can appear in the same picker.
+Choose the game, then **Minigame only**, **Fish here**, **Full farmer**, or **Statue damage**, with arrows and Enter. The dashboard opens after starting. Only Project Slayers 2 / Ouwland is supported currently; future supported games can appear in the same picker.
 
 The CLI opens with a full-terminal rod cast over water and reels the float back across the scene when you press **Q**. **Setup → Motion → Reduced** skips both animations.
 Ore pickups have their own short mineral-glint animation in the dashboard; it does not interrupt fishing or alter the item log.
@@ -27,6 +27,7 @@ autofish status
 autofish pause
 autofish continue
 autofish continue --mode full --until 22:00  # Stop at 22:00 local time today
+autofish damage        # Stationary statue: C, then five M1s
 autofish stop
 autofish logs --activity --follow
 autofish wiki             # Open your local item wiki, if captured
@@ -102,7 +103,7 @@ The same coordinate mapping is tested with 720p and 4K image fixtures, but those
 
 Opening or closing either view leaves the controller unchanged. **Pause** releases input and saves counters. **Continue** resumes the saved run. **Stop** stops input. In Minigame only and Fish here, **F9/F12 stop only while Roblox is foreground**; Escape never stops these modes. Full farmer retains its global F9/F12/Escape stop keys. Automatic recovery never clears a manual stop; an explicit Continue does. The CLI shows the stop or waiting reason, including the exact stop key for manual modes.
 
-**F8 pauses/resumes all three modes while Roblox is foreground.** Full farmer keeps the same worker and counters, releases held input, and rereads the current minigame or pickup on resume. Holding F8 counts once. Switching apps or moving the pointer outside Roblox pauses Full farmer automatically; returning resumes unless F8 was used to pause manually. Neither kind of pause triggers a rejoin. The dashboard shows `Paused — F8 to resume`; an explicit Continue command also releases Full farmer's F8 pause. Health checks and presence recovery leave manual pauses alone.
+**F8 pauses/resumes all four modes while Roblox is foreground.** Full farmer keeps the same worker and counters, releases held input, and rereads the current minigame or pickup on resume. Holding F8 counts once. Switching apps or moving the pointer outside Roblox pauses Full farmer automatically; returning resumes unless F8 was used to pause manually. Neither kind of pause triggers a rejoin. The dashboard shows `Paused — F8 to resume`; an explicit Continue command also releases Full farmer's F8 pause. Health checks and presence recovery leave manual pauses alone.
 
 If you move the installation folder, run `Setup.cmd` again to refresh the shortcut paths.
 
@@ -113,6 +114,21 @@ If you move the installation folder, run `Setup.cmd` again to refresh the shortc
 | **Full farmer** (`full`) | Saved spawn and initial setup | Rod, casts, minigame, collection, inventory checks, local repairs and reconnects |
 | **Minigame only** (`assist`) | Spot, rod, casts and pickups | Minigame mouse hold/release |
 | **Fish here** (`spot`) | Spot, camera, mouse and rod; F8 starts | Click, reel, collect, repeat |
+| **Statue damage** (`damage`) | Saved spawn inside statue and gauntlet in hotbar slot 1 | C when ready, five M1s, combo checks and bounded respawn attempts |
+
+### Statue damage
+
+This mode is for the stationary statue setup. It has passed offline tests but needs a fresh live check before unattended use. Start it only after stopping another mode:
+
+```powershell
+autofish damage
+```
+
+The worker waits for Roblox to be foreground with your pointer inside it. It checks the action bar before touching slot 1, then presses C when its icon looks ready and follows with five M1 clicks. It watches combo growth. After three poor M1 strings it opens Roblox's Respawn menu, verifies the confirmation dialog, and resets to your saved spawn; repeated failures pause it for inspection. A menu, missing hotbar, lost focus, F8 pause, Stop, or an uncertain reset blocks attacks. F9/F12 stop while Roblox is foreground. It does not rejoin servers or move your character.
+
+F8 and CLI Pause/Continue keep the damage counters. CLI Stop ends that sample; the next start begins a fresh sample. The worker does not take over Roblox focus when another app is in front.
+
+`autofish status` and the terminal Run page show combo, M1/C counts, resets and a rough 5-million-damage time. Damage is estimated from observed combo growth using 70 per M1 and 38 per extra C tick; the in-game Titles progress is the source for your actual total. The first live test confirmed M1 combo growth, but C timing and the Respawn dialog still need validation.
 
 ### Fish here
 
@@ -180,11 +196,11 @@ Launch **Fishing CLI**, or run:
 | Q or Ctrl+C | Close the view; fishing stays as it was |
 | Enter / Ctrl+G while editing | Save / cancel |
 
-The **Run** tab has direct **Minigame only**, **Fish here**, and **Full farmer** choices: select with ↑/↓ and press Enter to start. Pause the current mode before switching to another. **C** continues the saved mode. The command equivalents are `fishing.cmd assist`, `fishing.cmd spot`, and `fishing.cmd continue --mode full`.
+The **Run** tab has direct **Minigame only**, **Fish here**, **Full farmer**, and **Statue damage** choices: select with ↑/↓ and press Enter to start. Pause the current mode before switching to another. **C** continues the saved mode. The command equivalents are `fishing.cmd assist`, `fishing.cmd spot`, `fishing.cmd continue --mode full`, and `fishing.cmd damage`.
 
 Use Ctrl+G to cancel an edit; Escape remains a global stop key in Full farmer. In Setup, **Motion** toggles animations. Use a terminal at least 65 columns × 22 rows; 100 × 32 or larger is more comfortable.
 
-The field-terminal view has Run, Catches, Radio (live log), Rig (setup), and Damage pages. Run keeps the current state, pace, last catch, bait estimate and three mode choices together. Detailed recovery history is in Radio, where Catches can also open a filtered catch history. The live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
+The field-terminal view has Run, Catches, Radio (live log), Rig (setup), and Damage pages. Run keeps the current state, pace, last catch, bait estimate and four mode choices together. Detailed recovery history is in Radio, where Catches can also open a filtered catch history. The live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
 
 ## Personal item wiki
 

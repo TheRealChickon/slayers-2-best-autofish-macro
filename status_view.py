@@ -18,6 +18,7 @@ def snapshot(journal=None):
     journal = journal if journal is not None else Journal()
     totals, supervisor, worker, bait, presence, bait_observation = [read(name + '.json') for name in
         ('totals', 'supervisor', 'status', 'bait', 'presence', 'bait-observation')]
+    damage = read('damage-status.json')
     journal.update(totals.get('started'))
     live = actions.alive()
     starting = actions.starting() and not live
@@ -39,8 +40,13 @@ def snapshot(journal=None):
                           'spot_blocked':'Waiting for fishing scene','spot_attention':'Check the spot, then press F8',
                           'waiting_marker':'Waiting for a clear marker','pickup_wait':'Checking pickup',
                           'cast_press':'Casting','equipping':'Equipping rod','equip_wait':'Equipping rod','cooldown':'Next cast'}
-        state = ('Paused — F8 to resume' if f8_paused or stage=='paused_manual' else 'Waiting for Roblox' if stage=='paused_focus' else fishing_states.get(worker.get('stage'),'Fishing')
-                 if stage=='fishing' else stage.replace('_',' ').title())
+        if f8_paused or stage == 'paused_manual': state = 'Paused — F8 to resume'
+        elif stage == 'paused_focus': state = 'Waiting for Roblox'
+        elif stage == 'attacking': state = 'Attacking statue'
+        elif stage == 'blocked_scene': state = 'Close Roblox menu'
+        elif stage == 'attention': state = 'Inspect statue'
+        elif stage == 'fishing': state = fishing_states.get(worker.get('stage'), 'Fishing')
+        else: state = stage.replace('_', ' ').title()
     else:
         state = 'Paused' if paused else 'Stopped'
     reason = worker.get('wait_reason', '') if live else worker.get('reason', '') or supervisor.get('reason', '')
@@ -80,6 +86,7 @@ def snapshot(journal=None):
         'spot_armed':worker.get('spot_armed',False),
         'spot_paused':worker.get('spot_paused',False),
         'manual_paused':f8_paused or worker.get('manual_paused',False),
+        'damage': damage if (live and supervisor.get('mode')=='damage') or load_config()['mode']=='damage' else {},
     }
 
 

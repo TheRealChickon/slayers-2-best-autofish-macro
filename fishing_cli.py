@@ -39,6 +39,20 @@ def enable_color(force=False):
 def status_lines(data, colors=False):
     c = lambda text, tone='white': color(text, tone, colors)
     tone = state_tone(data['state'],data['running'] and not data['stop_requested'])
+    if data.get('mode') == 'damage':
+        d = data.get('damage') or {}
+        return [c('STATUE DAMAGE', 'gold')+'  /  '+c(data['state'].upper(), tone),
+                '  '+(data.get('reason') or d.get('wait_reason') or ''), '',
+                f"  Combo           {d.get('combo') or '-'}",
+                f"  Observed hits   {d.get('observed_hits', 0):,}",
+                f"  M1 / C          {d.get('m1_clicks', 0):,} / {d.get('c_casts', 0):,}",
+                f"  Reset attempts  {d.get('resets', 0):,}",
+                f"  Active time     {duration(d.get('active_seconds', 0))}",
+                f"  Est. damage     {d.get('estimated_damage', 0):,}",
+                f"  Est. pace       {d.get('estimated_dps') or '-'} damage/s",
+                f"  5M at pace      {str(d.get('five_million_hours'))+' hours' if d.get('five_million_hours') else 'Awaiting hit sample'}",
+                c('  Estimate uses observed combo ticks; title progress is the authoritative total.', 'gray'),
+                c('  F8 pauses/resumes in Roblox. Losing focus pauses automatically.', 'gray')]
     remain = data['bait_remaining_estimate']
     hours = data['bait_hours_remaining_estimate']
     recent=data.get('recent')
@@ -96,10 +110,11 @@ def parser(prog='autofish'):
     plan.add_argument('--hours', type=float, required=True)
     sub.add_parser('pause', help='Release game input and retain counters')
     resume=sub.add_parser('continue', aliases=['resume'], help='Explicitly start the selected mode')
-    resume.add_argument('--mode',choices=('full','assist','spot'),help='Full farmer, minigame only, or fish here')
+    resume.add_argument('--mode',choices=tuple(MODES),help='Full farmer, minigame only, fish here, or statue damage')
     resume.add_argument('--until',help='Stop Full farmer at HH:MM local time today')
     sub.add_parser('assist',help='Start minigame only; you cast and collect manually')
     sub.add_parser('spot',help='Click, reel and collect; F8 starts/pauses/resumes, losing focus pauses automatically')
+    sub.add_parser('damage',help='Stationary statue damage: C then five M1s, combo-checked, F8 pauses')
     reference=sub.add_parser('reference',help='Save a local fishing view while paused')
     reference.add_argument('operation',choices=('status','save','disable'),nargs='?',default='status')
     reference.add_argument('--position',action='store_true',help='Calibrate small position corrections as well as camera movement')
@@ -233,12 +248,13 @@ def execute(args, colors=False):
         response, code = dispatch(args.operation, args.request_id, args.limit)
         print(json.dumps(response, ensure_ascii=True), flush=True)
         return code
-    if command in ('pause', 'stop', 'continue', 'resume', 'assist', 'spot'):
+    if command in ('pause', 'stop', 'continue', 'resume', 'assist', 'spot', 'damage'):
         action = {'pause': actions.pause, 'stop': actions.stop,
                   'continue':lambda:actions.resume(getattr(args,'mode',None),getattr(args,'until',None)),
                   'resume':lambda:actions.resume(getattr(args,'mode',None),getattr(args,'until',None)),
                   'assist':lambda:actions.resume('assist'),
-                  'spot':lambda:actions.resume('spot')}[command]
+                  'spot':lambda:actions.resume('spot'),
+                  'damage':lambda:actions.resume('damage')}[command]
         print(color(action(), 'green' if command in ('continue', 'resume') else 'gold', colors))
         return 0
     if command == 'tui':
@@ -284,7 +300,7 @@ def execute(args, colors=False):
 
 def shell(colors):
     print('\n'.join(status_lines(snapshot(), colors)))
-    print(color('\nModes: assist, spot, continue --mode full\nCommands: status, watch, items, logs, build, wiki, pause, continue, stop, plan --hours 8, export', 'gray', colors))
+    print(color('\nModes: assist, spot, damage, continue --mode full\nCommands: status, watch, items, logs, build, wiki, pause, continue, stop, plan --hours 8, export', 'gray', colors))
     print('help shows options. exit closes this prompt and leaves the bot unchanged.\n')
     while True:
         try:
