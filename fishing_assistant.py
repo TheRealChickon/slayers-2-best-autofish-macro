@@ -102,16 +102,6 @@ class Input:
             time.sleep(.035)
         self.cast_target=None
 
-    def zoom_out(self,ticks=8):
-        """Back away from an obstructed first-person view without moving the character."""
-        self.release()
-        for _ in range(ticks):
-            self.guard_press(True)
-            if (RUN/'STOP').exists():raise RuntimeError('Stopped by stop file')
-            USER.mouse_event(0x0800,0,0,-120,0)
-            time.sleep(.035)
-        self.cast_target=None
-
     def aim(self,x,y,after_menu=False):
         self.cast_target=None
         # Roblox can process its hotbar hover one frame behind the OS cursor.
@@ -387,10 +377,13 @@ def main():
                         if now-since>BITE_WAIT_TIMEOUT_SECONDS:
                             missing_casts+=1;event('no_minigame',count=missing_casts);screenshot('missing')
                             if first_person_active:
-                                inp.zoom_out();first_person_active=False;missing_casts=0
-                                cast_needs_settle=True;stage='casting';since=time.monotonic()
-                                event('camera_fallback',reason='No minigame from the first-person cast')
-                                continue
+                                # The game's camera can slowly pitch into a nearby
+                                # railing. Scrolling out and moving the pointer while
+                                # Roblox still has camera lock pitches it farther
+                                # down; a fresh join restores the saved view safely.
+                                event('camera_rejoin',reason='First-person cast did not reach water')
+                                raise FishingFault('no_minigame','First-person cast did not start a minigame; rejoin to restore camera',
+                                    missed_casts=missing_casts,wait_seconds=BITE_WAIT_TIMEOUT_SECONDS)
                             if missing_casts>=MISSED_CASTS_BEFORE_REJOIN:
                                 raise FishingFault('no_minigame','Three casts without a recognized minigame',
                                     missed_casts=missing_casts,wait_seconds=BITE_WAIT_TIMEOUT_SECONDS)
