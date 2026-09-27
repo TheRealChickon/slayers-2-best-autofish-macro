@@ -16,7 +16,7 @@ class Game:
 
 
 GAMES = {
-    'project-slayers-2': Game('Project Slayers 2 / Ouwland', ('assist', 'spot', 'full'), start_ouwland),
+    'project-slayers-2': Game('Project Slayers 2 / Ouwland', ('assist', 'spot', 'full', 'damage'), start_ouwland),
 }
 
 

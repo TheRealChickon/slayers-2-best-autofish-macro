@@ -44,7 +44,8 @@ def start(args, colors=False):
     if mode is None:
         details = {'assist': 'you cast + collect; bot reels',
                    'spot': 'you choose the spot; bot casts + collects',
-                   'full': 'saved spawn; bot fishes + rejoins'}
+                   'full': 'saved spawn; bot fishes + rejoins',
+                   'damage': 'statue; C + five M1; combo guard'}
         mode=choose('How should it fish?',
                     [(key, f'{MODES[key]}  /  {details[key]}') for key in game.modes], colors)
     if mode is None:return 0

@@ -52,10 +52,11 @@ class Journal:
                         if kind=='equipped_rod':
                             if self.joins==0 or self.join_pending:self.joins+=1;changed=True
                             self.join_pending=False
-                    if path.name in ('recovery.jsonl','controls.jsonl') and kind not in ('screen','disconnect_observed'):
+                    if (path.name in ('recovery.jsonl','controls.jsonl') or path.name.startswith('events-damage-')) and kind not in ('screen','disconnect_observed'):
                         message=row.get('message') or row.get('reason') or kind.replace('_',' ')
                         self.activity.append({'at':row['at'],'kind':kind,'message':message,
-                            'group':'recovery' if path.name=='recovery.jsonl' else 'controls'});changed=True
+                            'group':'recovery' if path.name=='recovery.jsonl' or kind=='damage_reset' else
+                                    'damage' if path.name.startswith('events-damage-') else 'controls'});changed=True
                 self.offsets[key]=f.tell()
         if changed:
             for reward_id,correction in self.corrections.items():

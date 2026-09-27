@@ -20,9 +20,9 @@ def event_tone(row):
         return 'gold' if message.lower().startswith(('stopped by','paused by','session_limit')) else 'red'
     if kind in ('wrong_interaction','disconnect_gui','disconnect_observed') or 'error' in kind:
         return 'red'
-    if row.get('level')=='warn' or any(word in kind for word in ('retry','backoff','no_minigame','unreadable','ambiguous','exhausted')):
+    if row.get('level')=='warn' or any(word in kind for word in ('retry','backoff','no_minigame','unreadable','ambiguous','exhausted','attention')):
         return 'gold'
-    if row.get('level')=='good' or kind in ('reward_observed','inventory_resolved','inventory_recovered','equipped_rod','rod_equipped','rod_already_equipped'):
+    if row.get('level')=='good' or kind in ('reward_observed','inventory_resolved','inventory_recovered','equipped_rod','rod_equipped','rod_already_equipped','damage_ready'):
         return 'green'
     if kind=='state':return state_tone(message)
     if row.get('group')=='recovery':return 'cyan'
@@ -85,8 +85,8 @@ class LiveFeed:
                     # Screen/OCR transitions are diagnostics, not new recoveries.
                     # Keep them in raw logs; show actual actions and outcomes here.
                     if kind in ('tracking_reacquired','screen','alignment_check'):continue
-                    group = 'catches' if kind in ('reward_observed','inventory_resolved','inventory_recovered') else 'recovery' if path.name=='recovery.jsonl' else 'fishing'
-                    level = 'warn' if any(term in kind for term in ('error','stopped','no_minigame','wrong_interaction','retry','exhausted','unreadable','ambiguous')) else 'good' if kind in ('reward_observed','equipped_rod','rod_equipped','inventory_resolved','inventory_recovered') else 'normal'
+                    group = 'catches' if kind in ('reward_observed','inventory_resolved','inventory_recovered') else 'recovery' if path.name=='recovery.jsonl' or kind=='damage_reset' else 'damage' if path.name.startswith('events-damage-') else 'fishing'
+                    level = 'warn' if any(term in kind for term in ('error','stopped','no_minigame','wrong_interaction','retry','exhausted','unreadable','ambiguous','attention')) else 'good' if kind in ('reward_observed','equipped_rod','rod_equipped','inventory_resolved','inventory_recovered','damage_ready') else 'normal'
                     event_id = hashlib.sha256(json.dumps([started, path.name, position, row], sort_keys=True).encode()).hexdigest()[:24]
                     self.rows.append({'id':event_id,'at':row.get('at',0),'kind':kind,'group':group,'level':level,
                         'text':re.sub(r'[\x00-\x1f\x7f]', ' ', describe(row))})

@@ -103,7 +103,7 @@ def seconds_until_local_clock(value):
 def resume(mode=None,until=None):
     global _starting
     mode = mode or load_config().get('mode','full')
-    if mode not in MODES:raise ValueError('Mode must be full, assist, or spot')
+    if mode not in MODES:raise ValueError('Mode must be full, assist, spot, or damage')
     if until and mode!='full':raise ValueError('--until is available for Full farmer only')
     seconds=seconds_until_local_clock(until) if until else 0
     with guard():
@@ -121,16 +121,22 @@ def resume(mode=None,until=None):
             if current_mode!=mode:return 'Pause the current mode before switching modes.'
             if mode=='assist':return 'Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.'
             if mode=='spot':return 'Fish here is active. Equip your rod, position the mouse, then press F8.'
+            if mode=='damage':return 'Statue damage is active. F8 pauses/resumes; Roblox focus controls attacks.'
             (RUN/'F8_PAUSE').unlink(missing_ok=True)
             focus_game()
             event('continue', 'Returned focus to Roblox.')
             return 'Roblox is focused. Fishing will resume automatically.'
         # Only an explicit Continue command may release a manual stop.
+        try:previous_mode=json.loads((RUN/'supervisor.json').read_text()).get('mode')
+        except (OSError,ValueError):previous_mode=None
+        resume_damage_counters = mode=='damage' and previous_mode=='damage' and (RUN/'PAUSE').exists()
         save_config({'mode':mode})
         (RUN / 'PAUSE').unlink(missing_ok=True)
         (RUN / 'STOP').unlink(missing_ok=True)
         (RUN / 'F8_PAUSE').unlink(missing_ok=True)
-        args = ([sys.executable,str(ROOT/'minigame_assist.py'),'--respect-stop','--mode',mode] if mode in ('assist','spot') else
+        args = ([sys.executable,str(ROOT/'damage_farmer.py'),'--respect-stop'] +
+                (['--resume-counters'] if resume_damage_counters else []) if mode=='damage' else
+                [sys.executable,str(ROOT/'minigame_assist.py'),'--respect-stop','--mode',mode] if mode in ('assist','spot') else
                 [sys.executable, str(ROOT / 'recovery.py'), '--seconds', str(seconds), '--rejoin',
                  '--focus', '--resume-counters', '--respect-stop'])
         try:
@@ -141,7 +147,8 @@ def resume(mode=None,until=None):
         except Exception:
             (RUN / 'STOP').write_text('Continue failed; input stopped')
             raise
-        message = ('Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.' if mode=='assist' else
+        message = ('Statue damage started. Bring Roblox forward; F8 pauses/resumes C and five M1s.' if mode=='damage' else
+                   'Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.' if mode=='assist' else
                    'Fish here is active. Equip your rod, position the mouse, then press F8; losing focus pauses input.' if mode=='spot' else
                    ('Continuing the saved run until '+until+' local time. Rejoining and equipping the rod...' if until else
                     'Continuing the saved run. Rejoining and equipping the rod...'))

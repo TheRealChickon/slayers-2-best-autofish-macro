@@ -46,18 +46,19 @@ def clip(line, width):
 class Terminal:
     pages = ('Run', 'Items', 'Live log', 'Setup', 'Build')
     categories = ('All', 'Catches', 'Recovery', 'Warnings')
-    run_modes = ('assist', 'spot', 'full')
+    run_modes = ('assist', 'spot', 'full', 'damage')
     mode_details = {
         'assist': ('green', 'you cast / auto reel'),
         'spot': ('cyan', 'cast / reel / collect'),
         'full': ('gold', 'spawn / rejoin'),
+        'damage': ('ore', 'C / five M1 / combo guard'),
     }
     settings_keys = ('Username', 'Mode', 'Rod slot', 'Auto rod', 'Camera', 'Heading',
                      'Fishing titles', 'Cast point', 'Capture pointer',
                      'Position correction', 'Save reference', 'Disable reference', 'Motion')
     setting_help = {
         'Username':'Roblox account for presence and reconnect checks.',
-        'Mode':'Full rejoins; Fish here stays at your spot; Minigame only reels.',
+        'Mode':'Full rejoins; Fish here stays put; Minigame only reels; Damage hits the statue.',
         'Rod slot':'Hotbar number of your fishing rod (1–9).',
         'Auto rod':'Full farmer checks the hotbar and equips an unselected rod.',
         'Camera':'Keep your view, or zoom fully in. At rails, the avatar may block first person.',
@@ -283,6 +284,22 @@ class Terminal:
     def body(self, available):
         d = self.data
         if self.page == 0:
+            if d.get('mode') == 'damage' and d.get('running'):
+                damage = d.get('damage', {})
+                rows = [tint('STATUE', 'dim')+'  '+tint(d['state'], 'gold'),
+                        tint('COMBO', 'dim')+f"  {damage.get('combo') or '—'}    "+
+                        tint('HITS', 'dim')+f"  {damage.get('observed_hits', 0):,}",
+                        tint('M1', 'dim')+f"  {damage.get('m1_clicks', 0):,}    "+
+                        tint('C', 'dim')+f"  {damage.get('c_casts', 0):,}    "+
+                        tint('RESETS', 'dim')+f"  {damage.get('resets', 0)}",
+                        tint('PACE', 'dim')+f"  {damage.get('estimated_dps') or '—'} est. damage/s    "+
+                        tint('5M', 'dim')+f"  {damage.get('five_million_hours') or '—'}h", '']
+                rows += [tint('› ' if self.selection == i else '  ', 'selected')+
+                         tint(MODES[mode]+'  /  '+self.mode_details[mode][1], 'gold' if self.selection==i else 'dim')
+                         for i,mode in enumerate(self.run_modes)]
+                rows += [tint('› ' if self.selection == i else '  ', 'selected')+label
+                         for i,label in enumerate(('Pause','Stop','Export log'),start=len(self.run_modes))]
+                return rows[:available]
             amount = estimate(d, self.hours)
             rows = [tint('CATCH', 'dim') + '  ' + tint(f"{d['items']:,}", 'gold') +
                     tint('     HOOK', 'dim') + f"  {d['hooks']:,}" +
