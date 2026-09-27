@@ -43,6 +43,19 @@ class DamageBuild(unittest.TestCase):
         (self.root/damage_build.PROFILE_NAME).write_text(json.dumps(self.profile), encoding='utf-8')
         self.assertIsNone(damage_build.report(self.root)['projected_m1'])
 
+    def test_haori_swap_uses_flat_damage_and_additive_displayed_factor(self):
+        owned = {
+            'Stone Haori': {'stats': ['+2 (Additional Damage)', '1.02x (Additional Damage Factor)']},
+            'Serpent Haori': {'stats': ['1.07x (Additional Damage Factor)']},
+            'Flame Haori Style 1': {'stats': ['1.07x (Additional Damage Factor)']},
+        }
+        result = damage_build.haori_comparison(self.profile, owned)
+        self.assertEqual(len(result['swaps']), 2)
+        self.assertEqual(result['swaps'][0]['damage_factor'], 1.511)
+        self.assertEqual(result['swaps'][0]['projected_m1'], 63.32)
+        self.assertEqual(result['swaps'][0]['difference'], -0.83)
+        self.assertEqual(result['swaps'][1]['projected_m1'], 63.32)
+
     def test_save_mastery_preserves_calibration_and_cli_is_read_only(self):
         damage_build.save_mastery(190, self.root)
         self.assertEqual(damage_build.load_profile(self.root)['calibration']['mastery'], 186)
