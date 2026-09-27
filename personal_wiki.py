@@ -200,6 +200,12 @@ def markdown(data):
                 'Times are approximate because the video was sampled every three seconds. Travel, respawn waits and menus are excluded. Shared-damage and incomplete fights were excluded.','']
         for row in boss.get('bosses',[]):
             lines.append(f"- {row['name']}: median {row['median_seconds']}s, observed {row['min_seconds']}–{row['max_seconds']}s across {row['count']} clean fights")
+        economy=boss.get('economy') or {}
+        if economy:
+            lines+=['','## Boss farming income without 2x Wen','',
+                    f"Normal reward {economy['base_wen_per_boss']} Wen + one coin pouch worth {economy['coin_pouch_wen_per_boss']} Wen = {economy['wen_per_boss_without_2x']} Wen per boss.",
+                    f"{economy['clean_kills']} clean kills in {round(economy['recording_seconds']/60,1)} minutes = {economy['clean_kills_per_hour']} kills/hour and about {economy['estimated_wen_per_hour']:,} Wen/hour gross, including redeemed pouches.",
+                    economy['assumption'],'']
         lines+=['','Video damage anchors: 64.78 Gauntlet M1 at mastery 202 with displayed +35.888 Additional Damage and 1.461x factor; Shockwave ticks of 37.57 and 38.23 at Shockwave mastery 206. Other visible hits range roughly 60–78 but cannot be assigned confidently to named skills from the sampled recording. Earlier same-gear M1 tests at mastery 183–186 imply about +0.0365 displayed M1 per Gauntlet mastery level.','']
     if data.get('profile'):
         profile=data['profile']
