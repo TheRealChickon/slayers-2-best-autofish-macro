@@ -8,13 +8,31 @@ from unittest.mock import patch
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from damage_cycle import DamageCycle, ProgressGuard
+from damage_cycle import DamageCycle, FiveHitGuard, ProgressGuard
 from damage_vision import B_ICON_BOX, B_READY_REFERENCE, SkillReady, gauntlet_selected, hotbar_visible
 from damage_farmer import reset_character
 from item_journal import Journal
 
 
 class DamagePolicy(unittest.TestCase):
+    def test_five_hit_guard_never_investigates_a_healthy_five_gain(self):
+        guard = FiveHitGuard()
+        for _ in range(5):
+            guard.begin(100, 40)
+            self.assertEqual(guard.check(105, 45, 45), 'healthy')
+        self.assertEqual(guard.deficient_trials, 0)
+
+    def test_five_hit_guard_needs_extra_string_and_stable_reads(self):
+        guard = FiveHitGuard()
+        guard.begin(0, 10)
+        self.assertEqual(guard.check(0, None, 10), 'unknown')
+        guard.begin(0, 10)
+        self.assertEqual(guard.check(0, 10, 10), 'recheck_next_string')
+        guard.begin(0, 10)
+        self.assertEqual(guard.check(0, 10, 10), 'investigate')
+        guard.title_progressed()
+        self.assertEqual(guard.deficient_trials, 0)
+
     def test_skill_precedes_exactly_five_m1s(self):
         cycle = DamageCycle()
         now = 10.

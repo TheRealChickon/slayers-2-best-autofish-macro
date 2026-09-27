@@ -11,7 +11,7 @@ import psutil
 import win32gui
 from rapidocr_onnxruntime import RapidOCR
 
-from damage_cycle import ProgressGuard
+from damage_cycle import FiveHitGuard, ProgressGuard
 from damage_plan import DamageRotation
 from damage_title import DamageTitleReader
 from damage_measure import DamageMeasurements
@@ -120,7 +120,7 @@ def main(argv=None):
     watcher.start()
     if B_READY_REFERENCE is None:
         raise RuntimeError('The verified ultimate icon reference is missing')
-    cycle, progress, ultimate_vision = (DamageRotation(rotation), ProgressGuard(),
+    cycle, progress, hit_guard, ultimate_vision = (DamageRotation(rotation), ProgressGuard(), FiveHitGuard(),
                                          SkillReady(B_ICON_BOX, B_READY_REFERENCE))
     ocr = RapidOCR()
     hwnd = screen = None
@@ -395,6 +395,53 @@ def main(argv=None):
                     action_at = time.monotonic()
                     due = cycle.due(action_at, ultimate_ready)
                     action = due[0] if due else None
+                    if action in ('shock_wave', 'skip_shock_wave'):
+                        # Check after the fifth click but before any skill can
+                        # add combo ticks. Two stable reads are required.
+                        first_post = combo_count(screen.capture(sct), ocr)
+                        observed_hits += progress.observe(first_post)
+                        guarded_wait(.18)
+                        second_post = combo_count(screen.capture(sct), ocr)
+                        observed_hits += progress.observe(second_post)
+                        combo = second_post if second_post is not None else first_post
+                        result = hit_guard.check(observed_hits, first_post, second_post)
+                        if result == 'investigate':
+                            stage = 'checking_damage'
+                            wait_reason = 'Two five-hit strings lacked confirmed combo growth; checking title'
+                            status()
+                            prior_title = measurements.total
+                            driver = InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer)
+                            reader = DamageTitleReader(driver, config['damage_title'],
+                                config['damage_target'], config['damage_title_category'])
+                            try:
+                                measurements.observe(reader.inspect(), time.time())
+                            except (RuntimeError, ValueError) as error:
+                                manual_paused = True
+                                stage = 'attention'
+                                wait_reason = 'Combo uncertain and title unreadable; reset withheld: '+str(error)
+                                event('damage_attention', message=wait_reason)
+                                continue
+                            last_progress_check = time.monotonic()
+                            hit_guard.title_progressed()
+                            if measurements.total > prior_title:
+                                event('damage_stall_cleared', message='Title increased despite uncertain combo; no reset.')
+                            elif not progress.reset_allowed(action_at):
+                                manual_paused = True
+                                stage = 'attention'
+                                wait_reason = 'Repeated verified stalls; reset limit reached'
+                                event('damage_attention', message=wait_reason)
+                            elif reset_character(inp, screen, sct, ocr, event):
+                                resets += 1
+                                needs_setup = True
+                                next_setup = time.monotonic()+7.
+                            else:
+                                manual_paused = True
+                                stage = 'attention'
+                                wait_reason = 'Reset UI uncertain after verified stall'
+                            cycle.resync(time.monotonic())
+                            continue
+                        if result != 'healthy':
+                            event('damage_combo_uncertain', message=f'Five-hit result: {result}; reset withheld.')
                     if action == 'shock_wave':
                         perform_move('shock_wave')
                         event('damage_skill', message=f"{rotation['names']['shock_wave']} used after five M1s")
@@ -406,28 +453,15 @@ def main(argv=None):
                         ultimate_ready = False
                         event('damage_skill', message='Quick prep tap and held ultimate used together')
                     elif action == 'm1':
+                        if due[1] == 1:
+                            hit_guard.begin(observed_hits, combo)
                         attack_click(inp)
                         clicks += 1
                     elif action == 'cycle_end':
                         cycles += 1
-                        stalled = progress.finish_cycle(False)
+                        progress.finish_cycle(True)
                         if cycles % 5 == 0:
                             event('damage_progress', message=f'Combo {combo or "—"} · {clicks} M1 · {casts} C · {resets} respawns.')
-                        if stalled:
-                            if not progress.reset_allowed(action_at):
-                                manual_paused = True
-                                stage = 'attention'
-                                wait_reason = 'Repeated resets did not restore combo; inspect statue position and press F8'
-                                event('damage_attention', message=wait_reason)
-                            elif reset_character(inp, screen, sct, ocr, event):
-                                resets += 1
-                                needs_setup = True
-                                next_setup = time.monotonic()+7.
-                                cycle.resync(next_setup)
-                            else:
-                                manual_paused = True
-                                stage = 'attention'
-                                wait_reason = 'Reset UI was uncertain; inspect Roblox and press F8'
                     active_seconds += delta
                     if not manual_paused:
                         stage = 'attacking'
