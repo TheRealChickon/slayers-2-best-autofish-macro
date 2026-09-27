@@ -154,7 +154,7 @@ class IsolatedState(unittest.TestCase):
         normal='\n'.join(app.render(100,32))
         for text in ('Minigame only','Fish here','Full farmer','Stopped by F12 in Roblox'):
             self.assertIn(text,normal)
-        for text in ('You cast + collect', 'You pick the spot', 'Saved spawn'):
+        for text in ('reel', 'cast', 'collect', 'rejoin'):
             self.assertIn(text,normal)
         for index,label in enumerate(('Minigame only','Fish here','Full farmer','Pause','Stop','Export log')):
             app.selection=index

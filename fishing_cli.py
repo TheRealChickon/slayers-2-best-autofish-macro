@@ -106,6 +106,8 @@ def parser(prog='autofish'):
     sub.add_parser('diagnostics',help='Show the last eight failure reports and local screenshot paths')
     sub.add_parser('stop', help='Stop game input and retain counters')
     sub.add_parser('export', help='Save the complete item log and totals as CSV')
+    wiki=sub.add_parser('wiki', help='Build and open the local item wiki from saved captures')
+    wiki.add_argument('--no-open', action='store_true', help='Build files without opening the browser')
     webhook=sub.add_parser('webhook', help='Set or inspect the hourly Discord webhook')
     webhook.add_argument('operation', choices=('status','set','verify','remove'), nargs='?', default='status')
     tui=sub.add_parser('tui', help='Keyboard interface with live logs and settings')
@@ -176,6 +178,12 @@ def execute(args, colors=False):
         path=RUN/'diagnostics/index.json'
         print(path)
         print(path.read_text() if path.exists() else 'No failure reports saved')
+        return 0
+    if command=='wiki':
+        from personal_wiki import build
+        path,counts=build(open_site=not args.no_open)
+        print(f'Wiki: {path}')
+        print(f"{counts['inventory']} owned variants · {counts['archive_only']} archive-only entries")
         return 0
     if command=='webhook':
         from app_config import data_directory
