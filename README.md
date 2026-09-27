@@ -26,6 +26,7 @@ autofish start --game project-slayers-2 --mode assist --no-ui
 autofish status
 autofish pause
 autofish continue
+autofish continue --mode full --until 22:00  # Stop at 22:00 local time today
 autofish stop
 autofish logs --activity --follow
 autofish wiki             # Open your local item wiki, if captured

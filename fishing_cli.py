@@ -97,6 +97,7 @@ def parser(prog='autofish'):
     sub.add_parser('pause', help='Release game input and retain counters')
     resume=sub.add_parser('continue', aliases=['resume'], help='Explicitly start the selected mode')
     resume.add_argument('--mode',choices=('full','assist','spot'),help='Full farmer, minigame only, or fish here')
+    resume.add_argument('--until',help='Stop Full farmer at HH:MM local time today')
     sub.add_parser('assist',help='Start minigame only; you cast and collect manually')
     sub.add_parser('spot',help='Click, reel and collect; F8 starts/pauses/resumes, losing focus pauses automatically')
     reference=sub.add_parser('reference',help='Save a local fishing view while paused')
@@ -209,8 +210,8 @@ def execute(args, colors=False):
         return code
     if command in ('pause', 'stop', 'continue', 'resume', 'assist', 'spot'):
         action = {'pause': actions.pause, 'stop': actions.stop,
-                  'continue':lambda:actions.resume(getattr(args,'mode',None)),
-                  'resume':lambda:actions.resume(getattr(args,'mode',None)),
+                  'continue':lambda:actions.resume(getattr(args,'mode',None),getattr(args,'until',None)),
+                  'resume':lambda:actions.resume(getattr(args,'mode',None),getattr(args,'until',None)),
                   'assist':lambda:actions.resume('assist'),
                   'spot':lambda:actions.resume('spot')}[command]
         print(color(action(), 'green' if command in ('continue', 'resume') else 'gold', colors))
