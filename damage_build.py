@@ -1,11 +1,8 @@
-"""Read-only personal damage notes from a captured inventory and local calibration.
-
-The game does not expose a verified damage formula. Only the unchanged measured
-loadout gets an M1 projection; a gear swap requires a new in-game measurement.
-"""
+"""Read-only personal damage notes from captured stats and M1 measurements."""
 
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -13,6 +10,49 @@ from app_config import data_directory
 
 
 PROFILE_NAME = 'damage-profile.json'
+
+
+def _damage_stat(item, label, default=None):
+    for line in item.get('stats', []):
+        match = re.fullmatch(r'\s*\+?([\d.]+)\s*x?\s*\(\s*' + re.escape(label) + r'\s*\)\s*', line, re.I)
+        if match:
+            return float(match.group(1))
+    return default
+
+
+def haori_comparison(profile, owned):
+    """Estimate one-piece M1 swaps from the measured hit and additive HUD factors."""
+    calibration = profile.get('calibration') or {}
+    stone = owned.get('Stone Haori')
+    if not stone or 'Stone Haori' not in profile.get('stat_items', []):
+        return None
+    measured = calibration.get('m1')
+    factor = calibration.get('damage_factor')
+    stone_flat = _damage_stat(stone, 'Additional Damage')
+    stone_factor = _damage_stat(stone, 'Additional Damage Factor')
+    if not all(value is not None for value in (measured, factor, stone_flat, stone_factor)) or factor <= 0:
+        return None
+    swaps = []
+    for name in ('Serpent Haori', 'Flame Haori Style 1'):
+        item = owned.get(name)
+        if not item:
+            continue
+        replacement_factor = _damage_stat(item, 'Additional Damage Factor')
+        if replacement_factor is None:
+            continue
+        replacement_flat = _damage_stat(item, 'Additional Damage', 0.0)
+        new_factor = factor - (stone_factor - 1) + (replacement_factor - 1)
+        new_m1 = (measured / factor - stone_flat + replacement_flat) * new_factor
+        swaps.append({'name': name, 'additional_damage': round(replacement_flat - stone_flat, 3),
+                      'damage_factor': round(new_factor, 3), 'projected_m1': round(new_m1, 2),
+                      'difference': round(new_m1 - measured, 2)})
+    if not swaps:
+        return None
+    return {'current_item': 'Stone Haori', 'measured_m1': measured,
+            'measured_factor': factor, 'mastery': calibration.get('mastery'),
+            'swaps': swaps,
+            'method': 'Swap the item flat damage and add its factor increment to the displayed total; apply the new factor to measured M1 divided by the old factor. HUD 1.23x to 1.28x supports additive stacking.',
+            'limit': 'Calculated M1 at the saved mastery if all item bonuses apply; not a live swap measurement.'}
 
 
 def profile_path(root=None):
@@ -87,6 +127,7 @@ def report(root=None, mastery=None):
                    'refinement': owned.get(weapon_name, {}).get('refinement', 0),
                    'stats': owned.get(weapon_name, {}).get('stats', [])} if weapon_name else None,
         'tests': profile.get('tests', []),
+        'haori_comparison': haori_comparison(profile, owned),
         'limits': profile.get('limits', []),
         'profile_found': bool(profile),
     }
@@ -121,6 +162,12 @@ def text_lines(data):
                                  if 'Additional Damage' in value)]
     if data['tests']:
         lines += ['', 'LIVE COMPARISON'] + [f"- {test}" for test in data['tests']]
+    comparison = data.get('haori_comparison')
+    if comparison:
+        lines += ['', 'HAORI SWAP / CALCULATED M1']
+        for swap in comparison['swaps']:
+            lines.append(f"- {swap['name']}: ~{swap['projected_m1']:.2f} M1 ({swap['difference']:+.2f} vs Stone Haori's {comparison['measured_m1']:.2f})")
+        lines.append(comparison['limit'])
     lines += ['', 'Mastery estimate is for unchanged gear. Inventory and equipped marks are a saved snapshot.']
     lines += data['limits']
     return lines
