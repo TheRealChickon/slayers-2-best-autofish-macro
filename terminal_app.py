@@ -19,7 +19,7 @@ from metrics import read, write
 from status_view import duration, estimate, snapshot
 from bait_warning import warning as bait_warning
 import damage_build
-from damage_view import pace_labels
+from damage_view import pace_labels, skill_lines
 
 ESC = '\033['
 RESET = ESC + '0m'
@@ -297,7 +297,8 @@ class Terminal:
                         tint('RESETS', 'dim')+f"  {damage.get('resets', 0)}",
                         tint('DPH', 'dim')+'  '+pace,
                         tint('LEFT', 'dim')+f"  {damage.get('remaining_damage', 0):,} damage    "+tint('CHECKED', 'dim')+'  '+sample,
-                        tint('FINISH', 'dim')+'  '+finish, '']
+                        tint('FINISH', 'dim')+'  '+finish,
+                        *skill_lines(damage)[1:5], '']
                 rows += [tint('› ' if self.selection == i else '  ', 'selected')+
                          tint(MODES[mode]+'  /  '+self.mode_details[mode][1], 'gold' if self.selection==i else 'dim')
                          for i,mode in enumerate(self.run_modes)]

@@ -15,6 +15,7 @@ from damage_cycle import FiveHitGuard, ProgressGuard
 from damage_plan import DamageRotation
 from damage_title import DamageTitleReader
 from damage_measure import DamageMeasurements
+from damage_skill_samples import sample_skill
 from damage_vision import B_ICON_BOX, C_ICON_BOX, Z_ICON_BOX, B_READY_REFERENCE, SkillReady, combo_count, blocked_scene, scene_text, gauntlet_selected, hotbar_visible
 from inventory_watch import InventoryDriver
 from app_config import load_config
@@ -151,6 +152,7 @@ def main(argv=None):
     last_progress_check = 0.
     next_setup = 0.
     scene_blocked = False
+    skill_samples = read('damage-skill-samples.json').get('samples', {})
     def status(running=True):
         now = time.time()
         measurements.active_seconds = active_seconds
@@ -163,6 +165,7 @@ def main(argv=None):
                    'title_name': config['damage_title'], 'rotation': rotation,
                    'five_million_hours': measured['eta_hours'],
                    'estimate_note': 'Verified in-game title progress; pace updates at each periodic read.',
+                   'skill_samples': skill_samples,
                    **measured,
                    'reason': reason if not running else ''}
         write('damage-status.json', payload)
@@ -175,10 +178,14 @@ def main(argv=None):
 
     def guarded_wait(seconds):
         until = time.monotonic()+seconds
+        next_status = time.monotonic()+1
         while time.monotonic() < until:
             inp.guard_press(True)
             if inp.toggle_requested.is_set():
                 raise RuntimeError('F8 requested during damage measurement')
+            if stage == 'measuring_skills' and time.monotonic() >= next_status:
+                status()
+                next_status = time.monotonic()+1
             time.sleep(.025)
 
     def perform_move(role):
@@ -204,6 +211,44 @@ def main(argv=None):
         measurements.observe(baseline, time.time())
         event('damage_baseline', title_progress=baseline,
               message=f'Verified starting title damage: {baseline:,}')
+
+    def measure_skills(reader):
+        nonlocal stage, wait_reason, clicks
+        stage = 'measuring_skills'
+        wait_reason = 'Letting prior damage finish before isolated samples'
+        status()
+        guarded_wait(20)
+        roles = ['m1_string'] + list(rotation['enabled'])
+        visions = {'shock_wave': shock_vision, 'followup': followup_vision,
+                   'ultimate': ultimate_vision}
+        for role in roles:
+            wait_reason = 'Measuring '+role.replace('_', ' ')
+            status()
+            if role != 'm1_string':
+                deadline = time.monotonic()+90
+                while not visions[role].observe(screen.capture(sct)):
+                    if time.monotonic() >= deadline:
+                        raise ValueError(role+' did not become ready; sample skipped')
+                    guarded_wait(.5)
+            def perform():
+                nonlocal clicks
+                if role == 'm1_string':
+                    for index in range(5):
+                        attack_click(inp)
+                        clicks += 1
+                        if index < 4:
+                            guarded_wait(rotation['m1_interval'])
+                else:
+                    perform_move('ultimate_pair' if role == 'ultimate' else role)
+            result = sample_skill(reader.inspect, guarded_wait, perform,
+                                  20 if role == 'ultimate' else 15)
+            result['at'] = time.time()
+            skill_samples[role] = result
+            measurements.observe(result['after'], result['at'])
+            write('damage-skill-samples.json', {'samples': skill_samples})
+            event('damage_skill_sample', role=role, **result,
+                  message=f"Isolated {role}: {result['damage']:,} damage")
+            status()
     event('damage_started', message='Measured five-M1, Shock Wave, follow-up and conditional ultimate rotation; F8 controls input.')
     status()
     try:
@@ -325,6 +370,26 @@ def main(argv=None):
                             hit_guard.cancel()
                             cycle.resync(last_progress_check)
                     frame = screen.capture(sct) if tick-last_frame >= .18 else None
+                    request = read('damage-sample-request.json') if cycle.m1_index == 0 else {}
+                    if request and cycle.phase == 'm1' and tick-cycle.last_ultimate >= 15:
+                        write('damage-sample-request.json', {})
+                        hit_guard.cancel()
+                        driver = InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer)
+                        reader = DamageTitleReader(driver, config['damage_title'],
+                            config['damage_target'], config['damage_title_category'])
+                        try:
+                            measure_skills(reader)
+                        except ValueError as error:
+                            event('damage_sample_failed', message=str(error))
+                            if not hotbar_visible(screen.capture(sct)):
+                                raise
+                        finally:
+                            measurements.samples.clear()
+                            cycle.resync(time.monotonic())
+                            hit_guard.cancel()
+                        stage, wait_reason = 'attacking', ''
+                        last_progress_check = time.monotonic()-config['damage_check_seconds']
+                        continue
                     if frame is not None:
                         last_frame = tick
                         combo = combo_count(frame, ocr)
