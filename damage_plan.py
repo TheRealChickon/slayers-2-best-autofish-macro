@@ -11,7 +11,7 @@ DEFAULT_ROTATION = {
     'm1_interval': .42, 'post_m1_wait': .75,
     'shock_wave_seconds': 1.0, 'followup_seconds': 1.0,
     'ultimate_cooldown_seconds': 60.0, 'ultimate_hold_seconds': 2.0,
-    'ultimate_prep_tap_seconds': .025, 'combo_gap': 1.65,
+    'ultimate_prep_tap_seconds': .025, 'ultimate_prep_wait_seconds': .5, 'combo_gap': 1.65,
 }
 
 
@@ -41,7 +41,8 @@ def validate_rotation(value):
     bounds = {'m1_interval': (.15, 2), 'post_m1_wait': (.5, 1.),
               'shock_wave_seconds': (.1, 15), 'followup_seconds': (.1, 15),
               'ultimate_cooldown_seconds': (1, 600), 'ultimate_hold_seconds': (.1, 15),
-              'ultimate_prep_tap_seconds': (.01, .05), 'combo_gap': (.5, 5)}
+              'ultimate_prep_tap_seconds': (.01, .05),
+              'ultimate_prep_wait_seconds': (.5, 2), 'combo_gap': (.5, 5)}
     for field, (minimum, maximum) in bounds.items():
         number = float(result[field])
         if not math.isfinite(number) or not minimum <= number <= maximum:
@@ -90,7 +91,9 @@ class DamageRotation:
             if ('ultimate' in s['enabled'] and ultimate_ready and
                     now-self.last_ultimate >= s['ultimate_cooldown_seconds']):
                 self.last_ultimate = now
-                self.next_at = now+s['ultimate_hold_seconds']+s['combo_gap']
+                self.next_at = (now+s['ultimate_prep_tap_seconds']+
+                                s['ultimate_prep_wait_seconds']+
+                                s['ultimate_hold_seconds']+s['combo_gap'])
                 return ('ultimate_pair', None)
             self.next_at = now+s['combo_gap']
             return ('skip_ultimate', None)
