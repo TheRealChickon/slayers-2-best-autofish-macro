@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 
 LOOT_MARKER=cv2.imread(str(Path(__file__).resolve().parent/'assets'/'boss-loot-marker.png'),0)
+POUCH_MARKER=cv2.imread(str(Path(__file__).resolve().parent/'assets'/'boss-pouch-marker.png'),0)
 
 
 def loot_glows(frame):
@@ -20,7 +21,7 @@ def loot_glows(frame):
     bright=(value>230)&(sat<150)
     mask=(color|bright).astype(np.uint8)*255
     mask[:540]=0;mask[1230:]=0;mask[:,:200]=0;mask[:,2140:]=0
-    mask[650:,1050:1510]=0;mask[620:735,:340]=0
+    mask[650:1150,1160:1410]=0;mask[620:735,:340]=0
     mask=cv2.morphologyEx(mask,cv2.MORPH_CLOSE,np.ones((7,7),np.uint8))
     n,labels,stats,centers=cv2.connectedComponentsWithStats(mask)
     found=[]
@@ -33,7 +34,7 @@ def loot_glows(frame):
         if np.count_nonzero(bright[y:y+h,x:x+w]&component)<15:continue
         # Boundary fragments can be sky, a notification or the player's aura.
         if x<=205 or x+w>=2135 or y<=545 or y+h>=1225:continue
-        if x+w>=1045 and x<=1515 and y+h>=645:continue
+        if x+w>=1155 and x<=1415 and y+h>=645 and y<=1155:continue
         found.append((float(centers[i][0]),float(y+h),1.))
     return found
 
@@ -44,11 +45,12 @@ def loot_markers(frame, threshold=.84):
     gray=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
     roi=gray[420:1230,200:2140].copy()
     # Exclude the player, party widget, notifications and the fixed HUD.
-    roi[120:,850:1310]=0
+    roi[230:730,960:1210]=0
     roi[200:315,:140]=0
     found=[]
-    for scale in (.45,.5,.6,.7,.8,.9,1.,1.1,1.25,1.5):
-        template=cv2.resize(LOOT_MARKER,None,fx=scale,fy=scale)
+    bases=[base for base in (LOOT_MARKER,POUCH_MARKER) if base is not None]
+    for base,scale in ((base,scale) for base in bases for scale in (.45,.5,.6,.7,.8,.9,.95,1.,1.05,1.1,1.25,1.5)):
+        template=cv2.resize(base,None,fx=scale,fy=scale)
         scores=cv2.matchTemplate(roi,template,cv2.TM_CCOEFF_NORMED)
         for _ in range(6):
             _,score,_,(x,y)=cv2.minMaxLoc(scores)

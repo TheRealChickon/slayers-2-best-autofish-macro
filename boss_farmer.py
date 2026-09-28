@@ -359,9 +359,18 @@ class BossSession:
                         x,y,_=marker
                         key=('a' if x<1280 else 'd') if abs(x-1280)>150 else ('w' if y<1050 else 's')
                         step=.22 if key in ('a','d','w') else .14
+                        forward=.16 if key in ('a','d') and y<900 else 0.
+                        if walked+step+forward>4.:break
                         self.tap(key,step)
                         walked+=step
                         self.event('boss_loot_approach',key=key,seconds=step)
+                        # A distant drop needs forward travel too. Pure
+                        # strafing can hide it behind the avatar before the
+                        # character is close enough to show Claim.
+                        if forward:
+                            self.tap('w',forward)
+                            walked+=forward
+                            self.event('boss_loot_approach',key='w',seconds=forward)
                         previous_marker=None
                         self.wait(.15)
                     else:
