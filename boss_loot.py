@@ -10,6 +10,35 @@ LOOT_MARKER=cv2.imread(str(Path(__file__).resolve().parent/'assets'/'boss-loot-m
 POUCH_MARKER=cv2.imread(str(Path(__file__).resolve().parent/'assets'/'boss-pouch-marker.png'),0)
 
 
+def chest_targets(frame):
+    """Orange chest frame around a dark green lid; navigation evidence only."""
+    if frame.shape[:2]!=(1440,2560):return []
+    hsv=cv2.cvtColor(frame,cv2.COLOR_BGR2HSV)
+    hue,sat,value=cv2.split(hsv)
+    mask=((hue>=7)&(hue<=27)&(sat>110)&(value>35)&(value<200)).astype(np.uint8)*255
+    mask[:500]=0;mask[1150:]=0;mask[:,:200]=0;mask[:,2140:]=0
+    mask[500:780,:450]=0
+    mask[730:,1140:1440]=0
+    mask=cv2.morphologyEx(mask,cv2.MORPH_CLOSE,np.ones((5,5),np.uint8))
+    _,_,stats,_=cv2.connectedComponentsWithStats(mask)
+    pieces=[(x,y,x+w,y+h) for x,y,w,h,area in stats[1:]
+            if 60<=w<=350 and 35<=h<=220 and area>500 and .08<area/(w*h)<.85]
+    groups=[]
+    for piece in pieces:
+        for i,(x,y,r,b) in enumerate(groups):
+            if min(b,piece[3])-max(y,piece[1])>25 and piece[0]<r+60 and piece[2]>x-60:
+                groups[i]=(min(x,piece[0]),min(y,piece[1]),max(r,piece[2]),max(b,piece[3]))
+                break
+        else:groups.append(piece)
+    found=[]
+    for x,y,r,b in groups:
+        if not (90<r-x<450 and .8<(r-x)/(b-y)<3.5):continue
+        green=(hue[y:b,x:r]>30)&(hue[y:b,x:r]<100)&(sat[y:b,x:r]>30)&(value[y:b,x:r]>25)&(value[y:b,x:r]<160)
+        if np.count_nonzero(green)<150:continue
+        found.append(((x+r)/2,(y+b)/2,1.))
+    return found
+
+
 def loot_glows(frame):
     """Colored drop glow can guide an approach before its circle is visible."""
     if frame.shape[:2]!=(1440,2560):return []
@@ -94,7 +123,7 @@ def prompt_from_rows(rows):
     for action in actions:
         nearby=[row for row in rows if row not in actions and row not in keys and
                 abs(row['x']-action['x']) < 500 and abs(row['y']-action['y']) < 110]
-        names=[row for row in nearby if re.search(r'chest|coin pouch|refinement ore|metal scraps|brave soul|silk thread|haor?i?|katana|uniform|\bwen\b',row['text'],re.I)]
+        names=[row for row in nearby if re.search(r'chest|coin pouch|refinement ore|metal scraps|brave soul|silk thread|haor?i?|katana|uniform|armou?r|\bwen\b',row['text'],re.I)]
         if len(names)!=1:continue
         name=names[0]
         radius=max(330,330+name.get('height',0)*6)
@@ -112,7 +141,7 @@ def reward_name(text):
         return 'Coin Pouch'
     if normalized in ('refinementore','refinemertore'):
         return 'Refinement Ore'
-    return text.strip() if re.search(r'pouch|ore|scraps|haori|katana|uniform|soul|silk thread',text,re.I) else None
+    return text.strip() if re.search(r'pouch|ore|scraps|haori|katana|uniform|armou?r|soul|silk thread',text,re.I) else None
 
 
 def reward_from_rows(rows):

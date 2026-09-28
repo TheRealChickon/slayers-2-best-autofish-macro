@@ -21,7 +21,7 @@ from app_config import load_config
 from boss_plan import FightLedger, can_attack
 from boss_vision import observe, rows_in, fast_health, cutscene_visible, combat_hud_visible, chat_send_button, player_bar_fraction, compass_heading, blocking_target
 from boss_tracking import BossTracker
-from boss_loot import prompt_from_rows, reward_from_rows, loot_markers, loot_glows
+from boss_loot import prompt_from_rows, reward_from_rows, loot_markers, loot_glows, chest_targets
 from damage_vision import blocked_scene, gauntlet_selected, SkillReady, C_ICON_BOX, Z_ICON_BOX, B_ICON_BOX, B_READY_REFERENCE
 from fishing_assistant import USER, find_window, rectangle, move_pointer
 from metrics import RUN, read, write
@@ -305,6 +305,7 @@ class BossSession:
         seen_rewards = set()
         clear_reward_frames = 0
         pending_reward = False
+        chest_opened = False
         searches = misses = 0
         total_searches = 0
         walked = 0.
@@ -352,6 +353,7 @@ class BossSession:
                 if previous_marker:
                     markers=[m for m in markers if m[2]>=.84 or math.hypot(m[0]-previous_marker[0],m[1]-previous_marker[1])<65]
                 if not markers:markers=loot_glows(frame)
+                if not markers and not chest_opened:markers=chest_targets(frame)
                 marker=min(markers,key=lambda p:math.hypot(p[0]-1280,(p[1]-1050)*.7),default=None)
                 if marker is not None and walked<4.:
                     self.event('boss_loot_target',point=marker,walked=round(walked,2))
@@ -401,6 +403,7 @@ class BossSession:
                     self.wait(.2)
                     continue
                 self.tap('t',1.5)
+                chest_opened=True
                 seen_rewards.clear()
                 pending_reward=True
                 self.actions += 1

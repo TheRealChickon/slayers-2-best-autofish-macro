@@ -187,7 +187,10 @@ observed approaches. They never authorize a pickup by themselves: a named item,
 Claim/Open action and nearby T prompt must agree twice. Small reward popups get
 a focused OCR pass, including Coin Pouch quantities. Confirmed collection renews
 the surrounding search; farm mode returns to the verified spawn after walking
-for loot. Pink ground effects are excluded from the glow-only approach.
+for loot. Pink ground effects are excluded from the glow-only approach. An
+unopened chest can also guide approach through its orange frame and green lid;
+only a readable named Open/Claim prompt permits interaction. Armour drops use
+the same prompt and reward-confirmation rules.
 
 Respawn completion is detected from a death transition followed by three stable
 full-health HUD frames. Camera return uses the observed post-combo compass,

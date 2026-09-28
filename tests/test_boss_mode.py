@@ -15,7 +15,7 @@ import fishing_cli
 from boss_plan import BossObservation, FightLedger, can_attack, validate_boss
 from boss_vision import boss_from_rows, health_pair, respawn_timer, player_bar_fraction, world_name, combat_hud_visible, chat_send_button, compass_heading, blocking_target, BLOCK_SHIELD
 from boss_tracking import BossTracker, Target
-from boss_loot import prompt_from_rows,reward_from_rows,loot_markers,loot_glows,LOOT_MARKER
+from boss_loot import prompt_from_rows,reward_from_rows,loot_markers,loot_glows,chest_targets,LOOT_MARKER
 
 
 def reading(hp=3000, **values):
@@ -24,6 +24,17 @@ def reading(hp=3000, **values):
 
 
 class BossEvidence(unittest.TestCase):
+    def test_chest_navigation_needs_frame_shape_and_green_lid(self):
+        frame=np.zeros((1440,2560,3),np.uint8)
+        cv2.rectangle(frame,(800,600),(1000,710),(40,70,30),-1)
+        cv2.rectangle(frame,(800,600),(1000,710),(20,80,140),15)
+        self.assertEqual(len(chest_targets(frame)),1)
+        cv2.rectangle(frame,(800,600),(1000,710),(20,80,140),-1)
+        self.assertEqual(chest_targets(frame),[])
+        frame[:]=0
+        cv2.rectangle(frame,(1200,680),(1220,760),(20,80,140),-1)
+        self.assertEqual(chest_targets(frame),[])
+
     def test_identical_stacks_count_separately_but_persistent_toasts_do_not(self):
         row=lambda text,x,y:dict(text=text,x=x,y=y,score=.99,height=25)
         prompt=[row('T',900,800),row('Coin Pouch',1100,775),row('Claim',1080,810)]
