@@ -187,6 +187,7 @@ def main(argv=None):
         if role == 'ultimate_pair':
             # X is never sent alone. Release it before holding B.
             press(inp, keys['ultimate_prep'], rotation['ultimate_prep_tap_seconds'])
+            guarded_wait(rotation['ultimate_prep_wait_seconds'])
             hold_key(inp, keys['ultimate'], rotation['ultimate_hold_seconds'])
         else:
             press(inp, keys[role])
