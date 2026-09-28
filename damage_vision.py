@@ -10,6 +10,7 @@ import cv2
 # sits at the left of the ornamental ring, so the ring is excluded from OCR.
 COMBO_BOX = (490, 680, 160, 120)
 C_ICON_BOX = (1205, 1280, 45, 45)
+Z_ICON_BOX = (1093, 1280, 45, 45)
 B_ICON_BOX = (1315, 1280, 45, 45)
 B_READY_REFERENCE = cv2.imread(str(Path(__file__).resolve().parent/'assets'/'b-ready.png'), cv2.IMREAD_GRAYSCALE)
 
@@ -64,6 +65,16 @@ class SkillReady:
         self.box = box
 
     def observe(self, frame):
+        # This game keeps the white artwork during cooldown and draws a red
+        # border around it. Artwork correlation alone therefore accepts a
+        # cooling skill. Include the outside border in the readiness check.
+        x, y, w, h = self.box
+        bordered = crop(frame, (max(0, x-8), max(0, y-4), w+12, h+12))
+        if bordered.size:
+            b, g, r = cv2.split(bordered.astype('float32'))
+            red = (r > 90) & (r > g*1.5) & (r > b*1.5)
+            if red.mean() > .025:
+                return False
         icon = c_icon(frame, self.box)
         if icon.shape != (45, 45):
             return False

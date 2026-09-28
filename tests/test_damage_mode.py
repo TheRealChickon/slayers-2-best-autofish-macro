@@ -15,6 +15,31 @@ from item_journal import Journal
 
 
 class DamagePolicy(unittest.TestCase):
+    def test_interrupted_string_cannot_confirm_previous_short_string(self):
+        guard = FiveHitGuard()
+        guard.begin(0, 10)
+        self.assertEqual(guard.check(2, 12, 12), 'recheck_next_string')
+        guard.begin(2, 12)
+        guard.cancel()
+        self.assertEqual(guard.check(2, 12, 12), 'unknown')
+        guard.begin(2, 12)
+        self.assertEqual(guard.check(2, 12, 12), 'recheck_next_string')
+
+    def test_counter_restart_is_uncertain_not_a_verified_stall(self):
+        guard = FiveHitGuard()
+        for _ in range(3):
+            guard.begin(100, 200)
+            self.assertEqual(guard.check(100, 3, 3), 'unknown')
+
+    def test_healthy_string_clears_previous_deficiency(self):
+        guard = FiveHitGuard()
+        guard.begin(0, 10)
+        self.assertEqual(guard.check(1, 11, 11), 'recheck_next_string')
+        guard.begin(1, 11)
+        self.assertEqual(guard.check(6, 16, 16), 'healthy')
+        guard.begin(6, 16)
+        self.assertEqual(guard.check(6, 16, 16), 'recheck_next_string')
+
     def test_five_hit_guard_never_investigates_a_healthy_five_gain(self):
         guard = FiveHitGuard()
         for _ in range(5):
@@ -79,6 +104,16 @@ class DamagePolicy(unittest.TestCase):
         frame = np.zeros((1440, 2560, 3), dtype=np.uint8)
         frame[1290:1310, 1212:1240] = 255
         skill = SkillReady()
+        self.assertTrue(skill.observe(frame))
+
+    def test_cooldown_red_border_blocks_unchanged_white_artwork(self):
+        frame = np.zeros((1440, 2560, 3), dtype=np.uint8)
+        frame[1290:1310, 1212:1240] = 255
+        skill = SkillReady()
+        self.assertTrue(skill.observe(frame))
+        frame[1277:1332, 1197:1200] = (0, 0, 220)
+        self.assertFalse(skill.observe(frame))
+        frame[1277:1332, 1197:1200] = 0
         self.assertTrue(skill.observe(frame))
         dark = frame.copy()
         dark[1280:1325, 1205:1250] = 0

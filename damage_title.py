@@ -18,6 +18,14 @@ def progress_from_rows(rows, title, target):
     joined = ' '.join(words)
     pairs = re.findall(r'(?<!\d)(\d[\d,.]*?)\s*/\s*(\d[\d,.]*)(?!\d)', joined)
     values = set()
+    # The live title panel shows a requirement and a separate remaining count.
+    requirements = re.findall(r'Deal\s+([\d,]+)\s+total\s+damage', joined, re.I)
+    remaining = re.findall(r'(?<!\d)(\d[\d,]*)\s+left\b', joined, re.I)
+    if len(requirements) == 1 and int(requirements[0].replace(',', '')) == target:
+        for value in remaining:
+            left = int(value.replace(',', ''))
+            if 0 <= left <= target:
+                values.add(target-left)
     for current, total in pairs:
         try:
             pair = int(re.sub(r'\D', '', current)), int(re.sub(r'\D', '', total))

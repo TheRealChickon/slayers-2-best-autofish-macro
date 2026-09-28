@@ -1,19 +1,13 @@
-# Supervised damage-mode test
+# Damage-mode live checks
 
-The controller remains stopped after staging. Use this only while watching the game on an unlocked desktop; the new rotation and title OCR have not been verified in Roblox. Only Shock Wave has previously been tested.
+Run `autofish damage` with Roblox foreground, the saved statue spawn set, and Gauntlet in slot 1. `autofish tui` opens the dashboard; `autofish status` prints a snapshot.
 
-1. In PowerShell, open the staged Fishing checkout and read its installed interpreter:
+The configured rotation is five M1s, ready C, ready Z, then a 25 ms X tap and a 2 s B hold only when B is ready. V, N, K and L are unused. Cooling skill borders prevent casting. The farmer waits through HUD-hidden ultimate animations.
 
-   ```powershell
-   Set-Location 'C:\Users\xsami\Documents\Codex\2026-09-21\ch\outputs\Fishing'
-   $fishingPython = (Get-Content 'C:\Users\xsami\Documents\Codex\2026-09-21\ch\outputs\Fishing\runtime.local.json' -Raw | ConvertFrom-Json).python
-   & $fishingPython .\fishing_cli.py damage --show-config
-   ```
+Annihilator requires 10,000,000 total damage. The reader accepts the requirement plus the remaining `left` value in the title detail. Startup establishes a baseline; periodic title checks occur between complete strings.
 
-   Check the four physical keys, move names, waits, Annihilator title and 5,000,000 target. To change one, run `& $fishingPython .\fishing_cli.py damage --key followup=Q --timing followup_seconds=1.5 --configure-only`. This saves settings without starting.
-2. In Roblox, stand at the intended statue with Gauntlet in slot 1. Open **Titles → Combat → Annihilator** and confirm the detail shows a readable `current / 5,000,000` damage figure. Close the menu. Keep Roblox foreground and the pointer inside it.
-3. Explicitly start with `& $fishingPython .\fishing_cli.py damage`, then watch the calibration. It measures one, four, and five M1 clicks in separate trials, Shock Wave, the follow-up, then the X+B pair only after the B icon appears ready. If title reading or damage sampling is uncertain, it pauses. Press F8 to pause/resume and F9 or F12 in Roblox to stop.
-4. Run `& $fishingPython .\fishing_cli.py status` from a separate console. Compare `title_progress`, first/fifth M1, each move's damage, and ETA against the visible Annihilator title. Check that X is tapped briefly only immediately before held B, that B is skipped when its icon is on cooldown, and that V is never used in the default rotation. Observe at least one periodic title recheck (three minutes by default).
-5. Stop with `& $fishingPython .\fishing_cli.py stop`. Keep the resulting local counters, inventory data and wiki. If any key, hold length, title OCR, or reset behavior differs from the game, keep the controller stopped and report the exact status/error and screenshot for adjustment before an unattended run.
+Every five-click check is recorded in `events-damage-*.jsonl`. Five confirmed hits are healthy. A deficient string must repeat before a title check; reset is withheld if title damage increased or the readings are uncertain. Focus interruptions and combo-counter restarts do not count as verified stalls.
 
-The deployed checkout is staged on `feature/universal-auto-damage-live`. The original `dev` checkout is preserved at `backup/deployed-before-universal-live`; source rollback is `backup/statue-damage-before-universal`. Local counters, inventory data and wiki remain in the ignored run-data directory. No title completion switches into fishing mode.
+F8 pauses/resumes, and F9/F12 stop while Roblox is foreground. CLI Pause/Continue preserves counters. Leave Roblox foreground to continue input.
+
+The September 28 live test verified title reading, M1 combo growth, C/Z casts and the X+B ultimate animation. The reset dialog is covered by unit tests; a real stall is required before the farmer attempts it.

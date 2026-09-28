@@ -62,7 +62,7 @@ class DamageRotation:
     def resync(self, now):
         self.phase, self.next_at, self.m1_index = 'm1', now+2.5, 0
 
-    def due(self, now, ultimate_ready=False):
+    def due(self, now, ultimate_ready=False, shock_wave_ready=True, followup_ready=True):
         if now < self.next_at:
             return None
         s = self.settings
@@ -75,13 +75,13 @@ class DamageRotation:
             return ('m1', self.m1_index)
         if self.phase == 'shock_wave':
             self.phase, self.next_at = 'followup', now+s['shock_wave_seconds']
-            if 'shock_wave' not in s['enabled']:
+            if 'shock_wave' not in s['enabled'] or not shock_wave_ready:
                 self.next_at = now
                 return ('skip_shock_wave', None)
             return ('shock_wave', None)
         if self.phase == 'followup':
             self.phase, self.next_at = 'ultimate', now+s['followup_seconds']
-            if 'followup' not in s['enabled']:
+            if 'followup' not in s['enabled'] or not followup_ready:
                 self.next_at = now
                 return ('skip_followup', None)
             return ('followup', None)

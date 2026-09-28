@@ -14,6 +14,29 @@ from damage_title import progress_from_rows
 
 
 class UniversalDamageTests(unittest.TestCase):
+    def test_cooling_skills_are_skipped_after_five_m1(self):
+        cycle = DamageRotation(DEFAULT_ROTATION)
+        now, actions = 0., []
+        while len(actions) < 9:
+            due = cycle.due(now, False, False, False)
+            if due:
+                actions.append(due[0])
+            now += .05
+        self.assertEqual(actions, ['m1']*5 + ['skip_shock_wave', 'skip_followup',
+                                             'skip_ultimate', 'cycle_end'])
+
+    def test_live_remaining_damage_format_requires_matching_requirement(self):
+        rows = [{'text': text, 'score': .94, 'center': (2200, y)} for text, y in
+                [('Annihilator', 365), ('Requirements', 469),
+                 ('Deal 10,000,000 total', 508), ('damage.', 545),
+                 ('5,251,113 left', 582)]]
+        self.assertEqual(progress_from_rows(rows, 'Annihilator', 10_000_000), 4_748_887)
+        with self.assertRaises(ValueError):
+            progress_from_rows(rows, 'Annihilator', 5_000_000)
+        rows.append({'text': '5,200,000 left', 'score': .94, 'center': (2200, 600)})
+        with self.assertRaises(ValueError):
+            progress_from_rows(rows, 'Annihilator', 10_000_000)
+
     def test_default_rotation_never_uses_v_or_x_alone(self):
         cycle = DamageRotation(DEFAULT_ROTATION)
         self.assertNotIn('V', DEFAULT_ROTATION['keys'].values())

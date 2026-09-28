@@ -15,18 +15,24 @@ class FiveHitGuard:
         self.start_hits = observed_hits
         self.start_combo = combo
 
+    def cancel(self):
+        """An interrupted string cannot establish or confirm a stall."""
+        self.start_hits = self.start_combo = None
+        self.deficient_trials = 0
+
     def check(self, observed_hits, first_post, second_post):
         if self.start_hits is None:
             return 'unknown'
         gained = max(0, observed_hits-self.start_hits)
         baseline = self.start_combo
         self.start_hits = self.start_combo = None
-        if gained >= 5 or (baseline is not None and any(
+        if gained >= 5 or (baseline is None and first_post == second_post == 5) or (baseline is not None and any(
                 value is not None and value-baseline >= 5
                 for value in (first_post, second_post))):
             self.deficient_trials = 0
             return 'healthy'
         if (baseline is None or first_post is None or second_post is None or
+                first_post < baseline or second_post < baseline or
                 abs(first_post-second_post) > 1):
             self.deficient_trials = 0
             return 'unknown'

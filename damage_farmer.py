@@ -15,7 +15,7 @@ from damage_cycle import FiveHitGuard, ProgressGuard
 from damage_plan import DamageRotation
 from damage_title import DamageTitleReader
 from damage_measure import DamageMeasurements
-from damage_vision import B_ICON_BOX, B_READY_REFERENCE, SkillReady, combo_count, blocked_scene, scene_text, gauntlet_selected, hotbar_visible
+from damage_vision import B_ICON_BOX, C_ICON_BOX, Z_ICON_BOX, B_READY_REFERENCE, SkillReady, combo_count, blocked_scene, scene_text, gauntlet_selected, hotbar_visible
 from inventory_watch import InventoryDriver
 from app_config import load_config
 from fishing_assistant import ROOT, USER, find_window, rectangle, move_pointer
@@ -122,6 +122,7 @@ def main(argv=None):
         raise RuntimeError('The verified ultimate icon reference is missing')
     cycle, progress, hit_guard, ultimate_vision = (DamageRotation(rotation), ProgressGuard(), FiveHitGuard(),
                                          SkillReady(B_ICON_BOX, B_READY_REFERENCE))
+    shock_vision, followup_vision = SkillReady(C_ICON_BOX), SkillReady(Z_ICON_BOX)
     ocr = RapidOCR()
     hwnd = screen = None
     manual_paused = False
@@ -195,56 +196,13 @@ def main(argv=None):
             casts += 1
 
     def calibrate(reader):
-        """Compare separate 1, 4 and 5 click trials; no fixed M1 math."""
-        nonlocal clicks, active_seconds
-        sample_started = time.monotonic()
+        """Establish title progress without disrupting the requested rotation."""
         baseline = reader.inspect()
-        if measurements.last_verified is None:
-            measurements.starting_total = baseline if not args.resume_counters else measurements.starting_total
+        if not args.resume_counters or not previous.get('last_verified'):
+            measurements.starting_total = baseline
         measurements.observe(baseline, time.time())
-        def trial(count):
-            before = measurements.total
-            for index in range(count):
-                if index:
-                    guarded_wait(rotation['m1_interval'])
-                attack_click(inp)
-                clicks += 1
-            guarded_wait(rotation['combo_gap'])
-            after = reader.inspect()
-            measurements.observe(after, time.time())
-            return after-before
-        first = trial(1)
-        four = trial(4)
-        five = trial(5)
-        measurements.calibrate_m1(first, four, five)
-        for role, settle in (('shock_wave','shock_wave_seconds'), ('followup','followup_seconds')):
-            if role not in rotation['enabled']:
-                continue
-            before = measurements.total
-            perform_move(role)
-            guarded_wait(rotation[settle])
-            after = reader.inspect()
-            measurements.observe(after, time.time())
-            measurements.calibrate_move(rotation['names'][role], after-before)
-        if 'ultimate' in rotation['enabled']:
-            ready_deadline = time.monotonic()+rotation['ultimate_cooldown_seconds']+10
-            while time.monotonic() < ready_deadline:
-                if ultimate_vision.observe(screen.capture(sct)):
-                    break
-                guarded_wait(.5)
-            else:
-                raise ValueError('Ultimate icon was not visibly ready; X and B were not used')
-            before = measurements.total
-            perform_move('ultimate_pair')
-            guarded_wait(rotation['combo_gap'])
-            after = reader.inspect()
-            measurements.observe(after, time.time())
-            measurements.calibrate_move(rotation['names']['ultimate'], after-before)
-            cycle.last_ultimate = time.monotonic()
-        event('damage_calibrated', message='Title-verified first/fifth M1 and move damage samples',
-              first_m1=measurements.first_m1, fifth_m1=measurements.fifth_m1,
-              move_damage=measurements.moves)
-        active_seconds += time.monotonic()-sample_started
+        event('damage_baseline', title_progress=baseline,
+              message=f'Verified starting title damage: {baseline:,}')
     event('damage_started', message='Measured five-M1, Shock Wave, follow-up and conditional ultimate rotation; F8 controls input.')
     status()
     try:
@@ -266,6 +224,7 @@ def main(argv=None):
                         inp.toggle_requested.clear()
                         manual_paused = not manual_paused
                         inp.suspend_input()
+                        hit_guard.cancel()
                         cycle.resync(tick)
                         event('damage_paused' if manual_paused else 'damage_resumed',
                               message='F8 paused attacks.' if manual_paused else 'F8 resumed attacks.')
@@ -274,6 +233,7 @@ def main(argv=None):
                         wait_reason = 'Return to Roblox; attacks resume automatically'
                         needs_setup = True
                         last_scan = 0.
+                        hit_guard.cancel()
                         cycle.resync(tick)
                         time.sleep(.05)
                         continue
@@ -282,6 +242,7 @@ def main(argv=None):
                         hwnd = selected
                         screen = ScreenSpace(rect)
                         needs_setup = True
+                        hit_guard.cancel()
                         cycle.resync(tick)
                     if manual_paused:
                         stage = 'paused_manual'
@@ -298,6 +259,7 @@ def main(argv=None):
                         inp.interrupted.clear()
                         needs_setup = True
                         last_scan = 0.
+                        hit_guard.cancel()
                         cycle.resync(tick)
                     if tick-last_scan >= 2.:
                         frame = screen.capture(sct)
@@ -306,6 +268,7 @@ def main(argv=None):
                         scene_blocked = blocked_scene(frame, ocr)
                         if was_blocked and not scene_blocked:
                             needs_setup = True
+                            hit_guard.cancel()
                             cycle.resync(tick)
                     if scene_blocked:
                         stage = 'blocked_scene'
@@ -358,6 +321,7 @@ def main(argv=None):
                                 continue
                             needs_calibration = False
                             last_progress_check = time.monotonic()
+                            hit_guard.cancel()
                             cycle.resync(last_progress_check)
                     frame = screen.capture(sct) if tick-last_frame >= .18 else None
                     if frame is not None:
@@ -366,7 +330,8 @@ def main(argv=None):
                         gain = progress.observe(combo)
                         observed_hits += gain
                         ultimate_ready = ultimate_vision.observe(frame)
-                    if tick-last_progress_check >= config['damage_check_seconds']:
+                    if (tick-last_progress_check >= config['damage_check_seconds'] and
+                            cycle.phase == 'm1' and cycle.m1_index == 0):
                         stage = 'checking_damage'
                         driver = InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer)
                         reader = DamageTitleReader(driver, config['damage_title'],
@@ -382,6 +347,7 @@ def main(argv=None):
                             event('damage_attention', message=wait_reason)
                             continue
                         last_progress_check = time.monotonic()
+                        hit_guard.cancel()
                         cycle.resync(last_progress_check)
                         event('damage_progress', message=f"Verified {measurements.total:,}/{measurements.target:,} title damage")
                         if measurements.total >= measurements.target:
@@ -393,7 +359,19 @@ def main(argv=None):
                     # OCR can take longer than a frame; schedule from the actual
                     # press time so the fifth M1 is never squeezed by scan delay.
                     action_at = time.monotonic()
-                    due = cycle.due(action_at, ultimate_ready)
+                    readiness_frame = screen.capture(sct)
+                    if not hotbar_visible(readiness_frame):
+                        # Ultimate cinematics hide the HUD. Do not send clicks
+                        # or count that interval as a failed attack string.
+                        stage = 'waiting_animation'
+                        wait_reason = 'Waiting for the skill animation to finish'
+                        hit_guard.cancel()
+                        cycle.resync(time.monotonic())
+                        time.sleep(.1)
+                        continue
+                    due = cycle.due(action_at, ultimate_vision.observe(readiness_frame),
+                                    shock_vision.observe(readiness_frame),
+                                    followup_vision.observe(readiness_frame))
                     action = due[0] if due else None
                     if action in ('shock_wave', 'skip_shock_wave'):
                         # Check after the fifth click but before any skill can
@@ -404,7 +382,11 @@ def main(argv=None):
                         second_post = combo_count(screen.capture(sct), ocr)
                         observed_hits += progress.observe(second_post)
                         combo = second_post if second_post is not None else first_post
+                        baseline_combo = hit_guard.start_combo
                         result = hit_guard.check(observed_hits, first_post, second_post)
+                        event('damage_five_hit_check', result=result, baseline=baseline_combo,
+                              first_post=first_post, second_post=second_post, clicks=5,
+                              message=f'Five M1s: {baseline_combo} -> {first_post}/{second_post}; {result}')
                         if result == 'investigate':
                             stage = 'checking_damage'
                             wait_reason = 'Two five-hit strings lacked confirmed combo growth; checking title'
@@ -454,6 +436,9 @@ def main(argv=None):
                         event('damage_skill', message='Quick prep tap and held ultimate used together')
                     elif action == 'm1':
                         if due[1] == 1:
+                            # Read immediately before this string, after prior skill ticks.
+                            combo = combo_count(screen.capture(sct), ocr)
+                            observed_hits += progress.observe(combo)
                             hit_guard.begin(observed_hits, combo)
                         attack_click(inp)
                         clicks += 1
@@ -472,6 +457,7 @@ def main(argv=None):
                     stage = 'paused_focus' if 'focus' in str(error).lower() or 'Roblox' in str(error) else 'attention'
                     wait_reason = str(error)
                     needs_setup = True
+                    hit_guard.cancel()
                     cycle.resync(tick)
                     time.sleep(.2)
                 finally:

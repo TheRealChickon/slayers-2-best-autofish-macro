@@ -17,7 +17,7 @@ DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             'spawn_backstep_seconds': 0.0, 'camera_mode': 'keep', 'camera_heading': None,
             'auto_fishing_titles': False, 'damage_rotation': DEFAULT_ROTATION,
             'damage_title': 'Annihilator', 'damage_title_category': 'Combat',
-            'damage_target': 5000000, 'damage_check_seconds': 180}
+            'damage_target': 10000000, 'damage_check_seconds': 180}
 
 
 def validate_options(values):

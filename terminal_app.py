@@ -290,7 +290,7 @@ class Terminal:
                         tint('COMBO', 'dim')+f"  {damage.get('combo') or '—'}    "+
                         tint('HITS', 'dim')+f"  {damage.get('observed_hits', 0):,}",
                         tint('M1', 'dim')+f"  {damage.get('m1_clicks', 0):,}    "+
-                        tint('FIRST / FIFTH', 'dim')+f"  {damage.get('first_m1_damage') or '—'} / {damage.get('fifth_m1_damage') or '—'}",
+                        tint('C / Z / B', 'dim')+'  '+ ' / '.join(str((damage.get('move_uses') or {}).get(role, 0)) for role in ('shock_wave', 'followup', 'ultimate')),
                         tint('TITLE', 'dim')+f"  {damage.get('title_progress', 0):,} / {damage.get('title_target', 0):,}    "+
                         tint('RESETS', 'dim')+f"  {damage.get('resets', 0)}",
                         tint('PACE', 'dim')+f"  {damage.get('estimated_dps') or '—'} observed damage/s    "+
