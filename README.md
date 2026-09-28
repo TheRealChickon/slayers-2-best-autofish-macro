@@ -167,7 +167,11 @@ autofish stop
 cutscene, follows with four M1s and ready C, then deliberately resets to the
 saved spawn. `m1_reset` and `m1_c_reset` isolate the shorter alternatives;
 `ultimate_reset` tests the separate 25 ms X tap, 500 ms wait and held B attack.
-V/N/K/L are never sent. Targeted Z is not enabled in the farm until its aim and
+`k_m1_reset` is an isolated double-K timing trial followed by four M1s.
+`block_k_m1_c_reset` checks for the visible shield after the first M1; only that
+shield can trigger ready L, then two K taps when ready, followed by M1 and C.
+These K/L alternatives remain experimental: displacement can spoil the follow-up.
+V/N are never sent. Targeted Z is not enabled in the farm until its aim and
 damage are validated. Readiness uses the visible cooldown border and skill art.
 
 Recognition requires the boss header, a unique world name, and matching hair
@@ -178,10 +182,26 @@ controls waiting. Confirmed zero HP or a consistent countdown records defeat.
 During the countdown it opens uniquely recognized nearby chests and claims
 named item prompts. Loot search is bounded and returns the camera afterward;
 only visible item-and-quantity reward toasts are added to the loot totals.
+Ground pickup circles and compact blue-white ore glow guide short, repeatedly
+observed approaches. They never authorize a pickup by themselves: a named item,
+Claim/Open action and nearby T prompt must agree twice. Small reward popups get
+a focused OCR pass, including Coin Pouch quantities. Confirmed collection renews
+the surrounding search; farm mode returns to the verified spawn after walking
+for loot. Pink ground effects are excluded from the glow-only approach.
 
-Status shows observed boss HP loss, elapsed-session DPH, per-combo/skill samples,
+Respawn completion is detected from a death transition followed by three stable
+full-health HUD frames. Camera return uses the observed post-combo compass,
+including a contrast fallback for bright sunlight. Acquisition adjusts camera
+gain from observed movement and rechecks the name, appearance and range before
+attacking. Missing or ambiguous observations still stop the bounded run.
+
+Status shows first-attack-to-confirmed-defeat time with the starting HP, measured
+respawn duration, observed boss HP loss, elapsed-session DPH, per-combo/skill samples,
 resets, spawn updates and confirmed loot. HP readings can include residual damage or damage from
 another player; these are not statue title measurements or confirmed gold income.
+Loot timing is separate: defeat to the first confirmed pouch reward. The combined
+kill-and-pouch time is shown only when that reward is seen; it does not claim that
+every other drop has been collected. Missing pouch evidence remains unverified.
 Unattended loot collection and repeated respawn cycles require live validation.
 F8/F9/F12 stop, and losing Roblox focus releases all owned input. Farm sessions
 are bounded by both `--seconds` (up to 12 hours) and `--max-cycles`.

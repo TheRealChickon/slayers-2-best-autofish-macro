@@ -130,7 +130,8 @@ def parser(prog='autofish'):
     boss=sub.add_parser('boss',help='Experimental Sanemi observation and bounded combo trials')
     boss.add_argument('operation',choices=('status','configure','observe','travel','trial','rejoin','farm','loot'),nargs='?',default='status')
     boss.add_argument('--seconds',type=float,default=60,help='Time limit; farm/observe allow up to 12 hours')
-    boss.add_argument('--strategy',choices=('m1_reset','m1_c_reset','ultimate_reset','b_m1_c_reset'),help='Configure the tested combo')
+    boss.add_argument('--strategy',choices=('m1_reset','m1_c_reset','ultimate_reset','b_m1_c_reset',
+                                          'k_m1_reset','block_k_m1_c_reset'),help='Configure the experimental combo')
     boss.add_argument('--max-cycles',type=int,help='Maximum combos before stopping')
     boss.add_argument('--spawn-verified',action='store_true',help='Confirm you verified /set beside Sanemi; enables tactical resets')
     boss.add_argument('--json',action='store_true',help='Print saved boss status as JSON')

@@ -20,7 +20,8 @@ def validate_boss(value):
     config = {**DEFAULT_BOSS, **value}
     if config['name'] not in ('Saneri', 'Sanemi'):
         raise ValueError('Only the Saneri/Sanemi trial is supported')
-    if config['strategy'] not in ('m1_reset', 'ultimate_reset', 'm1_c_reset', 'b_m1_c_reset'):
+    if config['strategy'] not in ('m1_reset', 'ultimate_reset', 'm1_c_reset', 'b_m1_c_reset',
+                                  'k_m1_reset','block_k_m1_c_reset'):
         raise ValueError('Unknown boss strategy')
     for field, low, high in (('m1_count', 1, 4), ('max_cycles', 1, 10000)):
         if type(config[field]) is not int or not low <= config[field] <= high:

@@ -100,14 +100,17 @@ class BossTracker:
         lx, ly = label
         scale = max(.25,min(1.5,(label_height or 32)/32))
         x, y = max(0, round(lx-170*scale)), max(350, round(ly+45*scale))
-        roi = frame[y:min(1200,y+round(150*scale)), x:min(2560,x+round(340*scale))]
+        roi = frame[y:min(1200,y+round(190*scale)), x:min(2560,x+round(340*scale))]
         if min(roi.shape[:2]) < 20:
             return None
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
         # Fog desaturates grass below the usual saturation threshold. Hair is
         # neutral or blue/pink-lit; reject chromatic green even in bright fog.
         neutral = (hsv[:,:,1] < 25) | (hsv[:,:,0] < 35) | (hsv[:,:,0] > 90)
-        mask = ((hsv[:,:,1] < 95) & (hsv[:,:,2] > 100) & neutral).astype('uint8')*255
+        # Foggy stone can be neutral too. Separate the bright hair from its
+        # local background instead of joining the entire stone path to it.
+        brightness = max(100.,min(185.,float(np.percentile(hsv[:,:,2],90))-35.))
+        mask = ((hsv[:,:,1] < 95) & (hsv[:,:,2] > brightness) & neutral).astype('uint8')*255
         # The party widget overlaps left-side targets and can join its white
         # horizontal line to the hair component. Ignore those fixed UI pixels.
         if x < 315 and y < 715:
@@ -118,11 +121,11 @@ class BossTracker:
         for n in range(1, count):
             bx, by, w, h, area = stats[n]
             cx, cy = centers[n]
-            if (area >= 2200*scale**2 and 85*scale <= w <= 325*scale and 55*scale <= h <= 220*scale+1
-                    and abs(x+cx-lx) < 110*scale and by < 140*scale and area/(w*h) > .35):
+            if (area >= 1200*scale**2 and 70*scale <= w <= 325*scale and 40*scale <= h <= 220*scale+1
+                    and abs(x+cx-lx) < 110*scale and by < 140*scale and area/(w*h) > .22):
                 head_h = min(h, round(w*.85))
                 piece = roi[by:by+head_h,bx:bx+w]
-                if cv2.cvtColor(piece,cv2.COLOR_BGR2GRAY).std() < 12:
+                if cv2.cvtColor(piece,cv2.COLOR_BGR2GRAY).std() < 6:
                     continue
                 candidates.append(Target((int(x+bx),int(y+by),int(w),int(head_h)),
                                          min(.94, .8+area/(w*h)*.12), 'name_and_light_hair'))

@@ -1,7 +1,8 @@
 """Boss observations are kept distinct from verified statue title damage."""
 def boss_lines(data):
-    hp = data.get('boss_hp')
     observation = data.get('observation') or {}
+    hp = observation.get('hp')
+    if hp is None: hp = data.get('boss_hp')
     player = observation.get('player_fraction')
     timer = data.get('respawn_remaining')
     if timer is None: timer = observation.get('respawn_seconds')
@@ -26,4 +27,14 @@ def boss_lines(data):
         rows.append(f"{name}: last {sample['last']:,.1f} / average {sample['average']:,.1f} ({sample['samples']} samples)")
     for name,quantity in (data.get('loot_items') or {}).items():
         rows.append(f'Collected {name}: {quantity}')
+    for fight in (data.get('fights') or [])[-3:]:
+        rows.append(f"Attack start to confirmed kill ({fight['strategy']}): {fight['seconds']:.1f}s (started at {fight['start_hp']:,.0f} HP)")
+        loot = fight.get('loot_to_pouch_seconds')
+        rows.append(f'Loot time (kill to confirmed pouch): {loot:.1f}s' if loot is not None else 'Loot time: pouch collection not verified')
+        total = fight.get('kill_and_pouch_seconds')
+        if total is not None:
+            rows.append(f'Combined kill + pouch: {total:.1f}s (other items may remain)')
+    timings=data.get('reset_timings') or []
+    if timings:
+        rows.append(f'Respawn: last {timings[-1]:.2f}s / average {sum(timings)/len(timings):.2f}s')
     return rows

@@ -19,9 +19,9 @@ from rapidocr_onnxruntime import RapidOCR
 
 from app_config import load_config
 from boss_plan import FightLedger, can_attack
-from boss_vision import observe, rows_in, fast_health, cutscene_visible, combat_hud_visible, chat_send_button, player_bar_fraction
+from boss_vision import observe, rows_in, fast_health, cutscene_visible, combat_hud_visible, chat_send_button, player_bar_fraction, compass_heading, blocking_target
 from boss_tracking import BossTracker
-from boss_loot import prompt_from_rows, reward_from_rows
+from boss_loot import prompt_from_rows, reward_from_rows, loot_markers, loot_glows
 from damage_vision import blocked_scene, gauntlet_selected, SkillReady, C_ICON_BOX, Z_ICON_BOX, B_ICON_BOX, B_READY_REFERENCE
 from fishing_assistant import USER, find_window, rectangle, move_pointer
 from metrics import RUN, read, write
@@ -99,6 +99,7 @@ class BossSession:
         self.last_status = 0.
         self.tracker = BossTracker(RUN/'boss-reference')
         self.target = None
+        self.navigation_target = None
         self.cycles = self.resets = self.empty_cycles = 0
         self.last_timer = None
         self.respawn_deadline = None
@@ -108,11 +109,16 @@ class BossSession:
         self.search_direction = 1
         self.visions = {'c': SkillReady(C_ICON_BOX), 'z': SkillReady(Z_ICON_BOX),
                         'b': SkillReady(B_ICON_BOX),
+                        'k': SkillReady((1432,1280,45,45)), 'l': SkillReady((1489,1280,45,45)),
                         'ultimate': SkillReady(B_ICON_BOX, B_READY_REFERENCE)}
         self.spawn_updates = 0
         self.loot_items = {}
         self.loot_attempted = False
         self.last_identity_at = 0.
+        self.fight_started = None
+        self.fight_start_hp = None
+        self.fights = []
+        self.reset_timings = []
 
     def event(self, kind, **fields):
         self.log.write(json.dumps({'at': time.time(), 'event': kind, 'mode': 'boss', **fields})+'\n')
@@ -129,6 +135,10 @@ class BossSession:
                    'strategy': self.config['strategy'], 'cycles': self.cycles, 'resets': self.resets,
                    'spawn_updates': self.spawn_updates,
                    'loot_items': self.loot_items,
+                   'fight_started': self.fight_started,
+                   'fight_elapsed': round(now-self.fight_started,2) if self.fight_started else None,
+                   'fights': self.fights,
+                   'reset_timings': self.reset_timings,
                    'observed_dph': round(self.ledger.damage*3600/max(1,now-self.started),1),
                    'target_evidence': asdict(self.target) if self.target else None,
                    'respawn_remaining': max(0, round(self.respawn_deadline-time.monotonic())) if self.respawn_deadline else None,
@@ -157,6 +167,8 @@ class BossSession:
 
     def tap(self, key, seconds=.065):
         self.guard()
+        if key in ('b','c','z','l','k'):
+            self.event('boss_skill_input',key=key,hold_seconds=seconds)
         self.inp.key(key, True)
         try:
             self.wait(seconds)
@@ -177,12 +189,27 @@ class BossSession:
         finally:
             self.inp.hold(False)
 
+    def aim(self, x, y):
+        self.guard()
+        move_pointer(*self.screen.point(x,y))
+        self.wait(.35)
+        move_pointer(*self.screen.point(x+1,y))
+        self.wait(.15)
+        move_pointer(*self.screen.point(x,y))
+        self.wait(.30)
+        # Refresh Roblox's raw-input cursor after UI interactions. Otherwise
+        # the OS cursor can move while M1 still clicks the old chat location.
+        USER.mouse_event(1,1,0,0,0)
+        self.wait(.05)
+        USER.mouse_event(1,-1,0,0,0)
+        self.wait(.05)
+
     def scan(self, sct, *, locate=True):
         self.guard()
         frame = self.screen.capture(sct)
         cv2.imwrite(str(RUN/'boss-latest.jpg'), frame, [cv2.IMWRITE_JPEG_QUALITY, 94])
         blocked = blocked_scene(frame, self.ocr)
-        self.observation = observe(frame, self.ocr, blocked)
+        self.observation = observe(frame, self.ocr, blocked, locate=locate)
         self.guard()
         o = self.observation
         self.world_label = o.target
@@ -195,20 +222,39 @@ class BossSession:
         elif identity:
             self.timer_samples = 0
             self.respawn_deadline = None
-        self.target = self.tracker.update(frame, time.monotonic(), identity) if locate else None
-        if locate and identity and self.target is None:
+        self.target = None
+        self.navigation_target = None
+        if locate and identity:
             self.target = self.tracker.from_label(frame, o.target, time.monotonic(), o.target_height)
+            if self.target is None:
+                self.target = self.tracker.update(frame, time.monotonic(), identity)
+        elif not identity:
+            self.tracker.clear()
         if self.target:
             tx, ty = self.target.center
             label = o.target
-            if label is None or abs(label[0]-tx) > max(170, self.target.box[2]) or not -30 < self.target.box[1]-label[1] < 320:
+            if label is None:
+                # Appearance alone may guide a short approach so a small,
+                # waypoint-obscured name becomes readable. It cannot permit
+                # attacks or spawn changes; those still require a fresh name.
+                self.navigation_target = self.target
+                self.target = None
+            elif abs(label[0]-tx) > max(170, self.target.box[2]) or not -30 < self.target.box[1]-label[1] < 320:
                 self.target = None
                 self.tracker.clear()
         if locate and self.target is None:
             self.observation = replace(self.observation, target=None)
         outcome = self.ledger.observe(self.observation, time.monotonic())
         if outcome == 'kill':
-            self.event('boss_kill', message='Defeat confirmed by repeated zero HP or visible respawn countdown')
+            result = None
+            if self.fight_started is not None:
+                result = {'strategy':self.config['strategy'],'seconds':round(time.time()-self.fight_started,2),
+                          'started':self.fight_started,'finished':time.time(),'start_hp':self.fight_start_hp,
+                          'loot_items':{},'loot_to_pouch_seconds':None,'kill_and_pouch_seconds':None}
+                self.fights.append(result)
+                self.fight_started = self.fight_start_hp = None
+            self.event('boss_kill', timing=result,
+                       message='Defeat confirmed by repeated zero HP or visible respawn countdown')
         self.status()
         return self.observation, frame
 
@@ -254,18 +300,26 @@ class BossSession:
         if o.respawn_seconds is None:
             raise RuntimeError('Sanemi respawn countdown is required before loot interaction')
         self.stage, self.reason = 'boss_loot', 'Reading nearby chest and item prompts'
-        deadline = time.monotonic()+min(75., max(0.,o.respawn_seconds-12.))
-        self.turn(0,180)
+        deadline = time.monotonic()+min(120., max(0.,o.respawn_seconds-15.))
         previous = None
         seen_rewards = set()
+        clear_reward_frames = 0
+        pending_reward = False
         searches = misses = 0
-        for attempt in range(32):
+        total_searches = 0
+        walked = 0.
+        previous_marker = None
+        marker_seen = 0.
+        last_interaction = 0.
+        for attempt in range(100):
             self.guard()
             if time.monotonic() >= deadline:
                 break
             frame = self.screen.capture(sct)
             cv2.imwrite(str(RUN/'boss-latest.jpg'),frame)
-            rows = rows_in(frame,self.ocr,(150,350,2300,900),1.2)
+            # A pouch beside the player's feet puts its Claim line below the
+            # hotbar. Keep the entire prompt, not only the item name.
+            rows = rows_in(frame,self.ocr,(150,350,2300,1040),1.2)
             if not any(row['text'].strip().upper() == 'T' for row in rows):
                 for row in tuple(rows):
                     if row['text'].strip().lower() in ('open','claim','collect'):
@@ -273,31 +327,76 @@ class BossSession:
                             (max(0,round(row['x']-350)),max(0,round(row['y']-110)),350,170),2.)
                             if found['text'].strip().upper() == 'T')
             prompt = prompt_from_rows(rows)
-            for name,quantity in reward_from_rows(rows):
+            rewards=reward_from_rows(rows)
+            if time.monotonic()-last_interaction<4 or any(row['text'].strip().lower().startswith('x') for row in rows):
+                # Wide-scene OCR downsizes the small reward popup. A focused
+                # read verified the previously missed Coin Pouch x2 toast.
+                detail=rows_in(frame,self.ocr,(1050,550,850,480),2.)
+                rewards+=reward_from_rows(detail)
+            clear_reward_frames=0 if rewards else clear_reward_frames+1
+            for name,quantity in rewards:
                 key=(''.join(char.lower() for char in name if char.isalpha()),quantity)
-                if key not in seen_rewards:
+                if pending_reward and key not in seen_rewards:
                     seen_rewards.add(key)
-                    self.loot_items[name] = self.loot_items.get(name,0)+quantity
-                    self.event('boss_loot_confirmed',name=name,quantity=quantity)
+                    self.record_loot(name,quantity)
+                    searches=misses=0
             self.event('boss_loot_observation',labels=[row['text'] for row in rows],
                        message='Read nearby loot; quantities are not assumed')
             self.evidence(frame,f'loot_{attempt}')
             if prompt is None:
+                previous = None
+                if time.monotonic()-last_interaction<3.5:
+                    self.wait(.2)
+                    continue
+                markers=loot_markers(frame,threshold=.78 if previous_marker else .84)
+                if previous_marker:
+                    markers=[m for m in markers if m[2]>=.84 or math.hypot(m[0]-previous_marker[0],m[1]-previous_marker[1])<65]
+                if not markers:markers=loot_glows(frame)
+                marker=min(markers,key=lambda p:math.hypot(p[0]-1280,(p[1]-1050)*.7),default=None)
+                if marker is not None and walked<4.:
+                    self.event('boss_loot_target',point=marker,walked=round(walked,2))
+                    if previous_marker and math.hypot(marker[0]-previous_marker[0],marker[1]-previous_marker[1])<65:
+                        x,y,_=marker
+                        key=('a' if x<1280 else 'd') if abs(x-1280)>150 else ('w' if y<1050 else 's')
+                        step=.22 if key in ('a','d','w') else .14
+                        self.tap(key,step)
+                        walked+=step
+                        self.event('boss_loot_approach',key=key,seconds=step)
+                        previous_marker=None
+                        self.wait(.15)
+                    else:
+                        previous_marker=marker
+                        marker_seen=time.monotonic()
+                        self.wait(.1)
+                    misses=0
+                    continue
+                if time.monotonic()-marker_seen>3.5:previous_marker=None
                 misses += 1
                 if misses < 3:
                     self.wait(.4)
                     continue
-                if searches < 4:
-                    self.turn(180)
+                if searches < 7:
+                    self.turn(300)
                     searches += 1
+                    total_searches += 1
+                    previous_marker=None
                     misses = 0
                     continue
                 break
             misses = 0
             if previous and prompt.name == previous.name and prompt.action == previous.action:
+                # Let the previous receipt disappear before a new claim.
+                # Identical stacks can then be counted without counting a
+                # persistent toast more than once.
+                if clear_reward_frames<2 or time.monotonic()-last_interaction<3.5:
+                    self.wait(.2)
+                    continue
                 self.tap('t',1.5)
+                seen_rewards.clear()
+                pending_reward=True
                 self.actions += 1
                 self.event('boss_loot_interaction',name=prompt.name,action=prompt.action)
+                last_interaction=time.monotonic()
                 self.wait(.6)
                 previous = None
             else:
@@ -305,10 +404,39 @@ class BossSession:
                 self.wait(.1)
         # Searches should not leave the camera facing away from the saved
         # combat position on the next spawn.
-        if searches:
-            self.turn(-180*searches)
-        self.turn(0,-180)
+        if total_searches:
+            self.turn(-300*total_searches)
         self.reason = 'Loot search finished; only confirmed reward toasts are counted'
+        return walked
+
+    def return_to_spawn(self, sct):
+        """End loot displacement at the verified spawn during the countdown."""
+        if not self.config['spawn_verified']:
+            raise RuntimeError('Returning from loot requires a verified saved spawn')
+        from damage_farmer import reset_character
+        self.stage,self.reason='boss_returning','Returning to saved spawn after loot movement'
+        if not reset_character(self.inp,self.screen,sct,self.ocr,self.event,deliberate=True):
+            raise RuntimeError('Return-to-spawn reset menu was not confirmed')
+        self.resets+=1
+        self.tracker.clear()
+        self.last_identity_at=0.
+        self.await_respawn(sct)
+        self.event('boss_loot_returned',message='Returned to the verified spawn after looting')
+
+    def record_loot(self, name, quantity):
+        """Record only observed reward toasts, with a separate pouch milestone."""
+        self.loot_items[name] = self.loot_items.get(name,0)+quantity
+        now = time.time()
+        fight = self.fights[-1] if self.fights else None
+        if fight and 0 <= now-fight['finished'] < self.config['respawn_seconds']:
+            items = fight.setdefault('loot_items',{})
+            items[name] = items.get(name,0)+quantity
+            if 'pouch' in name.lower() and fight.get('kill_and_pouch_seconds') is None:
+                fight['loot_to_pouch_seconds'] = round(now-fight['finished'],2)
+                fight['kill_and_pouch_seconds'] = round(now-fight['started'],2)
+        self.event('boss_loot_confirmed',name=name,quantity=quantity,
+                   loot_to_pouch_seconds=fight.get('loot_to_pouch_seconds') if fight else None,
+                   kill_and_pouch_seconds=fight.get('kill_and_pouch_seconds') if fight else None)
 
     def evidence(self, frame, label):
         path = RUN/f'boss-{self.session}-{self.cycles:04}-{label}.jpg'
@@ -367,49 +495,100 @@ class BossSession:
         self.click(138,35)
         self.wait(.15)
 
-    def turn(self, pixels, vertical=0):
+    def turn(self, pixels, vertical=0, *, fast=False):
         self.guard()
-        move_pointer(*self.screen.point(1280, 760))
+        # Roblox's raw cursor must settle before the right button goes down;
+        # otherwise the absolute recenter becomes part of the camera drag.
+        self.aim(1280,760)
         self.inp.right(True)
         try:
             self.wait(.18)
-            count = max(1, abs(round(pixels))//4,abs(round(vertical))//4)
-            for i in range(count):
-                self.guard()
-                USER.mouse_event(1, round((i+1)*pixels/count)-round(i*pixels/count),
-                                 round((i+1)*vertical/count)-round(i*vertical/count),0,0)
-                self.wait(.012)
+            if vertical == 0:
+                # Live compass probes confirmed single relative deltas at
+                # both 160 and 700 pixels. Smooth microsteps only add latency.
+                USER.mouse_event(1,round(pixels),0,0,0)
+                self.wait(.12)
+            else:
+                count=max(1,abs(round(pixels))//4,abs(round(vertical))//4)
+                for i in range(count):
+                    self.guard()
+                    USER.mouse_event(1, round((i+1)*pixels/count)-round(i*pixels/count),
+                                     round((i+1)*vertical/count)-round(i*vertical/count),0,0)
+                    self.wait(.012)
         finally:
             self.inp.right(False)
-        self.wait(.2)
+        self.wait(.32)
 
     def acquire(self, sct):
         self.stage, self.reason = 'boss_acquiring', 'Verifying boss name, appearance, range and player HP'
         until = time.monotonic()+self.config['target_timeout']
         walked = 0.
         searched = 0
+        tilts = 0
+        yaw_gain = 6.
+        last_rotation = None
         while time.monotonic() < until:
             o, frame = self.track_step(sct)
+            if self.world_label and last_rotation:
+                previous_x,pixels=last_rotation
+                observed=(previous_x-self.world_label[0])/pixels
+                # Close camera orbits move a nearby name much less than a
+                # distant one. Rejecting gains below 1 made corrections take
+                # dozens of seconds while the boss healed.
+                if .2 < observed < 14.:yaw_gain=max(.5,observed)
+                last_rotation=None
+            self.event('boss_target_step',hp=o.hp,label=self.world_label,
+                       box=self.target.box if self.target else None)
             if o.respawn_seconds is not None:
                 return None, frame
             if o.blocked:
                 raise RuntimeError('Game menu or disconnected scene detected; input stopped')
+            if o.player_fraction is not None and o.player_fraction <= .25:
+                raise RuntimeError('Player health is too low to continue boss acquisition')
+            if o.name and self.world_label and self.world_label[1] < 400 and tilts < 2:
+                self.turn(0,-120)
+                tilts += 1
+                continue
+            if (o.name and self.world_label and self.world_label[1] > 580
+                    and (o.target_height or 0) < 32 and tilts < 2):
+                self.turn(0,120)
+                tilts+=1
+                continue
             if self.target and can_attack(o):
                 x, y, w, h = self.target.box
                 offset = x+w/2-1280
+                # At contact distance the camera orbits our character, so a
+                # boss beside us may never centre on the screen. Its verified
+                # name is a steadier aim cue than a partly occluded hair box.
+                close = (o.target_height or 0) >= 34
+                steering_offset = self.world_label[0]-1280 if self.world_label else offset
+                tolerance = 120 if close else 70
                 self.search_direction = -1 if offset < 0 else 1
-                if w > 180 and y+h/2 > 680:
+                if w > 160 and close and abs(steering_offset)>tolerance:
+                    # At contact range yaw orbits around both characters.
+                    # Strafe toward the verified name to align the character,
+                    # rather than circling a boss beside the saved spawn.
+                    step=min(.15,max(.07,abs(steering_offset)/1800))
+                    if walked+step>self.config['max_approach_seconds']:
+                        raise RuntimeError('Approach budget reached')
+                    self.tap('a' if steering_offset<0 else 'd',step)
+                    walked+=step
+                    self.wait(.15)
+                elif w > 240 and ((self.world_label and self.world_label[1] > 650)
+                                  or y+h/2 > 750):
                     if walked+.20 > self.config['max_approach_seconds']:
                         raise RuntimeError('Approach budget reached')
-                    self.tap('s', .20)
-                    walked += .20
+                    self.tap('s',.20)
+                    walked+=.20
                     self.wait(.15)
-                elif abs(offset) > 260:
-                    # Turn toward distant targets first. Repeated short
-                    # strafes plus OCR can otherwise consume the heal window.
-                    self.turn(max(-160,min(160,round(offset/6))))
-                elif w < 130:
-                    step = .25 if w < 100 else .15
+                elif abs(steering_offset) > tolerance:
+                    pixels=max(-200,min(200,round(steering_offset/yaw_gain)))
+                    last_rotation=(self.world_label[0],pixels) if self.world_label else None
+                    self.turn(pixels)
+                elif (o.target_height or 0) < 30:
+                    # Hair width changes with head rotation and occlusion;
+                    # the world label's font size is a steadier range cue.
+                    step = .25 if (o.target_height or 0) < 25 else .12
                     if walked+step > self.config['max_approach_seconds']:
                         raise RuntimeError('Approach budget reached; no unverified walking')
                     self.tap('w', step)
@@ -422,27 +601,103 @@ class BossSession:
                         continue
                     # Movement establishes facing; pointer aiming alone does
                     # not turn an unlocked Roblox character's M1 direction.
-                    face = ('a' if offset < 0 else 'd') if abs(offset) > 100 else ('s' if y+h/2 > 750 else 'w')
-                    self.tap(face, .035)
+                    self.tap('w', .035)
                     self.wait(.1)
                     o, frame = self.scan(sct)
-                    if (can_attack(o) and self.target and self.target.box[2] >= 130
-                            and abs(self.target.center[0]-1280) <= 260):
-                        if walked > .35:
+                    if (can_attack(o) and self.target and self.target.box[2] >= 100
+                            and (o.target_height or 0) >= 28
+                            and abs(self.target.center[0]-1280) <= (160 if close else 90)):
+                        if o.hp == o.maximum and (walked > .8 or (self.cycles == 0 and self.spawn_updates == 0)):
                             self.set_spawn(sct)
                             o, frame = self.scan(sct)
-                            if (not can_attack(o) or self.target is None or self.target.box[2] < 130
-                                    or abs(self.target.center[0]-1280) > 260):
+                            if (not can_attack(o) or self.target is None or self.target.box[2] < 100
+                                    or (o.target_height or 0) < 28
+                                    or abs(self.target.center[0]-1280) > (160 if close else 90)):
                                 continue
                         return o, frame
             else:
-                if (o.name in ('Saneri','Sanemi') and o.hp and self.world_label is None and searched < 1440):
+                nav=getattr(self,'navigation_target',None)
+                if o.name in ('Saneri','Sanemi') and o.hp and not self.world_label and nav:
+                    offset=nav.center[0]-1280
+                    if abs(offset)>120:
+                        self.turn(max(-180,min(180,round(offset/yaw_gain))))
+                    else:
+                        step=.3 if nav.box[2]<140 else .12
+                        if walked+step>self.config['max_approach_seconds']:
+                            raise RuntimeError('Appearance approach budget reached without a readable name')
+                        self.tap('w',step)
+                        walked+=step
+                        self.wait(.15)
+                elif o.name in ('Saneri','Sanemi') and o.hp and self.world_label:
+                    # A unique world label can steer the camera while hair is
+                    # occluded or too small. It never authorizes an attack.
+                    offset=self.world_label[0]-1280
+                    if abs(offset)>80:
+                        pixels=max(-200,min(200,round(offset/yaw_gain)))
+                        last_rotation=(self.world_label[0],pixels)
+                        self.turn(pixels)
+                    else:
+                        step=.12 if (o.target_height or 0)<30 else .08
+                        if walked+step>self.config['max_approach_seconds']:
+                            raise RuntimeError('Approach budget reached while resolving an obscured boss')
+                        self.tap('w' if (o.target_height or 0)<30 else 's',step)
+                        walked+=step
+                        self.wait(.15)
+                elif (o.name in ('Saneri','Sanemi') and o.hp and self.world_label is None and searched < 2100):
                     self.reason = 'Looking around for Sanemi after displacement'
-                    self.turn(self.search_direction*180)
-                    searched += 180
+                    self.turn(self.search_direction*300)
+                    searched += 300
                 else:
                     self.wait(.2)
         raise RuntimeError('Boss reacquisition or approach did not finish within its limit; input stopped')
+
+    def await_respawn(self, sct):
+        """Wait for the death transition and stable full-health combat HUD."""
+        start = time.monotonic()
+        deadline = start + self.config['respawn_wait'] + 3.
+        missing = False
+        ready_frames = 0
+        while time.monotonic() < deadline:
+            self.guard()
+            frame = self.screen.capture(sct)
+            fraction = player_bar_fraction(frame)
+            ready = fraction is not None and fraction > .97 and combat_hud_visible(frame)
+            missing |= not ready
+            ready_frames = ready_frames+1 if ready else 0
+            elapsed = time.monotonic()-start
+            if missing and elapsed > 1. and ready_frames >= 3:
+                seconds = round(elapsed,2)
+                self.reset_timings.append(seconds)
+                self.event('boss_respawn_ready', seconds=seconds)
+                return
+            self.wait(.1)
+        raise RuntimeError('Respawn did not show a death transition followed by a ready HUD')
+
+    def restore_combat_heading(self, sct, target):
+        if target is None:
+            return
+        gain = .18
+        travel = 0
+        for _ in range(4):
+            current = compass_heading(self.screen.capture(sct),self.ocr)
+            if current is None:
+                return
+            difference = (target-current+180)%360-180
+            if abs(difference) < 5:
+                return
+            step = max(-900,min(900,round(difference/gain)))
+            if travel+abs(step) > 1800:
+                return
+            self.event('boss_restore_heading',current=current,target=target,step=step)
+            self.turn(step,fast=True)
+            travel += abs(step)
+            after = compass_heading(self.screen.capture(sct),self.ocr)
+            if after is not None:
+                observed = ((after-current+180)%360-180)/step
+                if observed < -.015:
+                    raise RuntimeError('Camera correction moved opposite to the observed compass')
+                if .03 < observed < .5:
+                    gain = observed
 
     def measure(self, name, before, after):
         if before is None or after is None or after > before:
@@ -468,10 +723,24 @@ class BossSession:
             cinematic = cutscene_visible(frame)
             seen |= cinematic
             if combat_hud_visible(frame) and (seen or time.monotonic()-start > .6):
+                # The HUD starts returning before B releases the character.
+                # Recorded probes lost the first two M1 inputs in this tail.
+                self.wait(.6)
+                frame = self.screen.capture(sct)
                 self.evidence(frame,'b_end')
                 return frame
             self.wait(.045)
         raise RuntimeError('B cutscene did not finish within its observed limit')
+
+    def double_k(self, sct):
+        self.tap('k',.065)
+        self.wait(.4)
+        self.tap('k',.065)
+        self.actions+=2
+        self.wait(1.2)
+        frame=self.screen.capture(sct)
+        self.evidence(frame,'k_double')
+        return frame
 
     def cycle(self, sct):
         if self.config['reset_after_combo'] and not self.config['spawn_verified']:
@@ -480,16 +749,22 @@ class BossSession:
         if o is None:
             return False
         before = o.hp
+        combat_heading = compass_heading(frame,self.ocr)
         self.cycles += 1
         self.evidence(frame, 'before')
         self.stage, self.reason = 'boss_attacking', 'Executing a bounded combo'
         x, y = self.target.center
         y = min(1150, y+self.target.box[3])
-        move_pointer(*self.screen.point(x, y)); self.wait(.25)
-        move_pointer(*self.screen.point(x+1, y)); self.wait(.1)
-        move_pointer(*self.screen.point(x, y)); self.wait(.15)
+        self.aim(x,y)
         strategy = self.config['strategy']
+        if strategy != 'ultimate_reset' or self.visions['ultimate'].observe(frame):
+            if self.fight_started is None:
+                self.fight_started = time.time()
+                self.fight_start_hp = o.hp
+                self.event('boss_fight_started',strategy=strategy,hp=o.hp)
+            self.event('boss_combo_started',cycle=self.cycles,strategy=strategy,hp=o.hp)
         b_frame = None
+        lead_samples = []
         if strategy == 'b_m1_c_reset' and self.visions['b'].observe(frame):
             b_frame = self.normal_b(sct, before)
             self.stage, self.reason = 'boss_attacking', 'Following B with M1s during the stun'
@@ -506,9 +781,32 @@ class BossSession:
             after, frame = self.scan(sct, locate=False)
             self.measure('X + B ultimate', before, after.hp)
         else:
+            prefix = 0
+            if strategy == 'k_m1_reset' and self.visions['k'].observe(frame):
+                lead_samples.append(('K double activation',self.double_k(sct)))
+            elif strategy == 'block_k_m1_c_reset':
+                self.inp.hold(True)
+                try:self.wait(.065)
+                finally:self.inp.hold(False)
+                self.actions+=1
+                self.wait(.25)
+                frame=self.screen.capture(sct)
+                prefix=1
+                if blocking_target(frame,self.world_label) and self.visions['l'].observe(frame):
+                    self.event('boss_block_detected',evidence='visible shield above the verified boss name')
+                    self.evidence(frame,'block_shield')
+                    self.tap('l',.065)
+                    self.actions+=1
+                    self.wait(1.6)
+                    frame=self.screen.capture(sct)
+                    lead_samples.append(('L block break',frame))
+                    if self.visions['k'].observe(frame):
+                        lead_samples.append(('K double activation',self.double_k(sct)))
+                    prefix=0
             # Full OCR between clicks breaks the combo. Identity/range/HP were
             # just verified; this fixed four-click burst lasts under 1.5s.
-            for index in range(self.config['m1_count']):
+            self.event('boss_m1_started',count=self.config['m1_count'],interval=self.config['m1_interval'])
+            for index in range(prefix,self.config['m1_count']):
                 self.guard()
                 self.inp.hold(True)
                 try:
@@ -519,7 +817,7 @@ class BossSession:
                 self.wait(self.config['m1_interval'] if index < self.config['m1_count']-1 else .5)
             frame = self.screen.capture(sct)
             self.evidence(frame, 'm1')
-            use_c = strategy in ('m1_c_reset','b_m1_c_reset') and self.visions['c'].observe(frame)
+            use_c = strategy in ('m1_c_reset','b_m1_c_reset','block_k_m1_c_reset') and self.visions['c'].observe(frame)
             if use_c:
                 # Send the follow-up before OCR: the boss can block/counter
                 # during a one-second OCR gap between M1 and the skill.
@@ -530,14 +828,27 @@ class BossSession:
                 b_hp = fast_health(b_frame,self.ocr)
                 self.measure('B cutscene / block break',before,b_hp)
                 before = b_hp
+            for label,lead_frame in lead_samples:
+                lead_hp=fast_health(lead_frame,self.ocr)
+                self.measure(label,before,lead_hp)
+                before=lead_hp
             self.measure(f"{self.config['m1_count']} M1", before, measured_m1)
             if use_c:
                 self.wait(2.)
                 after, frame = self.scan(sct, locate=False)
                 self.evidence(frame, 'c')
                 self.measure('C Explosive Fury', measured_m1, after.hp)
-        self.wait(.15)
-        final, frame = self.scan(sct, locate=False)
+        # Four punches need a prompt reset, before the boss can recover and
+        # displace us. The small HP crop is sufficient here; full identity and
+        # range are checked again before the next attack.
+        if strategy == 'ultimate_reset' or (strategy != 'ultimate_reset' and use_c):
+            final = after
+        elif self.config['reset_after_combo'] and measured_m1 is not None:
+            final = replace(o,hp=measured_m1)
+            self.ledger.observe(final,time.monotonic())
+        else:
+            self.wait(.15)
+            final, frame = self.scan(sct, locate=False)
         self.empty_cycles = self.empty_cycles+1 if final.hp is not None and final.hp >= o.hp else 0
         if self.empty_cycles >= 2:
             raise RuntimeError('Two measured combos caused no HP loss; stopping to inspect positioning or blocking')
@@ -545,6 +856,11 @@ class BossSession:
             return True
         if self.config['reset_after_combo']:
             from damage_farmer import reset_character
+            # Skills can swing the camera and move both characters across
+            # the saved spawn. Return toward the observed end of the combo.
+            post_heading = compass_heading(frame,self.ocr)
+            if post_heading is not None:
+                combat_heading = post_heading
             self.stage, self.reason = 'boss_resetting', 'Deliberate reset after the combo'
             if self.ledger.hp is None or self.ledger.hp <= 0:
                 raise RuntimeError('Boss HP is unverified; tactical reset withheld')
@@ -553,17 +869,11 @@ class BossSession:
                 raise RuntimeError('Reset menu was not confirmed')
             self.resets += 1
             self.tracker.clear()
-            self.wait(self.config['respawn_wait'])
-            self.scan(sct, locate=False)
-            self.wait(.15)
-            o, frame = self.scan(sct, locate=False)
-            self.evidence(frame, 'respawn')
-            if self.ledger.retention == 'healed':
-                self.event('boss_healing',message='HP rose during reset/approach; re-engaging promptly')
-                if o.hp is not None and before is not None and o.hp >= before:
-                    self.empty_cycles += 1
-                    if self.empty_cycles >= 2:
-                        raise RuntimeError('Repeated resets lost all combo progress to healing')
+            self.last_identity_at = 0.
+            self.await_respawn(sct)
+            self.restore_combat_heading(sct,combat_heading)
+            # The next farm/acquisition scan verifies the respawn and target.
+            # Repeating two full OCR passes here used up the heal window.
         return True
 
     def farm(self, sct):
@@ -574,7 +884,8 @@ class BossSession:
             if o.respawn_seconds is not None or (self.respawn_deadline and time.monotonic() < self.respawn_deadline):
                 if not self.loot_attempted and o.respawn_seconds is not None and o.respawn_seconds > 35:
                     self.loot_attempted = True
-                    self.collect_loot(sct)
+                    if self.collect_loot(sct):
+                        self.return_to_spawn(sct)
                 if self.cycles >= self.config['max_cycles']:
                     self.reason = 'Configured combo limit reached; nearby loot checked'
                     return
