@@ -1,13 +1,12 @@
 # Supervised damage-mode test
 
-The controller remains stopped after the offline update. Use this only while watching the game; the new rotation and title OCR have not been verified in Roblox. Only Shock Wave has previously been tested.
+The controller remains stopped after staging. Use this only while watching the game on an unlocked desktop; the new rotation and title OCR have not been verified in Roblox. Only Shock Wave has previously been tested.
 
-1. In PowerShell, open the feature checkout and read the installed interpreter from the deployed folder. This tests feature source without replacing the stable Fishing folder:
+1. In PowerShell, open the staged Fishing checkout and read its installed interpreter:
 
    ```powershell
-   Set-Location 'C:\Users\xsami\Documents\Codex\2026-09-21\ch\work\fishing-damage-farmer-src'
+   Set-Location 'C:\Users\xsami\Documents\Codex\2026-09-21\ch\outputs\Fishing'
    $fishingPython = (Get-Content 'C:\Users\xsami\Documents\Codex\2026-09-21\ch\outputs\Fishing\runtime.local.json' -Raw | ConvertFrom-Json).python
-   $env:FISHING_DATA_DIR = 'C:\Users\xsami\Documents\Codex\2026-09-21\ch\work\fishing'
    & $fishingPython .\fishing_cli.py damage --show-config
    ```
 
@@ -17,4 +16,4 @@ The controller remains stopped after the offline update. Use this only while wat
 4. Run `& $fishingPython .\fishing_cli.py status` from a separate console. Compare `title_progress`, first/fifth M1, each move's damage, and ETA against the visible Annihilator title. Check that X is tapped briefly only immediately before held B, that B is skipped when its icon is on cooldown, and that V is never used in the default rotation. Observe at least one periodic title recheck (three minutes by default).
 5. Stop with `& $fishingPython .\fishing_cli.py stop`. Keep the resulting local counters, inventory data and wiki. If any key, hold length, title OCR, or reset behavior differs from the game, keep the controller stopped and report the exact status/error and screenshot for adjustment before an unattended run.
 
-The source rollback point is `backup/statue-damage-before-universal`; the stable deployed Fishing checkout and its local run data have not been changed by this feature source update. No title completion switches into fishing mode.
+The deployed checkout is staged on `feature/universal-auto-damage-live`. The original `dev` checkout is preserved at `backup/deployed-before-universal-live`; source rollback is `backup/statue-damage-before-universal`. Local counters, inventory data and wiki remain in the ignored run-data directory. No title completion switches into fishing mode.
