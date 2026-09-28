@@ -10,6 +10,7 @@ class FiveHitGuard:
         self.start_hits = None
         self.start_combo = None
         self.deficient_trials = 0
+        self.missing_trials = 0
 
     def begin(self, observed_hits, combo):
         self.start_hits = observed_hits
@@ -19,6 +20,7 @@ class FiveHitGuard:
         """An interrupted string cannot establish or confirm a stall."""
         self.start_hits = self.start_combo = None
         self.deficient_trials = 0
+        self.missing_trials = 0
 
     def check(self, observed_hits, first_post, second_post):
         if self.start_hits is None:
@@ -30,7 +32,13 @@ class FiveHitGuard:
                 value is not None and value-baseline >= 5
                 for value in (first_post, second_post))):
             self.deficient_trials = 0
+            self.missing_trials = 0
             return 'healthy'
+        if baseline is None and first_post is None and second_post is None:
+            self.missing_trials += 1
+            self.deficient_trials = 0
+            return 'investigate' if self.missing_trials >= 2 else 'unknown'
+        self.missing_trials = 0
         if (baseline is None or first_post is None or second_post is None or
                 first_post < baseline or second_post < baseline or
                 abs(first_post-second_post) > 1):
@@ -41,6 +49,7 @@ class FiveHitGuard:
 
     def title_progressed(self):
         self.deficient_trials = 0
+        self.missing_trials = 0
 
 
 class DamageCycle:

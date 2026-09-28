@@ -15,6 +15,16 @@ from item_journal import Journal
 
 
 class DamagePolicy(unittest.TestCase):
+    def test_repeated_absent_combo_requests_title_check_not_immediate_reset(self):
+        guard = FiveHitGuard()
+        guard.begin(0, None)
+        self.assertEqual(guard.check(0, None, None), 'unknown')
+        guard.begin(0, None)
+        self.assertEqual(guard.check(0, None, None), 'investigate')
+        guard.title_progressed()
+        guard.begin(0, None)
+        self.assertEqual(guard.check(0, None, None), 'unknown')
+
     def test_interrupted_string_cannot_confirm_previous_short_string(self):
         guard = FiveHitGuard()
         guard.begin(0, 10)

@@ -305,7 +305,7 @@ def main(argv=None):
                         event('damage_ready', message='Gauntlet slot 1 selected; statue attack position ready.')
                         if needs_calibration:
                             stage = 'calibrating'
-                            wait_reason = 'Measuring the configured title and each attack'
+                            wait_reason = 'Reading the starting title damage'
                             status()
                             driver = InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer)
                             reader = DamageTitleReader(driver, config['damage_title'],
