@@ -19,6 +19,8 @@ def skill_lines(damage):
 
 
 def pace_labels(damage, now=None):
+    if damage.get('stage') == 'measuring_skills':
+        return 'Paused for isolated skill measurement', 'Recalculates after farming resumes', 'Sampling skills'
     now = time.time() if now is None else now
     verified = damage.get('last_verified')
     age = max(0, now-verified) if verified else None

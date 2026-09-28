@@ -1,10 +1,15 @@
 import unittest
 from unittest.mock import Mock
 from damage_skill_samples import sample_skill
-from damage_view import skill_lines
+from damage_view import skill_lines, pace_labels
 
 
 class SkillSamplesTests(unittest.TestCase):
+    def test_sampling_does_not_display_a_farming_rate(self):
+        pace, finish, _ = pace_labels({'stage': 'measuring_skills', 'recent_dph': 1234})
+        self.assertNotIn('1,234', pace)
+        self.assertIn('after farming resumes', finish)
+
     def test_waits_for_delayed_damage_and_measures_only_isolated_delta(self):
         inspect = Mock(side_effect=[100, 100, 350, 400, 400])
         perform, wait = Mock(), Mock()
