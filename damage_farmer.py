@@ -339,6 +339,16 @@ def main(argv=None):
                         try:
                             measurements.observe(reader.inspect(), time.time())
                         except (RuntimeError, ValueError) as error:
+                            # A title read is telemetry, not evidence that
+                            # healthy attacks are stuck. Retry it later only
+                            # when cleanup has returned to verified gameplay.
+                            retry_frame = screen.capture(sct)
+                            if isinstance(error, ValueError) and hotbar_visible(retry_frame) and not blocked_scene(retry_frame, ocr):
+                                last_progress_check = time.monotonic()-config['damage_check_seconds']+30
+                                hit_guard.cancel()
+                                cycle.resync(time.monotonic())
+                                event('damage_title_retry', message='Title read deferred; gameplay verified and no reset: '+str(error))
+                                continue
                             manual_paused = True
                             needs_setup = True
                             last_progress_check = 0.
