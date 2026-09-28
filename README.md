@@ -124,7 +124,9 @@ This mode is for the stationary statue setup. It has passed offline tests but ne
 autofish damage
 ```
 
-The default rotation is five M1 clicks, then Shock Wave (`C`) and follow-up (`Z`) only when their icons are ready. When `B` is visibly ready and its configured cooldown has elapsed, the worker taps `X` for 0.025 seconds, releases it, then holds `B` for 2 seconds. It skips cooling skills and repeats the five-click string. `X` is never used alone; `V`, `N`, `K`, and `L` are unused by this rotation.
+The default rotation is five M1 clicks, then Shock Wave (`C`) and follow-up (`Z`) only when their icons are ready. When `B` is visibly ready and its configured cooldown has elapsed, the worker taps `X` for 0.025 seconds, releases it, waits 0.5 seconds for the skill to transform, then holds `B` for 2 seconds. It skips cooling skills and repeats the five-click string. `X` is never used alone; `V`, `N`, `K`, and `L` are unused by this rotation.
+
+Damage status and the terminal dashboard show DPH, remaining damage, sample age, and estimated local finish time. DPH uses elapsed time between verified title readings over roughly the last ten minutes, including animation and menu time. A new worker needs two readings before showing a rate. Stale readings and paused runs suppress the finish estimate. `--timing m1_interval=0.30` requests faster discrete clicks while preserving the five-hit check; reduce timing only if registered hits and measured damage remain healthy.
 
 ```powershell
 autofish damage --show-config

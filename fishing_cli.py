@@ -12,6 +12,7 @@ from status_view import snapshot, duration, estimate
 from live_feed import event_tone, state_tone
 import control_actions as actions
 from app_config import MODES
+from damage_view import pace_labels
 from bait_warning import warning as bait_warning
 
 COLORS = {'gold': 33, 'green': 32, 'red': 31, 'cyan': 36, 'gray': 90, 'white': 97, 'text': 97}
@@ -41,6 +42,8 @@ def status_lines(data, colors=False):
     tone = state_tone(data['state'],data['running'] and not data['stop_requested'])
     if data.get('mode') == 'damage':
         d = data.get('damage') or {}
+        pace, finish, sample = pace_labels(d)
+        rotation = d.get('rotation') or {}
         return [c('STATUE DAMAGE', 'gold')+'  /  '+c(data['state'].upper(), tone),
                 '  '+(data.get('reason') or d.get('wait_reason') or ''), '',
                 f"  Combo           {d.get('combo') or '-'}",
@@ -51,9 +54,13 @@ def status_lines(data, colors=False):
                 f"  Active time     {duration(d.get('active_seconds', 0))}",
                 f"  Title progress  {d.get('title_progress', 0):,} / {d.get('title_target', 0):,}",
                 f"  Verified gain   {d.get('estimated_damage', 0):,}",
-                f"  Observed pace   {d.get('estimated_dps') or '-'} damage/s",
-                f"  Time left       {str(d.get('eta_hours'))+' hours' if d.get('eta_hours') is not None else 'Awaiting title sample'}",
-                c('  Pace and ETA update from the in-game title progress.', 'gray'),
+                f"  DPH             {pace}",
+                f"  Remaining       {d.get('remaining_damage', 0):,} damage",
+                f"  Est. finish     {finish}",
+                f"  Title checked   {sample}",
+                f"  Rotation        5 M1 ({rotation.get('m1_interval', .42):g}s) > ready C/Z > X tap > {rotation.get('ultimate_prep_wait_seconds', .5):g}s wait > B",
+                f"  Cycle pause     {rotation.get('combo_gap', 1.65):g}s",
+                c('  DPH uses elapsed time between verified title readings; ETA assumes this pace continues.', 'gray'),
                 c('  F8 pauses/resumes in Roblox. Losing focus pauses automatically.', 'gray')]
     remain = data['bait_remaining_estimate']
     hours = data['bait_hours_remaining_estimate']

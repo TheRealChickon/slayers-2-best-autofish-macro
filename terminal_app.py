@@ -19,6 +19,7 @@ from metrics import read, write
 from status_view import duration, estimate, snapshot
 from bait_warning import warning as bait_warning
 import damage_build
+from damage_view import pace_labels
 
 ESC = '\033['
 RESET = ESC + '0m'
@@ -284,8 +285,9 @@ class Terminal:
     def body(self, available):
         d = self.data
         if self.page == 0:
-            if d.get('mode') == 'damage' and d.get('running'):
+            if d.get('mode') == 'damage':
                 damage = d.get('damage', {})
+                pace, finish, sample = pace_labels(damage)
                 rows = [tint('STATUE', 'dim')+'  '+tint(d['state'], 'gold'),
                         tint('COMBO', 'dim')+f"  {damage.get('combo') or '—'}    "+
                         tint('HITS', 'dim')+f"  {damage.get('observed_hits', 0):,}",
@@ -293,8 +295,9 @@ class Terminal:
                         tint('C / Z / B', 'dim')+'  '+ ' / '.join(str((damage.get('move_uses') or {}).get(role, 0)) for role in ('shock_wave', 'followup', 'ultimate')),
                         tint('TITLE', 'dim')+f"  {damage.get('title_progress', 0):,} / {damage.get('title_target', 0):,}    "+
                         tint('RESETS', 'dim')+f"  {damage.get('resets', 0)}",
-                        tint('PACE', 'dim')+f"  {damage.get('estimated_dps') or '—'} observed damage/s    "+
-                        tint('ETA', 'dim')+f"  {damage.get('eta_hours') if damage.get('eta_hours') is not None else '—'}h", '']
+                        tint('DPH', 'dim')+'  '+pace,
+                        tint('LEFT', 'dim')+f"  {damage.get('remaining_damage', 0):,} damage    "+tint('CHECKED', 'dim')+'  '+sample,
+                        tint('FINISH', 'dim')+'  '+finish, '']
                 rows += [tint('› ' if self.selection == i else '  ', 'selected')+
                          tint(MODES[mode]+'  /  '+self.mode_details[mode][1], 'gold' if self.selection==i else 'dim')
                          for i,mode in enumerate(self.run_modes)]
