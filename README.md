@@ -128,6 +128,8 @@ The default rotation is five M1 clicks, then Shock Wave (`C`) and follow-up (`Z`
 
 Damage status and the terminal dashboard show DPH, remaining damage, sample age, and estimated local finish time. DPH uses elapsed time between verified title readings over roughly the last ten minutes, including animation and menu time. A new worker needs two readings before showing a rate. Stale readings and paused runs suppress the finish estimate. `--timing m1_interval=0.30` requests faster discrete clicks while preserving the five-hit check; reduce timing only if registered hits and measured damage remain healthy.
 
+Use `autofish damage --measure-skills` to briefly interrupt normal farming and measure isolated damage for a complete five-M1 string and each enabled skill. The worker waits for prior damage to settle, checks readiness, uses one attack, and compares stable title totals before and after. X and B are measured together because X prepares the ultimate. The CLI and dashboard show these saved per-use samples and their times; they are not live attribution or guaranteed damage for every cast. Remeasure after changing equipment, buffs, targets, or bindings. Sampling never resets the character, rejects changing baselines or zero-damage casts, and resumes normal farming after a successful measurement. DPH recollects normal-farming samples afterward, excluding calibration time. Stop, F8, and focus checks remain active.
+
 ```powershell
 autofish damage --show-config
 autofish damage --key shock_wave=Q --key followup=E --key ultimate_prep=R --key ultimate=T --timing post_m1_wait=0.8 --timing ultimate_hold_seconds=2.5 --title Annihilator --target 10000000 --configure-only

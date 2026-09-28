@@ -2,6 +2,22 @@
 import time
 
 
+def skill_lines(damage):
+    samples = damage.get('skill_samples') or {}
+    labels = [('m1_string', 'Five M1s'), ('shock_wave', 'C'),
+              ('followup', 'Z'), ('ultimate', 'X+B combined')]
+    lines = ['Damage per use (isolated title samples):']
+    for role, label in labels:
+        sample = samples.get(role)
+        if sample:
+            stamp = time.strftime('%H:%M', time.localtime(sample['at']))
+            lines.append(f"  {label:<14} {sample['damage']:,} damage (sample {stamp})")
+        else:
+            lines.append(f'  {label:<14} Not measured')
+    lines.append('Remeasure after build changes: autofish damage --measure-skills')
+    return lines
+
+
 def pace_labels(damage, now=None):
     now = time.time() if now is None else now
     verified = damage.get('last_verified')

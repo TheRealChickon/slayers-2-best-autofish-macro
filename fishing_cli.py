@@ -12,7 +12,7 @@ from status_view import snapshot, duration, estimate
 from live_feed import event_tone, state_tone
 import control_actions as actions
 from app_config import MODES
-from damage_view import pace_labels
+from damage_view import pace_labels, skill_lines
 from bait_warning import warning as bait_warning
 
 COLORS = {'gold': 33, 'green': 32, 'red': 31, 'cyan': 36, 'gray': 90, 'white': 97, 'text': 97}
@@ -60,6 +60,7 @@ def status_lines(data, colors=False):
                 f"  Title checked   {sample}",
                 f"  Rotation        5 M1 ({rotation.get('m1_interval', .42):g}s) > ready C/Z > X tap > {rotation.get('ultimate_prep_wait_seconds', .5):g}s wait > B",
                 f"  Cycle pause     {rotation.get('combo_gap', 1.65):g}s",
+                *['  '+line for line in skill_lines(d)],
                 c('  DPH uses elapsed time between verified title readings; ETA assumes this pace continues.', 'gray'),
                 c('  F8 pauses/resumes in Roblox. Losing focus pauses automatically.', 'gray')]
     remain = data['bait_remaining_estimate']
@@ -138,6 +139,8 @@ def parser(prog='autofish'):
     damage.add_argument('--check-seconds',type=int,help='Title progress recheck interval')
     damage.add_argument('--configure-only',action='store_true',help='Save configuration without starting game input')
     damage.add_argument('--show-config',action='store_true',help='Print damage settings without starting')
+    damage.add_argument('--measure-skills',action='store_true',
+                        help='Sample isolated five-M1, C, Z and X+B damage, then resume farming')
     reference=sub.add_parser('reference',help='Save a local fishing view while paused')
     reference.add_argument('operation',choices=('status','save','disable'),nargs='?',default='status')
     reference.add_argument('--position',action='store_true',help='Calibrate small position corrections as well as camera movement')
@@ -246,6 +249,9 @@ def execute(args, colors=False):
             print(json.dumps({key: config[key] for key in ('damage_rotation','damage_title',
                 'damage_title_category','damage_target','damage_check_seconds')}, indent=2))
             return 0
+        if args.measure_skills:
+            from metrics import write
+            write('damage-sample-request.json', {'id': str(time.time_ns())})
         return print(color(actions.resume('damage'), 'gold', colors)) or 0
     if command=='start':
         from start_picker import start
