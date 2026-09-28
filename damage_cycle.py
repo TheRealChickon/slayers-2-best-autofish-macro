@@ -3,6 +3,46 @@
 from collections import deque
 
 
+class FiveHitGuard:
+    """Confirm a five-M1 stall from stable reads, then one more full trial."""
+
+    def __init__(self):
+        self.start_hits = None
+        self.start_combo = None
+        self.deficient_trials = 0
+
+    def begin(self, observed_hits, combo):
+        self.start_hits = observed_hits
+        self.start_combo = combo
+
+    def cancel(self):
+        """An interrupted string cannot establish or confirm a stall."""
+        self.start_hits = self.start_combo = None
+        self.deficient_trials = 0
+
+    def check(self, observed_hits, first_post, second_post):
+        if self.start_hits is None:
+            return 'unknown'
+        gained = max(0, observed_hits-self.start_hits)
+        baseline = self.start_combo
+        self.start_hits = self.start_combo = None
+        if gained >= 5 or (baseline is None and first_post == second_post == 5) or (baseline is not None and any(
+                value is not None and value-baseline >= 5
+                for value in (first_post, second_post))):
+            self.deficient_trials = 0
+            return 'healthy'
+        if (baseline is None or first_post is None or second_post is None or
+                first_post < baseline or second_post < baseline or
+                abs(first_post-second_post) > 1):
+            self.deficient_trials = 0
+            return 'unknown'
+        self.deficient_trials += 1
+        return 'investigate' if self.deficient_trials >= 2 else 'recheck_next_string'
+
+    def title_progressed(self):
+        self.deficient_trials = 0
+
+
 class DamageCycle:
     """C precedes a five-hit M1 string, as requested by the player."""
 

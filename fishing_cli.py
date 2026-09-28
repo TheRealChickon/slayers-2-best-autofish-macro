@@ -45,13 +45,15 @@ def status_lines(data, colors=False):
                 '  '+(data.get('reason') or d.get('wait_reason') or ''), '',
                 f"  Combo           {d.get('combo') or '-'}",
                 f"  Observed hits   {d.get('observed_hits', 0):,}",
-                f"  M1 / C          {d.get('m1_clicks', 0):,} / {d.get('c_casts', 0):,}",
+                f"  M1 clicks       {d.get('m1_clicks', 0):,}",
+                f"  Move uses       {', '.join(f'{name}: {value}' for name,value in (d.get('move_uses') or {}).items()) or 'None yet'}",
                 f"  Reset attempts  {d.get('resets', 0):,}",
                 f"  Active time     {duration(d.get('active_seconds', 0))}",
-                f"  Est. damage     {d.get('estimated_damage', 0):,}",
-                f"  Est. pace       {d.get('estimated_dps') or '-'} damage/s",
-                f"  5M at pace      {str(d.get('five_million_hours'))+' hours' if d.get('five_million_hours') else 'Awaiting hit sample'}",
-                c('  Estimate uses observed combo ticks; title progress is the authoritative total.', 'gray'),
+                f"  Title progress  {d.get('title_progress', 0):,} / {d.get('title_target', 0):,}",
+                f"  Verified gain   {d.get('estimated_damage', 0):,}",
+                f"  Observed pace   {d.get('estimated_dps') or '-'} damage/s",
+                f"  Time left       {str(d.get('eta_hours'))+' hours' if d.get('eta_hours') is not None else 'Awaiting title sample'}",
+                c('  Pace and ETA update from the in-game title progress.', 'gray'),
                 c('  F8 pauses/resumes in Roblox. Losing focus pauses automatically.', 'gray')]
     remain = data['bait_remaining_estimate']
     hours = data['bait_hours_remaining_estimate']
@@ -114,7 +116,21 @@ def parser(prog='autofish'):
     resume.add_argument('--until',help='Stop Full farmer at HH:MM local time today')
     sub.add_parser('assist',help='Start minigame only; you cast and collect manually')
     sub.add_parser('spot',help='Click, reel and collect; F8 starts/pauses/resumes, losing focus pauses automatically')
-    sub.add_parser('damage',help='Stationary statue damage: C then five M1s, combo-checked, F8 pauses')
+    damage=sub.add_parser('damage',help='Measured statue damage with configurable keys and timing')
+    damage.add_argument('--key',action='append',default=[],metavar='ROLE=KEY',
+                        help='Bind shock_wave, followup, ultimate_prep or ultimate')
+    damage.add_argument('--name',action='append',default=[],metavar='ROLE=NAME',
+                        help='Label shock_wave, followup or ultimate')
+    damage.add_argument('--timing',action='append',default=[],metavar='FIELD=SECONDS',
+                        help='Set a rotation timing; see README')
+    damage.add_argument('--moves',metavar='ROLES',
+                        help='Comma-separated moves: shock_wave,followup,ultimate; use none for M1 only')
+    damage.add_argument('--title',help='Exact in-game title name to measure')
+    damage.add_argument('--category',help='Title menu category (default Combat)')
+    damage.add_argument('--target',type=int,help='Damage title goal (default 5,000,000)')
+    damage.add_argument('--check-seconds',type=int,help='Title progress recheck interval')
+    damage.add_argument('--configure-only',action='store_true',help='Save configuration without starting game input')
+    damage.add_argument('--show-config',action='store_true',help='Print damage settings without starting')
     reference=sub.add_parser('reference',help='Save a local fishing view while paused')
     reference.add_argument('operation',choices=('status','save','disable'),nargs='?',default='status')
     reference.add_argument('--position',action='store_true',help='Calibrate small position corrections as well as camera movement')
@@ -182,6 +198,48 @@ def stream_logs(args, journal, colors):
 
 def execute(args, colors=False):
     command = args.command or 'status'
+    if command == 'damage':
+        from app_config import load_config, save_config
+        from damage_plan import validate_rotation
+        config = load_config()
+        rotation = {**config['damage_rotation'],
+                    'keys': dict(config['damage_rotation']['keys']),
+                    'names': dict(config['damage_rotation']['names']),
+                    'enabled': list(config['damage_rotation']['enabled'])}
+        changes = {}
+        if args.moves is not None:
+            rotation['enabled'] = ([] if args.moves.strip().lower() == 'none' else
+                                   [role.strip().lower().replace('-', '_') for role in args.moves.split(',')])
+        for option, field in ((args.key, 'keys'), (args.name, 'names')):
+            for entry in option:
+                if '=' not in entry:
+                    raise ValueError(f'Use --{field[:-1]} ROLE=VALUE')
+                role, value = entry.split('=', 1)
+                role = role.strip().lower().replace('-', '_')
+                if role not in rotation[field]:
+                    raise ValueError(f'Unknown {field[:-1]} role: {role}')
+                rotation[field][role] = value.strip()
+        for entry in args.timing:
+            if '=' not in entry:
+                raise ValueError('Use --timing FIELD=SECONDS')
+            field, value = entry.split('=', 1)
+            field = field.strip().lower().replace('-', '_')
+            if field not in rotation or field in ('keys', 'names'):
+                raise ValueError(f'Unknown damage timing: {field}')
+            rotation[field] = float(value)
+        if args.key or args.name or args.timing or args.moves is not None:
+            changes['damage_rotation'] = validate_rotation(rotation)
+        for option, field in ((args.title, 'damage_title'), (args.category, 'damage_title_category'),
+                              (args.target, 'damage_target'), (args.check_seconds, 'damage_check_seconds')):
+            if option is not None:
+                changes[field] = option
+        if changes:
+            config = save_config(changes)
+        if args.show_config or args.configure_only:
+            print(json.dumps({key: config[key] for key in ('damage_rotation','damage_title',
+                'damage_title_category','damage_target','damage_check_seconds')}, indent=2))
+            return 0
+        return print(color(actions.resume('damage'), 'gold', colors)) or 0
     if command=='start':
         from start_picker import start
         return start(args, colors)
@@ -248,13 +306,12 @@ def execute(args, colors=False):
         response, code = dispatch(args.operation, args.request_id, args.limit)
         print(json.dumps(response, ensure_ascii=True), flush=True)
         return code
-    if command in ('pause', 'stop', 'continue', 'resume', 'assist', 'spot', 'damage'):
+    if command in ('pause', 'stop', 'continue', 'resume', 'assist', 'spot'):
         action = {'pause': actions.pause, 'stop': actions.stop,
                   'continue':lambda:actions.resume(getattr(args,'mode',None),getattr(args,'until',None)),
                   'resume':lambda:actions.resume(getattr(args,'mode',None),getattr(args,'until',None)),
                   'assist':lambda:actions.resume('assist'),
-                  'spot':lambda:actions.resume('spot'),
-                  'damage':lambda:actions.resume('damage')}[command]
+                  'spot':lambda:actions.resume('spot')}[command]
         print(color(action(), 'green' if command in ('continue', 'resume') else 'gold', colors))
         return 0
     if command == 'tui':
