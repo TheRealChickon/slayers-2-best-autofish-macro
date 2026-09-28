@@ -79,6 +79,7 @@ class DamageTitleReader:
         sidebar = (0, 610, 320, 180)
         def menu_visible():
             return any(normalized(row['text']) == 'titles' for row in self.rows(sidebar))
+        attempted_open = False
         try:
             for attempt in range(3):
                 if menu_visible():
@@ -87,6 +88,7 @@ class DamageTitleReader:
                 # verified gameplay HUD, never blindly toggle an unknown menu.
                 if hotbar_visible(d.capture()):
                     d.key('M')
+                    attempted_open = True
                 d.sleep(.8)
             self.click_named('Titles', (0, 610, 320, 180))
             self.click_named(self.category, (320, 250, 450, 620), category=True)
@@ -95,6 +97,13 @@ class DamageTitleReader:
             return progress_from_rows(rows, self.title, self.target)
         finally:
             # The driver rechecks stop, focus and window bounds before closing.
-            if menu_visible():
-                d.key('M'); d.sleep(.8)
+            # Restore the HUD after our own menu operation, including a blank
+            # transition frame. At most two toggles: reveal, then close.
+            for _ in range(2):
+                if hotbar_visible(d.capture()) and not menu_visible():
+                    break
+                if menu_visible() or attempted_open:
+                    d.key('M'); d.sleep(.8)
+                else:
+                    break
             d.move(1280, 690)

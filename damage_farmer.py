@@ -331,7 +331,8 @@ def main(argv=None):
                         observed_hits += gain
                         ultimate_ready = ultimate_vision.observe(frame)
                     if (tick-last_progress_check >= config['damage_check_seconds'] and
-                            cycle.phase == 'm1' and cycle.m1_index == 0):
+                            cycle.phase == 'm1' and cycle.m1_index == 0 and
+                            tick-cycle.last_ultimate >= 15 and hotbar_visible(screen.capture(sct))):
                         stage = 'checking_damage'
                         driver = InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer)
                         reader = DamageTitleReader(driver, config['damage_title'],

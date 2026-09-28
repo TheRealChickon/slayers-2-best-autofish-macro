@@ -27,7 +27,7 @@ class UniversalDamageTests(unittest.TestCase):
             def move(self, x, y): pass
             def capture(self):
                 frame = np.zeros((1440, 2560, 3), dtype=np.uint8)
-                frame[1340:1430, 1050:1530] = 255
+                frame[1345:1360, 1060:1100] = 255
                 return frame
         driver = Driver()
         reader = DamageTitleReader(driver, 'Annihilator', 10_000_000)
