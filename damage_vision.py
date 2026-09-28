@@ -20,7 +20,8 @@ def hotbar_visible(frame):
     if frame.shape[:2] != (1440, 2560):
         return False
     gray = cv2.cvtColor(frame[1340:1430, 1050:1530], cv2.COLOR_BGR2GRAY)
-    return bool((gray > 180).mean() > .003)
+    bright = (gray > 180).mean()
+    return bool(.003 < bright < .75 and gray.std() > 8)
 
 
 def gauntlet_selected(frame):

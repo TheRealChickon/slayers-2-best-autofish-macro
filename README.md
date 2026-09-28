@@ -140,7 +140,7 @@ The worker waits for Roblox to be foreground with your pointer inside it. It che
 
 F8 and CLI Pause/Continue keep the damage counters. CLI Stop ends that sample; the next start begins a fresh sample. The worker does not take over Roblox focus when another app is in front.
 
-`autofish status` and the terminal Run page show combo, M1 counts, measured first/fifth hits, title progress, resets and an ETA derived from verified title progress. Each five-click health result is recorded in the damage event log. A five-hit gain clears suspicion; an interrupted string, counter restart, or unreadable result cannot confirm a stall. Two deficient strings trigger a title check, and recovery requires that title progress also failed to increase.
+`autofish status` and the terminal Run page show combo, M1 counts, measured first/fifth hits, title progress, resets and an ETA derived from verified title progress. Each five-click health result is recorded in the damage event log. A five-hit gain clears suspicion; an interrupted string, counter restart, or unreadable result cannot confirm a stall. Two deficient strings, or two entirely absent combo readings, trigger a title check, and recovery requires that title progress also failed to increase.
 
 ### Fish here
 

@@ -10,10 +10,39 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from damage_plan import DEFAULT_ROTATION, DamageRotation, validate_rotation
 from damage_measure import DamageMeasurements
-from damage_title import progress_from_rows
+from damage_title import DamageTitleReader, progress_from_rows
 
 
 class UniversalDamageTests(unittest.TestCase):
+    def test_title_reader_retries_swallowed_menu_key_and_closes_verified_menu(self):
+        import numpy as np
+        class Driver:
+            keys = 0
+            menu = False
+            def key(self, key):
+                self.keys += 1
+                if self.keys > 1:
+                    self.menu = not self.menu
+            def sleep(self, seconds): pass
+            def move(self, x, y): pass
+            def capture(self):
+                frame = np.zeros((1440, 2560, 3), dtype=np.uint8)
+                frame[1345:1360, 1060:1100] = 255
+                return frame
+        driver = Driver()
+        reader = DamageTitleReader(driver, 'Annihilator', 10_000_000)
+        detail = [{'text': text, 'score': .99, 'center': (2200, y)} for text, y in
+                  [('Annihilator', 365), ('Requirements', 469),
+                   ('Deal 10,000,000 total damage.', 508), ('5,251,113 left', 582)]]
+        def rows(box):
+            if box[0] == 0:
+                return [{'text': 'Titles'}] if driver.menu else []
+            return detail
+        with patch.object(reader, 'rows', side_effect=rows), patch.object(reader, 'click_named'):
+            self.assertEqual(reader.inspect(), 4_748_887)
+        self.assertEqual(driver.keys, 3)
+        self.assertFalse(driver.menu)
+
     def test_cooling_skills_are_skipped_after_five_m1(self):
         cycle = DamageRotation(DEFAULT_ROTATION)
         now, actions = 0., []

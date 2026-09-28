@@ -127,7 +127,7 @@ def parser(prog='autofish'):
                         help='Comma-separated moves: shock_wave,followup,ultimate; use none for M1 only')
     damage.add_argument('--title',help='Exact in-game title name to measure')
     damage.add_argument('--category',help='Title menu category (default Combat)')
-    damage.add_argument('--target',type=int,help='Damage title goal (default 5,000,000)')
+    damage.add_argument('--target',type=int,help='Damage title goal (default 10,000,000)')
     damage.add_argument('--check-seconds',type=int,help='Title progress recheck interval')
     damage.add_argument('--configure-only',action='store_true',help='Save configuration without starting game input')
     damage.add_argument('--show-config',action='store_true',help='Print damage settings without starting')

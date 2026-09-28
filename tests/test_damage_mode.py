@@ -15,6 +15,16 @@ from item_journal import Journal
 
 
 class DamagePolicy(unittest.TestCase):
+    def test_repeated_absent_combo_requests_title_check_not_immediate_reset(self):
+        guard = FiveHitGuard()
+        guard.begin(0, None)
+        self.assertEqual(guard.check(0, None, None), 'unknown')
+        guard.begin(0, None)
+        self.assertEqual(guard.check(0, None, None), 'investigate')
+        guard.title_progressed()
+        guard.begin(0, None)
+        self.assertEqual(guard.check(0, None, None), 'unknown')
+
     def test_interrupted_string_cannot_confirm_previous_short_string(self):
         guard = FiveHitGuard()
         guard.begin(0, 10)
@@ -94,11 +104,17 @@ class DamagePolicy(unittest.TestCase):
 
     def test_equipment_detection_uses_action_bar_and_waits_for_hud(self):
         frame = np.zeros((1440, 2560, 3), dtype=np.uint8)
-        frame[1340:1430, 1050:1530] = 255
+        frame[1345:1360, 1060:1100] = 255
         self.assertTrue(hotbar_visible(frame))
         self.assertFalse(gauntlet_selected(frame))
         frame[1260:1335, 1025:1540] = 255
         self.assertTrue(gauntlet_selected(frame))
+
+    def test_blank_ultimate_flash_is_not_a_playable_hud(self):
+        frame = np.full((1440, 2560, 3), 255, dtype=np.uint8)
+        self.assertFalse(hotbar_visible(frame))
+        frame[:] = 0
+        self.assertFalse(hotbar_visible(frame))
 
     def test_skill_ready_returns_only_after_the_icon_recovers(self):
         frame = np.zeros((1440, 2560, 3), dtype=np.uint8)
