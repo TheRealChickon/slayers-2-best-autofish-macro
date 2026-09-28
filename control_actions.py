@@ -100,10 +100,16 @@ def seconds_until_local_clock(value):
     return remaining
 
 
-def resume(mode=None,until=None):
+def resume(mode=None,until=None, boss_operation='observe', boss_seconds=60):
     global _starting
     mode = mode or load_config().get('mode','full')
-    if mode not in MODES:raise ValueError('Mode must be full, assist, spot, or damage')
+    if mode not in MODES:raise ValueError('Unknown controller mode')
+    if mode == 'boss':
+        if boss_operation not in ('observe', 'travel', 'trial', 'rejoin', 'farm', 'loot'):
+            raise ValueError('Unknown boss operation')
+        limit = 43200 if boss_operation in ('farm', 'observe') else 180
+        if not math.isfinite(float(boss_seconds)) or not 5 <= float(boss_seconds) <= limit:
+            raise ValueError(f'Boss operation must be 5–{limit} seconds')
     if mode == 'damage' and not load_config()['damage_title']:
         raise ValueError('Configure the exact in-game damage title first: autofish damage --title NAME --configure-only')
     if until and mode!='full':raise ValueError('--until is available for Full farmer only')
@@ -124,6 +130,7 @@ def resume(mode=None,until=None):
             if mode=='assist':return 'Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.'
             if mode=='spot':return 'Fish here is active. Equip your rod, position the mouse, then press F8.'
             if mode=='damage':return 'Statue damage is active. F8 pauses/resumes; Roblox focus controls attacks.'
+            if mode=='boss':return 'A boss trial is active. Stop it before starting another operation.'
             (RUN/'F8_PAUSE').unlink(missing_ok=True)
             focus_game()
             event('continue', 'Returned focus to Roblox.')
@@ -136,7 +143,9 @@ def resume(mode=None,until=None):
         (RUN / 'PAUSE').unlink(missing_ok=True)
         (RUN / 'STOP').unlink(missing_ok=True)
         (RUN / 'F8_PAUSE').unlink(missing_ok=True)
-        args = ([sys.executable,str(ROOT/'damage_farmer.py'),'--respect-stop'] +
+        args = ([sys.executable,str(ROOT/'boss_farmer.py'),'--respect-stop',
+                 '--operation',boss_operation,'--seconds',str(boss_seconds)] if mode=='boss' else
+                [sys.executable,str(ROOT/'damage_farmer.py'),'--respect-stop'] +
                 (['--resume-counters'] if resume_damage_counters else []) if mode=='damage' else
                 [sys.executable,str(ROOT/'minigame_assist.py'),'--respect-stop','--mode',mode] if mode in ('assist','spot') else
                 [sys.executable, str(ROOT / 'recovery.py'), '--seconds', str(seconds), '--rejoin',
@@ -149,7 +158,8 @@ def resume(mode=None,until=None):
         except Exception:
             (RUN / 'STOP').write_text('Continue failed; input stopped')
             raise
-        message = ('Statue damage started. Bring Roblox forward; F8 pauses/resumes the configured rotation.' if mode=='damage' else
+        message = (f'Sanemi {boss_operation} started with a {boss_seconds:g}s limit. F8/F9/F12 stop; losing focus releases input.' if mode=='boss' else
+                   'Statue damage started. Bring Roblox forward; F8 pauses/resumes the configured rotation.' if mode=='damage' else
                    'Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.' if mode=='assist' else
                    'Fish here is active. Equip your rod, position the mouse, then press F8; losing focus pauses input.' if mode=='spot' else
                    ('Continuing the saved run until '+until+' local time. Rejoining and equipping the rod...' if until else

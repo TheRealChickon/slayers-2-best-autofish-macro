@@ -47,12 +47,13 @@ def clip(line, width):
 class Terminal:
     pages = ('Run', 'Items', 'Live log', 'Setup', 'Build')
     categories = ('All', 'Catches', 'Recovery', 'Warnings')
-    run_modes = ('assist', 'spot', 'full', 'damage')
+    run_modes = ('assist', 'spot', 'full', 'damage', 'boss')
     mode_details = {
         'assist': ('green', 'you cast / auto reel'),
         'spot': ('cyan', 'cast / reel / collect'),
         'full': ('gold', 'spawn / rejoin'),
         'damage': ('ore', '5 M1 / two moves / ready ultimate'),
+        'boss': ('ore', 'Sanemi observation / no attacks'),
     }
     settings_keys = ('Username', 'Mode', 'Rod slot', 'Auto rod', 'Camera', 'Heading',
                      'Fishing titles', 'Cast point', 'Capture pointer',
@@ -285,6 +286,16 @@ class Terminal:
     def body(self, available):
         d = self.data
         if self.page == 0:
+            if d.get('mode') == 'boss':
+                from boss_view import boss_lines
+                rows = [tint(d['state'], 'gold'), *boss_lines(d.get('boss') or {}), '']
+                action_start = len(rows)
+                rows += [tint('› ' if self.selection == i else '  ', 'selected')+
+                         tint(MODES[mode]+'  /  '+self.mode_details[mode][1], 'gold' if self.selection==i else 'dim')
+                         for i,mode in enumerate(self.run_modes)]
+                rows += [tint('› ' if self.selection == i else '  ', 'selected')+label
+                         for i,label in enumerate(('Pause','Stop','Export log'),start=len(self.run_modes))]
+                return rows[max(0,action_start+self.selection-available+1):][:available]
             if d.get('mode') == 'damage':
                 damage = d.get('damage', {})
                 pace, finish, sample = pace_labels(damage)

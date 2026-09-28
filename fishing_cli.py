@@ -40,6 +40,9 @@ def enable_color(force=False):
 def status_lines(data, colors=False):
     c = lambda text, tone='white': color(text, tone, colors)
     tone = state_tone(data['state'],data['running'] and not data['stop_requested'])
+    if data.get('mode') == 'boss':
+        from boss_view import boss_lines
+        return [c(data['state'].upper(), tone), *boss_lines(data.get('boss') or {})]
     if data.get('mode') == 'damage':
         d = data.get('damage') or {}
         pace, finish, sample = pace_labels(d)
@@ -124,6 +127,13 @@ def parser(prog='autofish'):
     resume.add_argument('--until',help='Stop Full farmer at HH:MM local time today')
     sub.add_parser('assist',help='Start minigame only; you cast and collect manually')
     sub.add_parser('spot',help='Click, reel and collect; F8 starts/pauses/resumes, losing focus pauses automatically')
+    boss=sub.add_parser('boss',help='Experimental Sanemi observation and bounded combo trials')
+    boss.add_argument('operation',choices=('status','configure','observe','travel','trial','rejoin','farm','loot'),nargs='?',default='status')
+    boss.add_argument('--seconds',type=float,default=60,help='Time limit; farm/observe allow up to 12 hours')
+    boss.add_argument('--strategy',choices=('m1_reset','m1_c_reset','ultimate_reset','b_m1_c_reset'),help='Configure the tested combo')
+    boss.add_argument('--max-cycles',type=int,help='Maximum combos before stopping')
+    boss.add_argument('--spawn-verified',action='store_true',help='Confirm you verified /set beside Sanemi; enables tactical resets')
+    boss.add_argument('--json',action='store_true',help='Print saved boss status as JSON')
     damage=sub.add_parser('damage',help='Measured statue damage with configurable keys and timing')
     damage.add_argument('--key',action='append',default=[],metavar='ROLE=KEY',
                         help='Bind shock_wave, followup, ultimate_prep or ultimate')
@@ -208,6 +218,28 @@ def stream_logs(args, journal, colors):
 
 def execute(args, colors=False):
     command = args.command or 'status'
+    if command == 'boss':
+        from app_config import load_config, save_config
+        from boss_plan import validate_boss
+        from boss_view import boss_lines
+        from metrics import read
+        if args.strategy or args.max_cycles is not None or args.spawn_verified:
+            if args.operation != 'configure':
+                raise ValueError('Use boss configure to change settings without starting')
+            config = dict(load_config()['boss'])
+            if args.strategy: config['strategy'] = args.strategy
+            if args.max_cycles is not None: config['max_cycles'] = args.max_cycles
+            if args.spawn_verified:
+                config.update(spawn_verified=True, reset_after_combo=True)
+            save_config({'boss': validate_boss(config)})
+        if args.operation == 'configure':
+            print(json.dumps(load_config()['boss'], indent=2))
+        elif args.operation == 'status':
+            data = read('boss-status.json')
+            print(json.dumps(data, indent=2) if args.json else '\n'.join(boss_lines(data)))
+        else:
+            print(actions.resume('boss', boss_operation=args.operation, boss_seconds=args.seconds))
+        return 0
     if command == 'damage':
         from app_config import load_config, save_config
         from damage_plan import validate_rotation

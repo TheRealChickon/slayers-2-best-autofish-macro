@@ -87,6 +87,7 @@ def snapshot(journal=None):
         'spot_paused':worker.get('spot_paused',False),
         'manual_paused':f8_paused or worker.get('manual_paused',False),
         'damage': damage if (live and supervisor.get('mode')=='damage') or load_config()['mode']=='damage' else {},
+        'boss': read('boss-status.json') if (live and supervisor.get('mode')=='boss') or load_config()['mode']=='boss' else {},
     }
 
 

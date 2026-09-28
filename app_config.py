@@ -6,10 +6,11 @@ import urllib.request
 from pathlib import Path
 from cast_point import DEFAULT as DEFAULT_CAST_POINT, validate as validate_cast_point
 from damage_plan import DEFAULT_ROTATION, validate_rotation
+from boss_plan import DEFAULT_BOSS, validate_boss
 
 ROOT = Path(__file__).resolve().parent
 MODES = {'full': 'Full farmer', 'assist': 'Minigame only', 'spot': 'Fish here',
-         'damage': 'Statue damage'}
+         'damage': 'Statue damage', 'boss': 'Sanemi trial'}
 CONFIG = ROOT / 'config.local.json'
 DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             'rod_slot': 5, 'auto_rod': True, 'reduced_motion': False, 'inventory_check': True,
@@ -17,10 +18,11 @@ DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             'spawn_backstep_seconds': 0.0, 'camera_mode': 'keep', 'camera_heading': None,
             'auto_fishing_titles': False, 'damage_rotation': DEFAULT_ROTATION,
             'damage_title': 'Annihilator', 'damage_title_category': 'Combat',
-            'damage_target': 10000000, 'damage_check_seconds': 180}
+            'damage_target': 10000000, 'damage_check_seconds': 180, 'boss': DEFAULT_BOSS}
 
 
 def validate_options(values):
+    values['boss'] = validate_boss(values['boss'])
     values['damage_rotation'] = validate_rotation(values['damage_rotation'])
     for name in ('damage_title', 'damage_title_category'):
         value = values[name]

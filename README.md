@@ -146,6 +146,46 @@ F8 and CLI Pause/Continue keep the damage counters. CLI Stop ends that sample; t
 
 `autofish status` and the terminal Run page show combo, M1 counts, measured first/fifth hits, title progress, resets and an ETA derived from verified title progress. Each five-click health result is recorded in the damage event log. A five-hit gain clears suspicion; an interrupted string, counter restart, or unreadable result cannot confirm a stall. Two deficient strings, or two entirely absent combo readings, trigger a title check, and recovery requires that title progress also failed to increase.
 
+### Sanemi boss trials
+
+Boss mode is experimental. It has its own worker, health ledger, screenshots and
+event log; opening the CLI or selecting **Sanemi trial** starts observation only.
+It never starts the statue controller. Use an already verified `/set` beside
+Sanemi (displayed as Saneri in game), with gauntlets in slot 1.
+
+```powershell
+autofish boss status
+autofish boss observe --seconds 30
+autofish boss configure --spawn-verified --strategy b_m1_c_reset --max-cycles 10
+autofish boss trial --seconds 120
+autofish boss farm --seconds 600
+autofish boss loot --seconds 60
+autofish stop
+```
+
+`b_m1_c_reset` aims normal B when ready, watches for the combat HUD after its
+cutscene, follows with four M1s and ready C, then deliberately resets to the
+saved spawn. `m1_reset` and `m1_c_reset` isolate the shorter alternatives;
+`ultimate_reset` tests the separate 25 ms X tap, 500 ms wait and held B attack.
+V/N/K/L are never sent. Targeted Z is not enabled in the farm until its aim and
+damage are validated. Readiness uses the visible cooldown border and skill art.
+
+Recognition requires the boss header, a unique world name, and matching hair
+appearance. It rechecks range and player health, limits searching and movement,
+and verifies `/set` in chat before updating a displaced spawn. Missing vision
+does not count as a kill or authorize a blind reset. The visible respawn timer
+controls waiting. Confirmed zero HP or a consistent countdown records defeat.
+During the countdown it opens uniquely recognized nearby chests and claims
+named item prompts. Loot search is bounded and returns the camera afterward;
+only visible item-and-quantity reward toasts are added to the loot totals.
+
+Status shows observed boss HP loss, elapsed-session DPH, per-combo/skill samples,
+resets, spawn updates and confirmed loot. HP readings can include residual damage or damage from
+another player; these are not statue title measurements or confirmed gold income.
+Unattended loot collection and repeated respawn cycles require live validation.
+F8/F9/F12 stop, and losing Roblox focus releases all owned input. Farm sessions
+are bounded by both `--seconds` (up to 12 hours) and `--max-cycles`.
+
 ### Fish here
 
 Choose **Settings → Mode → Fish here**, save and Continue. Or run:
