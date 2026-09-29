@@ -18,7 +18,7 @@ from fishing_assistant import ROOT, find_window, rectangle
 from item_journal import Journal
 from status_view import snapshot, duration
 import control_actions as actions
-from app_config import load_config, save_config, resolve_account, MODES
+from app_config import load_config, save_config, resolve_account, MODES, GUI_MODES
 from live_feed import LiveFeed
 from ui_motion import SoftButton, tween, mix
 
@@ -289,8 +289,8 @@ class Window:
         options=tk.Frame(self.settings_page,bg=BG);options.pack(side='left',anchor='n',fill='x',expand=True)
         mode_row=tk.Frame(form,bg=BG);mode_row.pack(fill='x',pady=(6,12))
         tk.Label(mode_row,text='Mode',bg=BG,fg=MUTED,font=(FONT,10),width=18,anchor='w').pack(side='left')
-        self.mode_var=tk.StringVar(value=MODES[config['mode']])
-        ttk.Combobox(mode_row,textvariable=self.mode_var,values=tuple(MODES.values()),state='readonly',width=23).pack(side='left',ipady=5)
+        self.mode_var=tk.StringVar(value=GUI_MODES.get(config['mode'], GUI_MODES['full']))
+        ttk.Combobox(mode_row,textvariable=self.mode_var,values=tuple(GUI_MODES.values()),state='readonly',width=23).pack(side='left',ipady=5)
         tk.Label(form,text='Manual modes: F8 pauses / resumes.\nLosing focus pauses automatically.',bg=BG,fg=MUTED,font=(FONT,9),justify='left').pack(anchor='w',pady=(0,8))
         camera_row=tk.Frame(form,bg=BG);camera_row.pack(fill='x',pady=(6,12))
         tk.Label(camera_row,text='Full farmer camera',bg=BG,fg=MUTED,font=(FONT,10),width=18,anchor='w').pack(side='left')
@@ -320,7 +320,7 @@ class Window:
 
     def save_settings(self):
         values={key:var.get() for key,var in self.setting_vars.items()}
-        mode=next(key for key,label in MODES.items() if label==self.mode_var.get())
+        mode=next(key for key,label in GUI_MODES.items() if label==self.mode_var.get())
         def save():
             if mode!=load_config().get('mode','full') and (actions.alive() or actions.starting()):
                 raise ValueError('Pause before switching modes.')
@@ -351,7 +351,11 @@ class Window:
         # Stop remains available while Continue is being dispatched.
         try:self.message(actions.stop(),'warn')
         except Exception as e:self.message(str(e),'error')
-    def resume(self):self.run_action(actions.resume)
+    def resume(self):
+        if load_config()['mode']=='rejoin':
+            self.message('Auto rejoin is CLI only. Run autofish rejoin or autofish continue.','warn')
+            return
+        self.run_action(actions.resume)
 
     def open_csv(self):
         try:

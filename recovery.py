@@ -201,7 +201,7 @@ class Recovery:
         finally:self.inp.hold(False)
         self.event('private_join_released',seconds=round(time.monotonic()-started,2),reason=reason)
         return True
-    def recover(self,force_menu=False):
+    def recover(self,force_menu=False,equip_rod=True):
         self.inp.release();self.event('recovery_started',force_menu=force_menu)
         try:self.select()
         except RuntimeError:self.launch()
@@ -249,8 +249,12 @@ class Recovery:
                     if pacer.ready('open_menu',now):
                         self.capture('before-menu');self.key('M');pacer.acted('open_menu',time.monotonic(),2);self.event('open_menu')
                 elif pacer.ready('world_ready',now,stable_seconds=3):
-                    self.backstep_after_join(join_attempts>0)
-                    self.equip_rod();self.capture('equipped');self.event('equipped_rod');self.restarts=0;return
+                    if equip_rod:
+                        self.backstep_after_join(join_attempts>0)
+                        self.equip_rod();self.capture('equipped');self.event('equipped_rod')
+                    else:
+                        self.event('game_ready',mode='rejoin')
+                    self.restarts=0;return
             elif kind=='private_join' and pacer.ready(kind,now):
                 if target is None:
                     self.event('private_join_retry',reason='Waiting for an unambiguous private Join button')

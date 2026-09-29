@@ -28,6 +28,7 @@ autofish pause
 autofish continue
 autofish continue --mode full --until 22:00  # Stop at 22:00 local time today
 autofish damage        # Measured statue damage with configured rotation
+autofish rejoin        # Reconnect the configured account without farming
 autofish stop
 autofish logs --activity --follow
 autofish wiki             # Open your local item wiki, if captured
@@ -115,6 +116,13 @@ If you move the installation folder, run `Setup.cmd` again to refresh the shortc
 | **Minigame only** (`assist`) | Spot, rod, casts and pickups | Minigame mouse hold/release |
 | **Fish here** (`spot`) | Spot, camera, mouse and rod; F8 starts | Click, reel, collect, repeat |
 | **Statue damage** (`damage`) | Saved spawn inside statue and gauntlet in hotbar slot 1 | Five M1s, configured moves, title-progress checks and bounded respawn attempts |
+| **Auto rejoin** (`rejoin`) | The game after reconnection | Detect disconnects and return to Ouwland; no fishing, attacks or gear changes |
+
+### Auto rejoin from the CLI
+
+Set the Roblox username in Setup first, then run `autofish rejoin`. For the configured **Grofheyse3729** account, the guard checks Roblox's presence about every 45 seconds and reads the visible client. A disconnect dialog or Ouwland menu starts recovery through the game's private-server Join flow. If the Roblox window is gone for 45 seconds, it can reopen the configured place link after the desktop has been idle for 90 seconds. A failed presence API call alone does not count as a disconnect. A visible, loaded world prevents a presence-only rejoin.
+
+This is a **standalone** CLI mode; the app allows only one controller at a time. Full farmer already has its own reconnect recovery. To switch from another running mode, use `autofish pause`, wait for it to stop, then `autofish rejoin`. The guard does not resume fishing or statue attacks after reconnecting. `autofish status`, `autofish watch`, and `autofish logs --activity --follow` show its state, attempts, successful rejoins, client launches, and retries. `autofish pause` retains those counters, `autofish continue` resumes, and `autofish stop` ends the guard. F8 pauses or resumes only with Roblox foreground; F9/F12 stop only with Roblox foreground. It never sends input to another foreground app.
 
 ### Statue damage
 

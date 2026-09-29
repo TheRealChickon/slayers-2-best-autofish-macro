@@ -47,6 +47,16 @@ class IsolatedState(unittest.TestCase):
         self.assertEqual(len(feed.filtered('Coral', 'Catches')), 1)
         self.assertEqual(len(feed.filtered('', 'Recovery')), 0)
 
+    def test_rejoin_events_appear_in_activity_and_recovery_log(self):
+        self.append('events-rejoin-session.jsonl', [
+            {'at': 11, 'event': 'rejoin_attempt', 'message': 'Recovering from disconnect'},
+            {'at': 12, 'event': 'rejoin_success', 'message': 'Roblox world is ready'}])
+        journal = item_journal.Journal(); journal.update(10)
+        self.assertEqual([row['kind'] for row in journal.activity], ['rejoin_attempt', 'rejoin_success'])
+        feed = live_feed.LiveFeed(); feed.update(10)
+        self.assertEqual(len(feed.filtered('', 'Recovery')), 2)
+        self.assertEqual(live_feed.event_tone(feed.rows[-1]), 'green')
+
     def test_feed_filters_and_bounded_history(self):
         self.append('events-test.jsonl', [{'at':11+i, 'event':'cast','cast':i} for i in range(4005)])
         self.append('recovery.jsonl', [{'at':5000,'event':'recovery_retry','reason':'Window changed'}])
@@ -180,10 +190,10 @@ class IsolatedState(unittest.TestCase):
     def test_run_page_launches_each_explicit_mode_without_changing_focus_itself(self):
         app=terminal_app.Terminal()
         with patch.object(app,'job',side_effect=lambda fn:fn()), patch.object(control_actions,'resume') as resume:
-            for index,mode in enumerate(('assist','spot','full','damage')):
+            for index,mode in enumerate(('assist','spot','full','damage','rejoin')):
                 app.selection=index;app.key('ENTER')
                 resume.assert_called_with(mode)
-            app.key('END');self.assertEqual(app.selection,6)
+            app.key('END');self.assertEqual(app.selection,7)
 
     def test_run_modes_and_stop_reason_are_visible_with_keyboard_scrolling(self):
         (self.root/'STOP').write_text('Stopped by F12 in Roblox')
@@ -197,7 +207,7 @@ class IsolatedState(unittest.TestCase):
             self.assertIn(text,normal)
         for text in ('reel', 'cast', 'collect', 'rejoin'):
             self.assertIn(text,normal)
-        for index,label in enumerate(('Minigame only','Fish here','Full farmer','Statue damage','Pause','Stop','Export log')):
+        for index,label in enumerate(('Minigame only','Fish here','Full farmer','Statue damage','Auto rejoin','Pause','Stop','Export log')):
             app.selection=index
             self.assertIn('› '+label,'\n'.join(app.render(65,22)))
 

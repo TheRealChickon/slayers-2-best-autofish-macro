@@ -40,6 +40,18 @@ def enable_color(force=False):
 def status_lines(data, colors=False):
     c = lambda text, tone='white': color(text, tone, colors)
     tone = state_tone(data['state'],data['running'] and not data['stop_requested'])
+    if data.get('mode') == 'rejoin':
+        guard = data.get('rejoin') or {}
+        return [c('AUTO REJOIN', 'gold') + '  /  ' + c(data['state'].upper(), tone),
+                '  ' + (data.get('reason') or guard.get('detail') or 'Waiting to start'), '',
+                f"  Account         {guard.get('account') or 'Not configured'}",
+                f"  Presence        {data['presence']}",
+                f"  Rejoins         {guard.get('rejoins', 0):,}",
+                f"  Attempts        {guard.get('attempts', 0):,}",
+                f"  Client launches {guard.get('launches', 0):,}",
+                f"  Retry in        {guard.get('retry_seconds', 0)}s" if guard.get('retry_seconds') else '',
+                c('  F8 pauses in Roblox. Pause, Continue and Stop work from this CLI.', 'gray'),
+                c('  Watches the connection only; no fishing, attacks or gear changes.', 'gray')]
     if data.get('mode') == 'damage':
         d = data.get('damage') or {}
         pace, finish, sample = pace_labels(d)
@@ -124,6 +136,7 @@ def parser(prog='autofish'):
     resume.add_argument('--until',help='Stop Full farmer at HH:MM local time today')
     sub.add_parser('assist',help='Start minigame only; you cast and collect manually')
     sub.add_parser('spot',help='Click, reel and collect; F8 starts/pauses/resumes, losing focus pauses automatically')
+    sub.add_parser('rejoin',help='Watch configured Roblox account and reconnect; no fishing or attacks')
     damage=sub.add_parser('damage',help='Measured statue damage with configurable keys and timing')
     damage.add_argument('--key',action='append',default=[],metavar='ROLE=KEY',
                         help='Bind shock_wave, followup, ultimate_prep or ultimate')
@@ -319,12 +332,13 @@ def execute(args, colors=False):
         response, code = dispatch(args.operation, args.request_id, args.limit)
         print(json.dumps(response, ensure_ascii=True), flush=True)
         return code
-    if command in ('pause', 'stop', 'continue', 'resume', 'assist', 'spot'):
+    if command in ('pause', 'stop', 'continue', 'resume', 'assist', 'spot', 'rejoin'):
         action = {'pause': actions.pause, 'stop': actions.stop,
                   'continue':lambda:actions.resume(getattr(args,'mode',None),getattr(args,'until',None)),
                   'resume':lambda:actions.resume(getattr(args,'mode',None),getattr(args,'until',None)),
                   'assist':lambda:actions.resume('assist'),
-                  'spot':lambda:actions.resume('spot')}[command]
+                  'spot':lambda:actions.resume('spot'),
+                  'rejoin':lambda:actions.resume('rejoin')}[command]
         print(color(action(), 'green' if command in ('continue', 'resume') else 'gold', colors))
         return 0
     if command == 'tui':
@@ -370,7 +384,7 @@ def execute(args, colors=False):
 
 def shell(colors):
     print('\n'.join(status_lines(snapshot(), colors)))
-    print(color('\nModes: assist, spot, damage, continue --mode full\nCommands: status, watch, items, logs, build, wiki, pause, continue, stop, plan --hours 8, export', 'gray', colors))
+    print(color('\nModes: assist, spot, damage, rejoin, continue --mode full\nCommands: status, watch, items, logs, build, wiki, pause, continue, stop, plan --hours 8, export', 'gray', colors))
     print('help shows options. exit closes this prompt and leaves the bot unchanged.\n')
     while True:
         try:
