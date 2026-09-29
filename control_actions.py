@@ -103,7 +103,7 @@ def seconds_until_local_clock(value):
 def resume(mode=None,until=None):
     global _starting
     mode = mode or load_config().get('mode','full')
-    if mode not in MODES:raise ValueError('Mode must be full, assist, spot, or damage')
+    if mode not in MODES:raise ValueError('Unknown controller mode')
     if mode == 'damage' and not load_config()['damage_title']:
         raise ValueError('Configure the exact in-game damage title first: autofish damage --title NAME --configure-only')
     if until and mode!='full':raise ValueError('--until is available for Full farmer only')
@@ -124,6 +124,7 @@ def resume(mode=None,until=None):
             if mode=='assist':return 'Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.'
             if mode=='spot':return 'Fish here is active. Equip your rod, position the mouse, then press F8.'
             if mode=='damage':return 'Statue damage is active. F8 pauses/resumes; Roblox focus controls attacks.'
+            if mode=='rejoin':return 'Auto rejoin is watching the configured account. Use status or logs --activity.'
             (RUN/'F8_PAUSE').unlink(missing_ok=True)
             focus_game()
             event('continue', 'Returned focus to Roblox.')
@@ -132,11 +133,14 @@ def resume(mode=None,until=None):
         try:previous_mode=json.loads((RUN/'supervisor.json').read_text()).get('mode')
         except (OSError,ValueError):previous_mode=None
         resume_damage_counters = mode=='damage' and previous_mode=='damage' and (RUN/'PAUSE').exists()
+        resume_rejoin_counters = mode=='rejoin' and previous_mode=='rejoin' and (RUN/'PAUSE').exists()
         save_config({'mode':mode})
         (RUN / 'PAUSE').unlink(missing_ok=True)
         (RUN / 'STOP').unlink(missing_ok=True)
         (RUN / 'F8_PAUSE').unlink(missing_ok=True)
-        args = ([sys.executable,str(ROOT/'damage_farmer.py'),'--respect-stop'] +
+        args = ([sys.executable,str(ROOT/'rejoin_only.py'),'--respect-stop'] +
+                (['--resume-counters'] if resume_rejoin_counters else []) if mode=='rejoin' else
+                [sys.executable,str(ROOT/'damage_farmer.py'),'--respect-stop'] +
                 (['--resume-counters'] if resume_damage_counters else []) if mode=='damage' else
                 [sys.executable,str(ROOT/'minigame_assist.py'),'--respect-stop','--mode',mode] if mode in ('assist','spot') else
                 [sys.executable, str(ROOT / 'recovery.py'), '--seconds', str(seconds), '--rejoin',
@@ -149,7 +153,8 @@ def resume(mode=None,until=None):
         except Exception:
             (RUN / 'STOP').write_text('Continue failed; input stopped')
             raise
-        message = ('Statue damage started. Bring Roblox forward; F8 pauses/resumes the configured rotation.' if mode=='damage' else
+        message = ('Auto rejoin started. Watching the configured Roblox account; no fishing or attacks.' if mode=='rejoin' else
+                   'Statue damage started. Bring Roblox forward; F8 pauses/resumes the configured rotation.' if mode=='damage' else
                    'Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.' if mode=='assist' else
                    'Fish here is active. Equip your rod, position the mouse, then press F8; losing focus pauses input.' if mode=='spot' else
                    ('Continuing the saved run until '+until+' local time. Rejoining and equipping the rod...' if until else

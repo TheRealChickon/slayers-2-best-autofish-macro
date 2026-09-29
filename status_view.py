@@ -19,6 +19,7 @@ def snapshot(journal=None):
     totals, supervisor, worker, bait, presence, bait_observation = [read(name + '.json') for name in
         ('totals', 'supervisor', 'status', 'bait', 'presence', 'bait-observation')]
     damage = read('damage-status.json')
+    rejoin = read('rejoin-status.json')
     journal.update(totals.get('started'))
     live = actions.alive()
     starting = actions.starting() and not live
@@ -43,6 +44,9 @@ def snapshot(journal=None):
         if f8_paused or stage == 'paused_manual': state = 'Paused — F8 to resume'
         elif stage == 'paused_focus': state = 'Waiting for Roblox'
         elif stage == 'attacking': state = 'Attacking statue'
+        elif stage == 'watching': state = 'Watching connection'
+        elif stage == 'rejoining': state = 'Rejoining Roblox'
+        elif stage == 'waiting_game': state = 'Waiting for Roblox'
         elif stage == 'blocked_scene': state = 'Close Roblox menu'
         elif stage == 'attention': state = 'Inspect statue'
         elif stage == 'fishing': state = fishing_states.get(worker.get('stage'), 'Fishing')
@@ -87,6 +91,7 @@ def snapshot(journal=None):
         'spot_paused':worker.get('spot_paused',False),
         'manual_paused':f8_paused or worker.get('manual_paused',False),
         'damage': damage if (live and supervisor.get('mode')=='damage') or load_config()['mode']=='damage' else {},
+        'rejoin': rejoin if (live and supervisor.get('mode')=='rejoin') or load_config()['mode']=='rejoin' else {},
     }
 
 

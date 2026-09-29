@@ -47,19 +47,20 @@ def clip(line, width):
 class Terminal:
     pages = ('Run', 'Items', 'Live log', 'Setup', 'Build')
     categories = ('All', 'Catches', 'Recovery', 'Warnings')
-    run_modes = ('assist', 'spot', 'full', 'damage')
+    run_modes = ('assist', 'spot', 'full', 'damage', 'rejoin')
     mode_details = {
         'assist': ('green', 'you cast / auto reel'),
         'spot': ('cyan', 'cast / reel / collect'),
         'full': ('gold', 'spawn / rejoin'),
         'damage': ('ore', '5 M1 / two moves / ready ultimate'),
+        'rejoin': ('green', 'connection guard only'),
     }
     settings_keys = ('Username', 'Mode', 'Rod slot', 'Auto rod', 'Camera', 'Heading',
                      'Fishing titles', 'Cast point', 'Capture pointer',
                      'Position correction', 'Save reference', 'Disable reference', 'Motion')
     setting_help = {
         'Username':'Roblox account for presence and reconnect checks.',
-        'Mode':'Full rejoins; Fish here stays put; Minigame only reels; Damage hits the statue.',
+        'Mode':'Full fishes and rejoins; Rejoin only restores the connection; other modes work as labeled.',
         'Rod slot':'Hotbar number of your fishing rod (1–9).',
         'Auto rod':'Full farmer checks the hotbar and equips an unselected rod.',
         'Camera':'Keep your view, or zoom fully in. At rails, the avatar may block first person.',
@@ -285,6 +286,24 @@ class Terminal:
     def body(self, available):
         d = self.data
         if self.page == 0:
+            if d.get('mode') == 'rejoin':
+                guard = d.get('rejoin') or {}
+                rows = [tint('CONNECTION', 'dim')+'  '+tint(d['state'], 'gold'),
+                        tint('ACCOUNT', 'dim')+f"  {guard.get('account') or 'Not configured'}",
+                        tint('PRESENCE', 'dim')+f"  {d['presence']}",
+                        tint('LAST', 'dim')+f"  {guard.get('detail') or 'Waiting to start'}",
+                        tint('REJOINS', 'dim')+f"  {guard.get('rejoins', 0):,}"+
+                        tint('  ATTEMPTS', 'dim')+f"  {guard.get('attempts', 0):,}"+
+                        tint('  LAUNCHES', 'dim')+f"  {guard.get('launches', 0):,}"]
+                if guard.get('retry_seconds'):
+                    rows.append(tint('RETRY', 'dim')+f"  {guard['retry_seconds']}s")
+                rows += [tint('NO CASTS · NO ATTACKS · NO GEAR CHANGES', 'dim'), '']
+                rows += [tint('› ' if self.selection == i else '  ', 'selected')+
+                         tint(MODES[mode]+'  /  '+self.mode_details[mode][1], 'gold' if self.selection==i else 'dim')
+                         for i,mode in enumerate(self.run_modes)]
+                rows += [tint('› ' if self.selection == i else '  ', 'selected')+label
+                         for i,label in enumerate(('Pause','Stop','Export log'),start=len(self.run_modes))]
+                return rows[:available]
             if d.get('mode') == 'damage':
                 damage = d.get('damage', {})
                 pace, finish, sample = pace_labels(damage)
