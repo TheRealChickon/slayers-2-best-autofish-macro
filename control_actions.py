@@ -31,7 +31,7 @@ def guard():
         kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
         kernel.ReleaseMutex.argtypes = [ctypes.c_void_p]
         kernel.CloseHandle.argtypes = [ctypes.c_void_p]
-        name = 'Local\\FishingControls-' + hashlib.sha1(str(RUN.resolve()).lower().encode()).hexdigest()
+        name = 'Local\\Slayers2MacroControls'
         handle = kernel.CreateMutexW(None, False, name)
         if not handle:
             raise OSError('Could not lock fishing controls')
@@ -104,11 +104,10 @@ def resume(mode=None,until=None):
     global _starting
     mode = mode or load_config().get('mode','full')
     if mode not in MODES:raise ValueError('Unknown controller mode')
-    if mode == 'damage' and not load_config()['damage_title']:
-        raise ValueError('Configure the exact in-game damage title first: autofish damage --title NAME --configure-only')
     if until and mode!='full':raise ValueError('--until is available for Full farmer only')
     seconds=seconds_until_local_clock(until) if until else 0
     with guard():
+        refuse_peer_controller()
         if alive('calibration-pid.json'):
             return 'Reference setup is running. Stop cancels it.'
         live, pending = alive(), starting()
@@ -123,7 +122,6 @@ def resume(mode=None,until=None):
             if current_mode!=mode:return 'Pause the current mode before switching modes.'
             if mode=='assist':return 'Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.'
             if mode=='spot':return 'Fish here is active. Equip your rod, position the mouse, then press F8.'
-            if mode=='damage':return 'Statue damage is active. F8 pauses/resumes; Roblox focus controls attacks.'
             if mode=='rejoin':return 'Auto rejoin is watching the configured account. Use status or logs --activity.'
             (RUN/'F8_PAUSE').unlink(missing_ok=True)
             focus_game()
@@ -132,7 +130,6 @@ def resume(mode=None,until=None):
         # Only an explicit Continue command may release a manual stop.
         try:previous_mode=json.loads((RUN/'supervisor.json').read_text()).get('mode')
         except (OSError,ValueError):previous_mode=None
-        resume_damage_counters = mode=='damage' and previous_mode=='damage' and (RUN/'PAUSE').exists()
         resume_rejoin_counters = mode=='rejoin' and previous_mode=='rejoin' and (RUN/'PAUSE').exists()
         save_config({'mode':mode})
         (RUN / 'PAUSE').unlink(missing_ok=True)
@@ -140,8 +137,6 @@ def resume(mode=None,until=None):
         (RUN / 'F8_PAUSE').unlink(missing_ok=True)
         args = ([sys.executable,str(ROOT/'rejoin_only.py'),'--respect-stop'] +
                 (['--resume-counters'] if resume_rejoin_counters else []) if mode=='rejoin' else
-                [sys.executable,str(ROOT/'damage_farmer.py'),'--respect-stop'] +
-                (['--resume-counters'] if resume_damage_counters else []) if mode=='damage' else
                 [sys.executable,str(ROOT/'minigame_assist.py'),'--respect-stop','--mode',mode] if mode in ('assist','spot') else
                 [sys.executable, str(ROOT / 'recovery.py'), '--seconds', str(seconds), '--rejoin',
                  '--focus', '--resume-counters', '--respect-stop'])
@@ -154,10 +149,23 @@ def resume(mode=None,until=None):
             (RUN / 'STOP').write_text('Continue failed; input stopped')
             raise
         message = ('Auto rejoin started. Watching the configured Roblox account; no fishing or attacks.' if mode=='rejoin' else
-                   'Statue damage started. Bring Roblox forward; F8 pauses/resumes the configured rotation.' if mode=='damage' else
                    'Minigame only is active. F8 pauses/resumes; bring Roblox forward and cast manually.' if mode=='assist' else
                    'Fish here is active. Equip your rod, position the mouse, then press F8; losing focus pauses input.' if mode=='spot' else
                    ('Continuing the saved run until '+until+' local time. Rejoining and equipping the rod...' if until else
                     'Continuing the saved run. Rejoining and equipping the rod...'))
         event('continue',message)
         return message
+
+
+def refuse_peer_controller():
+    peer = load_config().get('peer_data_dir')
+    if not peer:
+        return
+    from pathlib import Path
+    for name in ('supervisor-pid.json', 'pid.json', 'control-start.json', 'calibration-pid.json'):
+        try:
+            record = json.loads((Path(peer)/name).read_text())
+            if abs(psutil.Process(record['pid']).create_time() - record['created']) < 1:
+                raise RuntimeError('The other Slayers 2 macro is running or stopping. Stop it before switching projects.')
+        except (OSError, ValueError, KeyError, psutil.Error):
+            pass

@@ -1,6 +1,8 @@
 # Fishing
 
-A Windows assistant for Project Slayers 2 fishing and stationary statue damage practice. It includes a game-inspired inventory window, a keyboard terminal app, item history, live events, bait estimates, and fishing reconnect recovery.
+Sanemi is a separate project. This CLI keeps fishing, automatic fishing titles, item logs and fishing recovery.
+
+A Windows assistant for Project Slayers 2 fishing. It includes a game-inspired inventory window, a keyboard terminal app, item history, live events, bait estimates, and fishing reconnect recovery.
 
 ## Launch it
 
@@ -12,7 +14,7 @@ Setup installs the **`autofish`** command for your Windows account. Open a new t
 autofish start
 ```
 
-Choose the game, then **Minigame only**, **Fish here**, **Full farmer**, or **Statue damage**, with arrows and Enter. The dashboard opens after starting. Only Project Slayers 2 / Ouwland is supported currently; future supported games can appear in the same picker.
+Choose the game, then **Minigame only**, **Fish here**, or **Full farmer**, with arrows and Enter. The dashboard opens after starting. Only Project Slayers 2 / Ouwland is supported currently; future supported games can appear in the same picker.
 
 The CLI opens with a full-terminal rod cast over water and reels the float back across the scene when you press **Q**. **Setup → Motion → Reduced** skips both animations.
 Ore pickups have their own short mineral-glint animation in the dashboard; it does not interrupt fishing or alter the item log.
@@ -27,14 +29,11 @@ autofish status
 autofish pause
 autofish continue
 autofish continue --mode full --until 22:00  # Stop at 22:00 local time today
-autofish damage        # Measured statue damage with configured rotation
 autofish rejoin        # Reconnect the configured account without farming
 autofish stop
 autofish logs --activity --follow
 autofish wiki             # Open your local item wiki, if captured
 autofish wiki --site      # Open your configured private ChatGPT Site
-autofish build            # Best known owned M1 gear and measured mastery anchor
-autofish build --save-mastery 200
 ```
 
 The command points to this application folder and preserves its settings and saved run. Keep the folder in place; if you move it, rerun Install-CLI.cmd from the new location. To remove only the global command, run `Install-CLI.cmd -Uninstall`; the app and fishing data remain. `Setup.ps1 -NoCLI` skips command installation.
@@ -115,7 +114,6 @@ If you move the installation folder, run `Setup.cmd` again to refresh the shortc
 | **Full farmer** (`full`) | Saved spawn and initial setup | Rod, casts, minigame, collection, inventory checks, local repairs and reconnects |
 | **Minigame only** (`assist`) | Spot, rod, casts and pickups | Minigame mouse hold/release |
 | **Fish here** (`spot`) | Spot, camera, mouse and rod; F8 starts | Click, reel, collect, repeat |
-| **Statue damage** (`damage`) | Saved spawn inside statue and gauntlet in hotbar slot 1 | Five M1s, configured moves, title-progress checks and bounded respawn attempts |
 | **Auto rejoin** (`rejoin`) | The game after reconnection | Detect disconnects and return to Ouwland; no fishing, attacks or gear changes |
 
 ### Auto rejoin from the CLI
@@ -123,36 +121,6 @@ If you move the installation folder, run `Setup.cmd` again to refresh the shortc
 Set the Roblox username in Setup first, then run `autofish rejoin`. For the configured **Grofheyse3729** account, the guard checks Roblox's presence about every 45 seconds and reads the visible client. A disconnect dialog or Ouwland menu starts recovery through the game's private-server Join flow. If the Roblox window is gone for 45 seconds, it can reopen the configured place link after the desktop has been idle for 90 seconds. A failed presence API call alone does not count as a disconnect. A visible, loaded world prevents a presence-only rejoin.
 
 This is a **standalone** CLI mode; the app allows only one controller at a time. Full farmer already has its own reconnect recovery. To switch from another running mode, use `autofish pause`, wait for it to stop, then `autofish rejoin`. The guard does not resume fishing or statue attacks after reconnecting. `autofish status`, `autofish watch`, and `autofish logs --activity --follow` show its state, attempts, successful rejoins, client launches, and retries. `autofish pause` retains those counters, `autofish continue` resumes, and `autofish stop` ends the guard. F8 pauses or resumes only with Roblox foreground; F9/F12 stop only with Roblox foreground. It never sends input to another foreground app.
-
-### Statue damage
-
-This mode is for the stationary statue setup. It has passed offline tests but needs a fresh live check before unattended use. Start it only after stopping another mode:
-
-```powershell
-autofish damage
-```
-
-The default rotation is five M1 clicks, then Shock Wave (`C`) and follow-up (`Z`) only when their icons are ready. When `B` is visibly ready and its configured cooldown has elapsed, the worker taps `X` for 0.025 seconds, releases it, waits 0.5 seconds for the skill to transform, then holds `B` for 2 seconds. It skips cooling skills and repeats the five-click string. `X` is never used alone; `V`, `N`, `K`, and `L` are unused by this rotation.
-
-Damage status and the terminal dashboard show DPH, remaining damage, sample age, and estimated local finish time. DPH uses elapsed time between verified title readings over roughly the last ten minutes, including animation and menu time. A new worker needs two readings before showing a rate. Stale readings and paused runs suppress the finish estimate. `--timing m1_interval=0.30` requests faster discrete clicks while preserving the five-hit check; reduce timing only if registered hits and measured damage remain healthy.
-
-Use `autofish damage --measure-skills` to briefly interrupt normal farming and measure isolated damage for a complete five-M1 string and each enabled skill. The worker waits for prior damage to settle, checks readiness, uses one attack, and compares stable title totals before and after. X and B are measured together because X prepares the ultimate. The CLI and dashboard show these saved per-use samples and their times; they are not live attribution or guaranteed damage for every cast. Remeasure after changing equipment, buffs, targets, or bindings. Sampling never resets the character, rejects changing baselines or zero-damage casts, and resumes normal farming after a successful measurement. DPH recollects normal-farming samples afterward, excluding calibration time. Stop, F8, and focus checks remain active.
-
-```powershell
-autofish damage --show-config
-autofish damage --key shock_wave=Q --key followup=E --key ultimate_prep=R --key ultimate=T --timing post_m1_wait=0.8 --timing ultimate_hold_seconds=2.5 --title Annihilator --target 10000000 --configure-only
-autofish damage
-```
-
-Use `--moves shock_wave,followup,ultimate` to choose moves (`--moves none` runs M1 only); X and B are always one coupled ultimate move. Use `--name shock_wave=NAME`, `--name followup=NAME`, and `--name ultimate=NAME` to change labels. Other timing fields shown by `--show-config` can be set with `--timing FIELD=SECONDS`. `--configure-only` saves settings without starting input. The title category defaults to Combat and can be changed with `--category`. The exact title detail must display either a readable `current / target` pair or a matching total-damage requirement and remaining `left` count; an unreadable or changed detail pauses attacks for inspection.
-
-At startup, the worker reads the configured title without separate attack trials. It reopens the title every three minutes by default to update verified damage gain, pace and remaining time. Annihilator currently requires 10,000,000 total damage. Damage estimates use the visible title counter, not assumed damage per click.
-
-The worker waits for Roblox to be foreground with your pointer inside it. It checks the action bar before touching slot 1 and watches combo growth. A five-hit combo gain is healthy and never triggers a reset. If two consecutive five-M1 strings have stable but insufficient combo reads, it checks the in-game title; any title increase cancels the reset. Only a still-unchanged title allows a bounded Respawn attempt after verifying Roblox's confirmation dialog. Unreadable combo or title evidence withholds reset and, if needed, pauses for inspection. A menu, missing hotbar, lost focus, F8 pause, Stop, or an uncertain reset blocks attacks. F9/F12 stop while Roblox is foreground. It does not rejoin servers, move your character, or switch to fishing after the title completes.
-
-F8 and CLI Pause/Continue keep the damage counters. CLI Stop ends that sample; the next start begins a fresh sample. The worker does not take over Roblox focus when another app is in front.
-
-`autofish status` and the terminal Run page show combo, M1 counts, measured first/fifth hits, title progress, resets and an ETA derived from verified title progress. Each five-click health result is recorded in the damage event log. A five-hit gain clears suspicion; an interrupted string, counter restart, or unreadable result cannot confirm a stall. Two deficient strings, or two entirely absent combo readings, trigger a title check, and recovery requires that title progress also failed to increase.
 
 ### Fish here
 
@@ -220,7 +188,7 @@ Launch **Fishing CLI**, or run:
 | Q or Ctrl+C | Close the view; fishing stays as it was |
 | Enter / Ctrl+G while editing | Save / cancel |
 
-The **Run** tab has direct **Minigame only**, **Fish here**, **Full farmer**, and **Statue damage** choices: select with ↑/↓ and press Enter to start. Pause the current mode before switching to another. **C** continues the saved mode. The command equivalents are `fishing.cmd assist`, `fishing.cmd spot`, `fishing.cmd continue --mode full`, and `fishing.cmd damage`.
+The **Run** tab has direct **Minigame only**, **Fish here**, **Full farmer** choices: select with ↑/↓ and press Enter to start. Pause the current mode before switching to another. **C** continues the saved mode. The command equivalents are `fishing.cmd assist`, `fishing.cmd spot`, `fishing.cmd continue --mode full`.
 
 Use Ctrl+G to cancel an edit; Escape remains a global stop key in Full farmer. In Setup, **Motion** toggles animations. Use a terminal at least 65 columns × 22 rows; 100 × 32 or larger is more comfortable.
 
@@ -230,7 +198,6 @@ The field-terminal view has Run, Catches, Radio (live log), Rig (setup), and Dam
 
 `autofish wiki` builds and opens a local, searchable field ledger from saved inventory and archive captures. `autofish wiki --no-open` only rebuilds the files. The resulting `site/index.html` has Field (damage build and current character), Satchel (owned items), Archive (unowned reference items), and Bosses (when a reviewed `boss-analysis.json` is present beside the captures). The Field page includes the captured HUD, measured M1 build and recommended owned Stats pieces. `site/context.md` is the plain-text version to attach to an AI conversation; `site/items.json` provides the same snapshot as structured data. Open an item detail image to check its captured in-game text. If this account has a private hosted Site URL saved locally, `autofish wiki --site` opens it; rebuilding the local wiki does not automatically update that hosted snapshot.
 
-`autofish build` shows a local damage profile beside the captured owned item cards. The profile records a measured M1 anchor, the five best known Stats-slot pieces, a separate weapon, and live swap tests. `autofish build --save-mastery N` stores your current Gauntlet mastery in the ignored run-data directory; `--mastery N` previews without saving, and `--json` exports the report for another tool. The fifth terminal page shows the same build; press **M** there to update mastery. The 0.025 base-M1-per-mastery estimate is inferred from four measured levels with unchanged gear, and predictions are suppressed if a recommended piece is missing from the captured inventory. Gear swaps or class effects need a fresh in-game measurement.
 
 The wiki keeps live inventory stats and archive base stats separate, especially when an owned item has a `+N` refinement. Owned entries take priority, so an item also present in the archive does not appear twice in the main listings. Captures and generated pages are local account data and stay out of Git. The wiki is a snapshot, not a live inventory sync: rebuild it after changing equipment, refining items or collecting new gear. Item names and quantities come from UI OCR and may need checking against their attached screenshots.
 

@@ -65,7 +65,7 @@ class SkillReady:
         self.reference = reference.copy() if reference is not None else None
         self.box = box
 
-    def observe(self, frame):
+    def cooling(self, frame):
         # This game keeps the white artwork during cooldown and draws a red
         # border around it. Artwork correlation alone therefore accepts a
         # cooling skill. Include the outside border in the readiness check.
@@ -75,7 +75,12 @@ class SkillReady:
             b, g, r = cv2.split(bordered.astype('float32'))
             red = (r > 90) & (r > g*1.5) & (r > b*1.5)
             if red.mean() > .025:
-                return False
+                return True
+        return False
+
+    def observe(self, frame):
+        if self.cooling(frame):
+            return False
         icon = c_icon(frame, self.box)
         if icon.shape != (45, 45):
             return False

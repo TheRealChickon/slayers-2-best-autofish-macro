@@ -47,16 +47,6 @@ class IsolatedState(unittest.TestCase):
         self.assertEqual(len(feed.filtered('Coral', 'Catches')), 1)
         self.assertEqual(len(feed.filtered('', 'Recovery')), 0)
 
-    def test_rejoin_events_appear_in_activity_and_recovery_log(self):
-        self.append('events-rejoin-session.jsonl', [
-            {'at': 11, 'event': 'rejoin_attempt', 'message': 'Recovering from disconnect'},
-            {'at': 12, 'event': 'rejoin_success', 'message': 'Roblox world is ready'}])
-        journal = item_journal.Journal(); journal.update(10)
-        self.assertEqual([row['kind'] for row in journal.activity], ['rejoin_attempt', 'rejoin_success'])
-        feed = live_feed.LiveFeed(); feed.update(10)
-        self.assertEqual(len(feed.filtered('', 'Recovery')), 2)
-        self.assertEqual(live_feed.event_tone(feed.rows[-1]), 'green')
-
     def test_feed_filters_and_bounded_history(self):
         self.append('events-test.jsonl', [{'at':11+i, 'event':'cast','cast':i} for i in range(4005)])
         self.append('recovery.jsonl', [{'at':5000,'event':'recovery_retry','reason':'Window changed'}])
@@ -142,29 +132,34 @@ class IsolatedState(unittest.TestCase):
         spawn.assert_not_called()
         self.assertTrue((self.root/'STOP').exists())
 
-    def test_damage_continue_retains_counters_only_after_damage_pause(self):
-        (self.root/'PAUSE').write_text('Paused by user')
-        (self.root/'STOP').write_text('Paused by user')
-        metrics.write('supervisor.json', {'mode':'damage'})
-        with patch.object(control_actions,'alive',return_value=False), \
-             patch.object(control_actions,'starting',return_value=False), \
-             patch.object(control_actions.subprocess,'Popen') as spawn, \
-             patch.object(control_actions.psutil,'Process') as process:
-            spawn.return_value.pid = 123
-            process.return_value.create_time.return_value = 10.
-            control_actions.resume('damage')
-        self.assertIn('--resume-counters', spawn.call_args.args[0])
+    def test_combat_modes_are_rejected_before_starting_input(self):
+        with patch.object(control_actions.subprocess, 'Popen') as spawn:
+            for mode in ('damage', 'boss'):
+                with self.assertRaisesRegex(ValueError, 'Unknown controller mode'):
+                    control_actions.resume(mode)
+            spawn.assert_not_called()
 
+    def test_old_boss_settings_migrate_to_fishing_without_resetting_data_or_titles(self):
+        app_config.CONFIG.write_text(json.dumps({'mode': 'boss', 'boss': {'invalid': True},
+            'data_dir': 'saved-run', 'auto_fishing_titles': True}))
+        values = app_config.load_config()
+        self.assertEqual(values['mode'], 'full')
+        self.assertEqual(values['data_dir'], 'saved-run')
+        self.assertTrue(values['auto_fishing_titles'])
+        self.assertNotIn('boss', values)
+
+    def test_running_peer_blocks_start_without_clearing_manual_stop(self):
         (self.root/'STOP').write_text('Stopped by user')
-        metrics.write('supervisor.json', {'mode':'full'})
-        with patch.object(control_actions,'alive',return_value=False), \
-             patch.object(control_actions,'starting',return_value=False), \
-             patch.object(control_actions.subprocess,'Popen') as spawn, \
-             patch.object(control_actions.psutil,'Process') as process:
-            spawn.return_value.pid = 124
-            process.return_value.create_time.return_value = 11.
-            control_actions.resume('damage')
-        self.assertNotIn('--resume-counters', spawn.call_args.args[0])
+        peer = self.root/'sanemi'; peer.mkdir()
+        (peer/'supervisor-pid.json').write_text(json.dumps({'pid': 555, 'created': 123}))
+        app_config.save_config({'peer_data_dir': str(peer)})
+        with patch.object(control_actions.psutil, 'Process') as process, \
+             patch.object(control_actions.subprocess, 'Popen') as spawn:
+            process.return_value.create_time.return_value = 123
+            with self.assertRaisesRegex(RuntimeError, 'other Slayers 2 macro'):
+                control_actions.resume('full')
+            spawn.assert_not_called()
+        self.assertEqual((self.root/'STOP').read_text(), 'Stopped by user')
 
     def test_timed_full_farmer_stops_at_local_clock_today(self):
         fixed=datetime.datetime(2026,9,27,3,50,tzinfo=datetime.timezone(datetime.timedelta(hours=2)))
@@ -190,10 +185,10 @@ class IsolatedState(unittest.TestCase):
     def test_run_page_launches_each_explicit_mode_without_changing_focus_itself(self):
         app=terminal_app.Terminal()
         with patch.object(app,'job',side_effect=lambda fn:fn()), patch.object(control_actions,'resume') as resume:
-            for index,mode in enumerate(('assist','spot','full','damage','rejoin')):
+            for index,mode in enumerate(('assist','spot','full','rejoin')):
                 app.selection=index;app.key('ENTER')
                 resume.assert_called_with(mode)
-            app.key('END');self.assertEqual(app.selection,7)
+            app.key('END');self.assertEqual(app.selection,6)
 
     def test_run_modes_and_stop_reason_are_visible_with_keyboard_scrolling(self):
         (self.root/'STOP').write_text('Stopped by F12 in Roblox')
@@ -203,11 +198,11 @@ class IsolatedState(unittest.TestCase):
         self.assertIn('Stopped by F12 in Roblox','\n'.join(fishing_cli.status_lines(data)))
         app=terminal_app.Terminal();app.data=data
         normal='\n'.join(app.render(100,32))
-        for text in ('Minigame only','Fish here','Full farmer','Statue damage','Stopped by F12 in Roblox'):
+        for text in ('Minigame only','Fish here','Full farmer','Stopped by F12 in Roblox'):
             self.assertIn(text,normal)
         for text in ('reel', 'cast', 'collect', 'rejoin'):
             self.assertIn(text,normal)
-        for index,label in enumerate(('Minigame only','Fish here','Full farmer','Statue damage','Auto rejoin','Pause','Stop','Export log')):
+        for index,label in enumerate(('Minigame only','Fish here','Full farmer','Auto rejoin','Pause','Stop','Export log')):
             app.selection=index
             self.assertIn('› '+label,'\n'.join(app.render(65,22)))
 

@@ -66,7 +66,7 @@ def wait_for_scene(inp, screen, sct, ocr, predicate, seconds=2.5):
     return False
 
 
-def reset_character(inp, screen, sct, ocr, event):
+def reset_character(inp, screen, sct, ocr, event, *, deliberate=False):
     """Use Roblox's visible reset menu; never blindly confirm a dialog."""
     inp.guard_press(True)
     inp.release()
@@ -84,7 +84,9 @@ def reset_character(inp, screen, sct, ocr, event):
         event('reset_attention', message='Reset confirmation could not be verified; attacks paused.')
         return False
     press(inp, 'enter')
-    event('damage_reset', message='Combo stalled; reset character to saved spawn.')
+    event('boss_tactical_reset' if deliberate else 'damage_reset',
+          message='Deliberate combo reset to saved spawn.' if deliberate else
+          'Combo stalled; reset character to saved spawn.')
     return True
 
 

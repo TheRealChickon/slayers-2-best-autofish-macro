@@ -253,7 +253,7 @@ class Recovery:
                         self.backstep_after_join(join_attempts>0)
                         self.equip_rod();self.capture('equipped');self.event('equipped_rod')
                     else:
-                        self.event('game_ready',mode='rejoin')
+                        self.capture('world-ready');self.event('world_ready')
                     self.restarts=0;return
             elif kind=='private_join' and pacer.ready(kind,now):
                 if target is None:
