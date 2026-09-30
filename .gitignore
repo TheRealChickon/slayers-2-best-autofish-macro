@@ -1,4 +1,5 @@
 /.venv/
+/.runtime/
 /config.local.json
 /runtime.local.json
 /data/

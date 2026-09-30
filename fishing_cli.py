@@ -12,7 +12,6 @@ from status_view import snapshot, duration, estimate
 from live_feed import event_tone, state_tone
 import control_actions as actions
 from app_config import MODES
-from damage_view import pace_labels, skill_lines
 from bait_warning import warning as bait_warning
 
 COLORS = {'gold': 33, 'green': 32, 'red': 31, 'cyan': 36, 'gray': 90, 'white': 97, 'text': 97}
@@ -52,29 +51,6 @@ def status_lines(data, colors=False):
                 f"  Retry in        {guard.get('retry_seconds', 0)}s" if guard.get('retry_seconds') else '',
                 c('  F8 pauses in Roblox. Pause, Continue and Stop work from this CLI.', 'gray'),
                 c('  Watches the connection only; no fishing, attacks or gear changes.', 'gray')]
-    if data.get('mode') == 'damage':
-        d = data.get('damage') or {}
-        pace, finish, sample = pace_labels(d)
-        rotation = d.get('rotation') or {}
-        return [c('STATUE DAMAGE', 'gold')+'  /  '+c(data['state'].upper(), tone),
-                '  '+(data.get('reason') or d.get('wait_reason') or ''), '',
-                f"  Combo           {d.get('combo') or '-'}",
-                f"  Observed hits   {d.get('observed_hits', 0):,}",
-                f"  M1 clicks       {d.get('m1_clicks', 0):,}",
-                f"  Move uses       {', '.join(f'{name}: {value}' for name,value in (d.get('move_uses') or {}).items()) or 'None yet'}",
-                f"  Reset attempts  {d.get('resets', 0):,}",
-                f"  Active time     {duration(d.get('active_seconds', 0))}",
-                f"  Title progress  {d.get('title_progress', 0):,} / {d.get('title_target', 0):,}",
-                f"  Verified gain   {d.get('estimated_damage', 0):,}",
-                f"  DPH             {pace}",
-                f"  Remaining       {d.get('remaining_damage', 0):,} damage",
-                f"  Est. finish     {finish}",
-                f"  Title checked   {sample}",
-                f"  Rotation        5 M1 ({rotation.get('m1_interval', .42):g}s) > ready C/Z > X tap > {rotation.get('ultimate_prep_wait_seconds', .5):g}s wait > B",
-                f"  Cycle pause     {rotation.get('combo_gap', 1.65):g}s",
-                *['  '+line for line in skill_lines(d)],
-                c('  DPH uses elapsed time between verified title readings; ETA assumes this pace continues.', 'gray'),
-                c('  F8 pauses/resumes in Roblox. Losing focus pauses automatically.', 'gray')]
     remain = data['bait_remaining_estimate']
     hours = data['bait_hours_remaining_estimate']
     recent=data.get('recent')
@@ -132,28 +108,11 @@ def parser(prog='autofish'):
     plan.add_argument('--hours', type=float, required=True)
     sub.add_parser('pause', help='Release game input and retain counters')
     resume=sub.add_parser('continue', aliases=['resume'], help='Explicitly start the selected mode')
-    resume.add_argument('--mode',choices=tuple(MODES),help='Full farmer, minigame only, fish here, or statue damage')
+    resume.add_argument('--mode',choices=tuple(MODES),help='Full farmer, minigame only, fish here, ')
     resume.add_argument('--until',help='Stop Full farmer at HH:MM local time today')
     sub.add_parser('assist',help='Start minigame only; you cast and collect manually')
     sub.add_parser('spot',help='Click, reel and collect; F8 starts/pauses/resumes, losing focus pauses automatically')
     sub.add_parser('rejoin',help='Watch configured Roblox account and reconnect; no fishing or attacks')
-    damage=sub.add_parser('damage',help='Measured statue damage with configurable keys and timing')
-    damage.add_argument('--key',action='append',default=[],metavar='ROLE=KEY',
-                        help='Bind shock_wave, followup, ultimate_prep or ultimate')
-    damage.add_argument('--name',action='append',default=[],metavar='ROLE=NAME',
-                        help='Label shock_wave, followup or ultimate')
-    damage.add_argument('--timing',action='append',default=[],metavar='FIELD=SECONDS',
-                        help='Set a rotation timing; see README')
-    damage.add_argument('--moves',metavar='ROLES',
-                        help='Comma-separated moves: shock_wave,followup,ultimate; use none for M1 only')
-    damage.add_argument('--title',help='Exact in-game title name to measure')
-    damage.add_argument('--category',help='Title menu category (default Combat)')
-    damage.add_argument('--target',type=int,help='Damage title goal (default 10,000,000)')
-    damage.add_argument('--check-seconds',type=int,help='Title progress recheck interval')
-    damage.add_argument('--configure-only',action='store_true',help='Save configuration without starting game input')
-    damage.add_argument('--show-config',action='store_true',help='Print damage settings without starting')
-    damage.add_argument('--measure-skills',action='store_true',
-                        help='Sample isolated five-M1, C, Z and X+B damage, then resume farming')
     reference=sub.add_parser('reference',help='Save a local fishing view while paused')
     reference.add_argument('operation',choices=('status','save','disable'),nargs='?',default='status')
     reference.add_argument('--position',action='store_true',help='Calibrate small position corrections as well as camera movement')
@@ -164,15 +123,10 @@ def parser(prog='autofish'):
     wiki=sub.add_parser('wiki', help='Build and open the local item wiki from saved captures')
     wiki.add_argument('--no-open', action='store_true', help='Build files without opening the browser')
     wiki.add_argument('--site', action='store_true', help='Open your configured private ChatGPT Site')
-    build=sub.add_parser('build', aliases=['gear'], help='Show your saved damage loadout and mastery estimate')
-    mastery=build.add_mutually_exclusive_group()
-    mastery.add_argument('--mastery', type=int, help='Preview this mastery without saving it')
-    mastery.add_argument('--save-mastery', type=int, metavar='LEVEL', help='Save your current Gauntlet mastery')
-    build.add_argument('--json', action='store_true', help='Machine-readable report')
     webhook=sub.add_parser('webhook', help='Set or inspect the hourly Discord webhook')
     webhook.add_argument('operation', choices=('status','set','verify','remove'), nargs='?', default='status')
     tui=sub.add_parser('tui', help='Keyboard interface with live logs and settings')
-    tui.add_argument('--page', choices=('run','items','log','setup','build'), default='run')
+    tui.add_argument('--page', choices=('run','items','log','setup'), default='run')
     sub.add_parser('shell', help='Interactive command prompt; does not start fishing')
     from control_api import COMMANDS
     api = sub.add_parser('api', help='Versioned JSON interface for local integrations')
@@ -221,51 +175,6 @@ def stream_logs(args, journal, colors):
 
 def execute(args, colors=False):
     command = args.command or 'status'
-    if command == 'damage':
-        from app_config import load_config, save_config
-        from damage_plan import validate_rotation
-        config = load_config()
-        rotation = {**config['damage_rotation'],
-                    'keys': dict(config['damage_rotation']['keys']),
-                    'names': dict(config['damage_rotation']['names']),
-                    'enabled': list(config['damage_rotation']['enabled'])}
-        changes = {}
-        if args.moves is not None:
-            rotation['enabled'] = ([] if args.moves.strip().lower() == 'none' else
-                                   [role.strip().lower().replace('-', '_') for role in args.moves.split(',')])
-        for option, field in ((args.key, 'keys'), (args.name, 'names')):
-            for entry in option:
-                if '=' not in entry:
-                    raise ValueError(f'Use --{field[:-1]} ROLE=VALUE')
-                role, value = entry.split('=', 1)
-                role = role.strip().lower().replace('-', '_')
-                if role not in rotation[field]:
-                    raise ValueError(f'Unknown {field[:-1]} role: {role}')
-                rotation[field][role] = value.strip()
-        for entry in args.timing:
-            if '=' not in entry:
-                raise ValueError('Use --timing FIELD=SECONDS')
-            field, value = entry.split('=', 1)
-            field = field.strip().lower().replace('-', '_')
-            if field not in rotation or field in ('keys', 'names'):
-                raise ValueError(f'Unknown damage timing: {field}')
-            rotation[field] = float(value)
-        if args.key or args.name or args.timing or args.moves is not None:
-            changes['damage_rotation'] = validate_rotation(rotation)
-        for option, field in ((args.title, 'damage_title'), (args.category, 'damage_title_category'),
-                              (args.target, 'damage_target'), (args.check_seconds, 'damage_check_seconds')):
-            if option is not None:
-                changes[field] = option
-        if changes:
-            config = save_config(changes)
-        if args.show_config or args.configure_only:
-            print(json.dumps({key: config[key] for key in ('damage_rotation','damage_title',
-                'damage_title_category','damage_target','damage_check_seconds')}, indent=2))
-            return 0
-        if args.measure_skills:
-            from metrics import write
-            write('damage-sample-request.json', {'id': str(time.time_ns())})
-        return print(color(actions.resume('damage'), 'gold', colors)) or 0
     if command=='start':
         from start_picker import start
         return start(args, colors)
@@ -303,13 +212,6 @@ def execute(args, colors=False):
         print(f'Wiki: {path}')
         print(f"{counts['inventory']} owned variants · {counts['archive_only']} archive-only entries")
         return 0
-    if command in ('build', 'gear'):
-        from damage_build import report, save_mastery, text_lines
-        if args.save_mastery is not None:
-            save_mastery(args.save_mastery)
-        data = report(mastery=args.mastery)
-        print(json.dumps(data, indent=2, ensure_ascii=False) if args.json else '\n'.join(text_lines(data)))
-        return 0
     if command=='webhook':
         from app_config import data_directory
         from discord_hourly import SECRET_FILE, configure_secret, load_secret, request_webhook
@@ -343,7 +245,7 @@ def execute(args, colors=False):
         return 0
     if command == 'tui':
         from terminal_app import Terminal
-        client=Terminal();client.switch(('run','items','log','setup','build').index(args.page))
+        client=Terminal();client.switch(('run','items','log','setup').index(args.page))
         return client.run()
     if command == 'shell':
         return shell(colors)
@@ -384,7 +286,7 @@ def execute(args, colors=False):
 
 def shell(colors):
     print('\n'.join(status_lines(snapshot(), colors)))
-    print(color('\nModes: assist, spot, damage, rejoin, continue --mode full\nCommands: status, watch, items, logs, build, wiki, pause, continue, stop, plan --hours 8, export', 'gray', colors))
+    print(color('\nModes: assist, spot, rejoin, continue --mode full\nCommands: status, watch, items, logs, wiki, pause, continue, stop, plan --hours 8, export', 'gray', colors))
     print('help shows options. exit closes this prompt and leaves the bot unchanged.\n')
     while True:
         try:

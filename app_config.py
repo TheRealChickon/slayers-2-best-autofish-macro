@@ -9,7 +9,7 @@ from damage_plan import DEFAULT_ROTATION, validate_rotation
 
 ROOT = Path(__file__).resolve().parent
 MODES = {'full': 'Full farmer', 'assist': 'Minigame only', 'spot': 'Fish here',
-         'damage': 'Statue damage', 'rejoin': 'Auto rejoin'}
+         'rejoin': 'Auto rejoin'}
 GUI_MODES = {key: label for key, label in MODES.items() if key != 'rejoin'}
 CONFIG = ROOT / 'config.local.json'
 DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
@@ -55,8 +55,11 @@ def load_config():
     values['spawn_backstep_seconds'] = float(values['spawn_backstep_seconds'])
     if not 0 <= values['spawn_backstep_seconds'] <= .35:
         raise ValueError('Spawn backstep must be between 0 and 0.35 seconds')
+    if values['mode'] in ('boss', 'damage'):
+        values['mode'] = 'full'
     if values['mode'] not in MODES:
-        raise ValueError('Mode must be full, assist, spot, damage, or rejoin')
+        raise ValueError('Mode must be full, assist, spot, or rejoin')
+    values.pop('boss', None)
     validate_options(values)
     if values['user_id'] is not None:
         values['user_id'] = int(values['user_id'])
@@ -74,7 +77,8 @@ def save_config(changes):
     values = load_config()
     values.update(changes)
     if values['mode'] not in MODES:
-        raise ValueError('Mode must be full, assist, spot, damage, or rejoin')
+        raise ValueError('Mode must be full, assist, spot, or rejoin')
+    values.pop('boss', None)
     validate_options(values)
     if not 1 <= int(values['rod_slot']) <= 9:raise ValueError('Rod slot must be between 1 and 9')
     values['cast_point'] = validate_cast_point(values['cast_point'])

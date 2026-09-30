@@ -132,22 +132,15 @@ class UniversalDamageTests(unittest.TestCase):
         self.assertEqual(summary['remaining_damage'], 4_998_400)
         self.assertEqual(summary['estimated_dps'], 10)
 
-    def test_cli_configure_only_saves_bindings_without_starting(self):
-        import app_config
+    def test_fishing_cli_rejects_combat_commands_without_starting(self):
         import fishing_cli
-        with tempfile.TemporaryDirectory() as directory:
-            config = Path(directory)/'config.local.json'
-            args = fishing_cli.parser().parse_args(['damage', '--key', 'followup=Q',
-                '--moves', 'shock_wave,followup',
-                '--timing', 'post_m1_wait=0.8', '--configure-only'])
-            with patch.object(app_config, 'CONFIG', config), \
-                 patch.object(fishing_cli.actions, 'resume', side_effect=AssertionError('controller started')), \
-                 redirect_stdout(StringIO()):
-                self.assertEqual(fishing_cli.execute(args), 0)
-                saved = app_config.load_config()
-            self.assertEqual(saved['damage_rotation']['keys']['followup'], 'Q')
-            self.assertEqual(saved['damage_rotation']['post_m1_wait'], .8)
-            self.assertEqual(saved['damage_rotation']['enabled'], ['shock_wave','followup'])
+        from contextlib import redirect_stderr
+        with patch.object(fishing_cli.actions, 'resume') as resume, redirect_stderr(StringIO()):
+            for command in ('boss', 'damage', 'build'):
+                with self.assertRaises(SystemExit) as error:
+                    fishing_cli.main([command])
+                self.assertEqual(error.exception.code, 2)
+            resume.assert_not_called()
 
 
 if __name__ == '__main__':

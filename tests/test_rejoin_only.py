@@ -96,7 +96,7 @@ class RejoinControls(unittest.TestCase):
             driver.recover(equip_rod=False)
         driver.equip_rod.assert_not_called()
         driver.backstep_after_join.assert_not_called()
-        driver.event.assert_any_call('game_ready', mode='rejoin')
+        driver.event.assert_any_call('world_ready')
 
 
 if __name__ == '__main__':
