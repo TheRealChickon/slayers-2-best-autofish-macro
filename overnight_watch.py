@@ -50,6 +50,11 @@ class Watcher:
                         if row.get('at',0)<run['started']:continue
                         event=row.get('event','');reason=row.get('reason') or row.get('message') or event
                         if manual(reason):continue
+                        if event=='minigame_ended' and isinstance(row.get('percent'),(int,float)) and row['percent']<100:
+                            self.alert(f"failed-round:{self.run_id}:{path.name}:{row.get('cycle')}",
+                                       f"Minigame ended at {row['percent']}%; inspect tracking evidence",event=event,source=path.name,cycle=row.get('cycle'))
+                        if event=='empty_round':
+                            self.alert(f"empty-round:{self.run_id}:{path.name}:{row.get('cycle')}",str(reason),event=event,source=path.name,cycle=row.get('cycle'))
                         if event in ('stopped','worker_exit','supervisor_stopped','recovery_retry','restart_backoff','wrong_interaction','disconnect_gui','pickup_exhausted_rejoining','inventory_unreadable','no_minigame','pickup_deferred','overnight_attention') or 'error' in event:
                             key=hashlib.sha256(f'{self.run_id}:{path.name}:{event}:{reason}'.encode()).hexdigest()[:24]
                             self.alert(key,str(reason),event=event,source=path.name)

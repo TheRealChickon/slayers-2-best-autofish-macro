@@ -120,6 +120,16 @@ class Reliability(unittest.TestCase):
         self.assertEqual(len(watcher.pending),1)
         self.assertFalse(discord.read_json(self.root/'monitor-delivery.json')['ok'])
 
+    def test_failed_and_empty_rounds_alert_once_but_unread_percent_does_not(self):
+        discord.atomic_json(self.root/'current-run.json',{'id':'test','started':100})
+        self.rows('events-test.jsonl',[{'at':101,'event':'minigame_ended','cycle':1,'percent':75},
+                    {'at':102,'event':'minigame_ended','cycle':2,'percent':None},
+                    {'at':103,'event':'empty_round','cycle':3,'message':'No pickup prompt'}])
+        watcher=Watcher(self.root,{})
+        watcher.poll(now=200);watcher.poll(now=201)
+        self.assertEqual(len(watcher.pending),2)
+        self.assertIn('75%',watcher.pending[0]['message'])
+
     def test_failed_native_alert_survives_watcher_restart_until_acknowledged(self):
         watcher=Watcher(self.root,{})
         watcher.alert('test-native-failure','Minigame stalled')
@@ -312,6 +322,28 @@ class Reliability(unittest.TestCase):
         driver.click(96,629)
         self.assertEqual(pressed,[(96,629)])
         driver.inp.hold.assert_called_with(False)
+
+    def test_rod_fallback_cannot_leave_previously_selected_rod_toggled_off(self):
+        import recovery
+        from unittest.mock import Mock
+        driver=recovery.Recovery.__new__(recovery.Recovery)
+        driver.move=Mock();driver.sleep=Mock();driver.key=Mock();driver.capture=Mock();driver.event=Mock()
+        off={'score':.95,'ring':0.,'equipped':False,'x':1300,'y':1370}
+        on={**off,'ring':.9,'equipped':True}
+        with patch.object(recovery,'load_config',return_value={'cast_point':(1332,508),'auto_rod':True,'rod_slot':5}),\
+             patch.object(recovery,'locate_rod',side_effect=[None,off,on]):
+            driver.equip_rod()
+        self.assertEqual([c.args for c in driver.key.call_args_list],[('5',),('5',)])
+        self.assertIn('rod_selection_verified',[c.args[0] for c in driver.event.call_args_list])
+
+    def test_inventory_tab_location_comes_from_its_current_label(self):
+        import inventory_watch
+        from unittest.mock import Mock
+        scanner=inventory_watch.InventoryScanner.__new__(inventory_watch.InventoryScanner)
+        scanner.driver=Mock();scanner.driver.text.return_value=[([[160,40],[250,40],[250,80],[160,80]],'All (187)',.99)]
+        self.assertEqual(scanner.tab_target(np.zeros((1440,2560,3),np.uint8),'All'),(825,160))
+        scanner.driver.text.return_value=[]
+        with self.assertRaises(ValueError):scanner.tab_target(np.zeros((1440,2560,3),np.uint8),'All')
 
 
 if __name__=='__main__':unittest.main()

@@ -212,14 +212,29 @@ class Recovery:
         cast_x, cast_y = config['cast_point']
         self.move(cast_x,cast_y);self.sleep(.3)
         rod=locate_rod(self.capture()) if config['auto_rod'] else None
+        fallback=False
         if selected_rod(rod):
             self.event('rod_already_equipped',score=rod['score'])
         elif unselected_rod(rod):
             self.click(rod['x'],rod['y']);self.sleep(.6)
             self.event('rod_equipped',method='visible hotbar',score=rod['score'])
         else:
-            self.key(str(config['rod_slot']));self.sleep(.6)
+            self.key(str(config['rod_slot']));self.sleep(.6);fallback=True
             self.event('rod_equipped',method='configured slot',slot=config['rod_slot'])
+        if config['auto_rod']:
+            observed=locate_rod(self.capture())
+            if fallback and unselected_rod(observed):
+                # The fallback can toggle an already-selected rod OFF. A
+                # positive unselected icon permits one corrective toggle.
+                self.key(str(config['rod_slot']));self.sleep(.6)
+                self.event('rod_toggle_corrected',slot=config['rod_slot'])
+                observed=locate_rod(self.capture())
+            for _ in range(2):
+                if selected_rod(observed):break
+                self.sleep(.25);observed=locate_rod(self.capture())
+            if not selected_rod(observed):
+                raise FishingFault('rod_unreadable','Rod selection could not be verified; no casting input sent')
+            self.event('rod_selection_verified',score=observed['score'])
         # Refresh Roblox's hover target after leaving the hotbar. The OS cursor
         # can arrive before the game's hit test; otherwise the first cast may
         # toggle the rod off and spend a full bite timeout waiting for nothing.
@@ -417,7 +432,7 @@ def main():
             except (win32gui.error,RuntimeError,ValueError):
                 driver.inp.release();driver.event('unattended_focus_wait',message='Focus or client changed; input remains paused')
     driver.event('run_started',run_id=log_run['id'],resumed=resume_log_run)
-    policy=RecoveryPolicy();here_policy=HereRecovery();here_disconnect=False;here_retries=0;display_repair=DisplayRepair()
+    policy=RecoveryPolicy();here_policy=HereRecovery();here_disconnect=False;here_retries=0;rod_retries=0;display_repair=DisplayRepair()
     performance=PerformanceRecorder(read_metrics('totals.json').get('started'))
     titles_checked=False
     camera_unlock_attempts=0
@@ -435,6 +450,7 @@ def main():
     def released_key(key):
         if key==Key.f8:toggle.release()
     listener=Listener(on_press=emergency_key,on_release=released_key,win32_event_filter=lambda message,data:not data.flags&0x10);listener.start()
+    driver.inp.physical_stop_owned=True
     presence_stop=presence_watch.start()
     discord_reporter=DiscordReporter(RUN);discord_reporter.start()
     def status(stage,**kw):
@@ -470,6 +486,7 @@ def main():
                     driver.event('saved_heading_ready',heading=round(actual_heading,1))
                 if not a.here:landmarks.align(driver)
                 display_repair.progress()
+                rod_retries=0
                 if load_config()['auto_fishing_titles'] and not titles_checked:
                     try:TitleManager(driver).run()
                     except ValueError as title_error:
@@ -523,6 +540,10 @@ def main():
                     # a relaunch storm. Rejoin once, then wait for adjustment.
                     if force:raise
                     force=True;continue
+                if code=='rod_unreadable':
+                    rod_retries+=1
+                    if rod_retries>2:raise FishingFault('user_required','Rod remains unreadable after local repair; automatic restart suspended')
+                    driver.sct.reset();status('retry_wait');driver.sleep(3,focus=False);force=False;continue
                 if code=='user_required':raise
                 if a.here:
                     here_retries+=1
@@ -534,7 +555,7 @@ def main():
                     last_error=str(restart_error);driver.event('restart_backoff',reason=last_error);status('retry_wait')
                     driver.sleep(60,focus=False);driver.restarts=0
                 force=False;continue
-            recoveries+=1;force=True
+            recoveries+=1;force=True;last_error=''
             camera_unlock_attempts=0
             if time.monotonic()>=deadline:break
             remaining=max(1,int(deadline-time.monotonic())) if a.seconds>0 else 0;status('fishing');worker_started=time.time()
@@ -555,6 +576,7 @@ def main():
             if reason.startswith('Pickup prompt still present'):
                 driver.event('pickup_exhausted_rejoining',reason=reason)
             code=child_status.get('failure_code') or reason_code(reason)
+            driver.sct.reset()  # Own a fresh context at a worker/recovery boundary.
             action=here_policy.choose(code) if a.here else policy.choose(code,time.monotonic(),landmarks.profile() is not None)
             driver.event('recovery_decision',code=code,action=action)
             if action=='stop_unstable_position':

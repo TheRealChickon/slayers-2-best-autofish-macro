@@ -13,23 +13,25 @@ def templates():
         for variant in rod['variants']:
             icon=cv2.imread(str(ROOT/'assets'/variant['image']),cv2.IMREAD_GRAYSCALE)
             if icon is None:continue
-            for scale in (1.,.95,1.05):
-                result.append({**variant,'name':rod['name'],'priority':rod['priority'],
-                               'scale':scale,'icon':cv2.resize(icon,None,fx=scale,fy=scale)})
+            for sx in (1.,.95,1.05):
+                for sy in (1.,.95,1.05):
+                    result.append({**variant,'name':rod['name'],'priority':rod['priority'],
+                                   'scale':sx,'sy':sy,'icon':cv2.resize(icon,None,fx=sx,fy=sy)})
     return result
 
 
-def selected_ring(frame,x,y,scale=1.):
+def selected_ring(frame,x,y,scale=1.,sy=None):
     # A circular brightness edge survives night lighting and scene tint. A
     # handful of pale scenery pixels is not enough: require three quadrants.
-    extent=int(46*scale+2)
+    sy=scale if sy is None else sy
+    extent=int(46*max(scale,sy)+2)
     left,right=max(0,int(x)-extent),min(frame.shape[1],int(x)+extent+1)
     top,bottom=max(0,int(y)-extent),min(frame.shape[0],int(y)+extent+1)
     gray=frame[top:bottom,left:right].mean(axis=2)
     angles=np.arange(96)*2*np.pi/96
     def sample(radius):
         xx=np.clip(np.round(x-left+np.cos(angles)*radius*scale).astype(int),0,gray.shape[1]-1)
-        yy=np.clip(np.round(y-top+np.sin(angles)*radius*scale).astype(int),0,gray.shape[0]-1)
+        yy=np.clip(np.round(y-top+np.sin(angles)*radius*sy).astype(int),0,gray.shape[0]-1)
         return gray[yy,xx]
     edge=np.max([sample(r) for r in (37.5,38.5,39.5,40.5)],axis=0)
     outer=np.mean([sample(r) for r in (43,44,45)],axis=0)
@@ -47,13 +49,13 @@ def locate_rod(frame):
     bar = cv2.cvtColor(frame[1320:1430,500:2060],cv2.COLOR_BGR2GRAY)
     matches=[]
     for variant in templates():
-        icon=variant['icon'];scale=variant['scale']
+        icon=variant['icon'];scale=variant['scale'];sy=variant.get('sy',scale)
         _,score,_,point=cv2.minMaxLoc(cv2.matchTemplate(bar,icon,cv2.TM_CCOEFF_NORMED))
         if score<.72:continue
         x=point[0]+500+variant['anchor'][0]*scale
-        y=point[1]+1320+variant['anchor'][1]*scale
+        y=point[1]+1320+variant['anchor'][1]*sy
         cx,cy=round(x),round(y)
-        ring,selected=selected_ring(frame,x,y,scale)
+        ring,selected=selected_ring(frame,x,y,scale,sy)
         matches.append({'x':cx,'y':cy,'score':round(score,3),'ring':round(ring,3),
                         'equipped':bool(variant['selected'] and selected),
                         'name':variant['name'],'priority':variant['priority']})

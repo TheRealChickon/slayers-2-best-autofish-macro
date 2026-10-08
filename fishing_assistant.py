@@ -74,7 +74,7 @@ class Input:
     def __init__(self,hwnd=None):
         self.mouse=False; self.t=False; self.hwnd=hwnd
         self.cast_target=None
-        self.lock=threading.RLock(); self.gate=None
+        self.lock=threading.RLock(); self.gate=None;self.physical_stop_owned=False
     def guard_press(self,down):
         if down and self.gate is not None:self.gate.check()
         if down and self.hwnd is not None and (not win32gui.IsWindow(self.hwnd) or win32gui.IsIconic(self.hwnd) or win32gui.GetForegroundWindow()!=self.hwnd):
@@ -177,6 +177,7 @@ def main():
             save_config({'overnight_enabled':False,'overnight_auto_enable_idle':False})
     emergency_listener=Listener(on_press=emergency_key,win32_event_filter=lambda message,data:not data.flags&0x10)
     emergency_listener.start()
+    inp.physical_stop_owned=True
     prev=None;velocity=0.;target_velocity=0.;cycles=0;casts=0;missing_casts=0;track_frames=0;inside_frames=0;laststate=0;lastimage=0;last_rod_check=0
     first_person_active=False
     motion=ReelMotion();tracking_watchdog=TrackingWatchdog()
