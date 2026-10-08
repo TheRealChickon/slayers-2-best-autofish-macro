@@ -65,7 +65,7 @@ class DamageBuild(unittest.TestCase):
     def test_fishing_pages_have_no_combat_build(self):
         app = terminal_app.Terminal()
         app.switch(4)
-        self.assertEqual(app.page, 0)
+        self.assertEqual(app.pages[app.page], 'Predictions')
         self.assertNotIn('Build', app.pages)
 
     def test_hosted_wiki_command_uses_local_url_without_rebuilding(self):

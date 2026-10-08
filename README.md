@@ -402,6 +402,24 @@ input and replaces the capture source; it never rejoins or changes monitor power
 Refreshes are limited to two in 90 minutes, at least 60 seconds apart.
 An unsupported temporary Player window is maximized locally before stable-client
 validation; a resize/focus fault never launches another client in Farm here.
+Rod startup now verifies the selected hotbar icon before casting, corrects a
+confirmed accidental slot toggle once, and bounds unreadable-rod retries locally.
+Inventory filters are located by their visible labels; the search placeholder
+uses a crop that includes its full text at 1440p with normal window borders.
+The watcher also alerts for failed minigames and empty pickup rounds.
+
+The read-only **Predictions** page (5) shows unique catches by item, worker-active
+time separately from elapsed time, items/hour, sample warnings and a configurable
+forecast duration (H or Enter). Reopen only the terminal view to see the new tab;
+the farmer can keep running. Arrow/Page keys scroll the complete table and value
+summary. `autofish predictions --hours 8` prints it; `--json` exports its calculation
+and `--run ID` selects a saved run. Prices for OuwFish/OuwFwesh/Coral (33 Wen) and
+Clown Fish/Golden Fish (66 Wen) are user-provided. Other prices remain unknown;
+historical Crustadon/Krathulon 110 Wen is never treated as a current price.
+Known-price NPC estimates and confirmed sale proceeds are separate. Forecasts
+require 20 catches and ten active minutes; incomplete activity records withhold
+them. Active time includes casting, pickup and inventory work, excludes recorded
+focus/manual pauses and recovery gaps, and never counts overlapping workers twice.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v

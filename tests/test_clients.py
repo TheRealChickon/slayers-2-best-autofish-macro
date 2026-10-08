@@ -124,6 +124,21 @@ class IsolatedState(unittest.TestCase):
         app.body(18); self.assertEqual(app.scroll,position)
         app.key('END'); self.assertTrue(app.follow)
 
+    def test_prediction_page_scrolls_to_values_and_duration_is_read_only(self):
+        import catch_predictions
+        rows=[{'at':0,'event':'started','source':'events-20261009-010000.jsonl'},
+              {'at':900,'event':'stopped','source':'events-20261009-010000.jsonl'}]
+        rows.extend({'at':i,'event':'reward_observed','source':'events-20261009-010000.jsonl',
+                     'cycle':i,'text':'Item '+str(i)+' X1'} for i in range(1,26))
+        app=terminal_app.Terminal();app.switch(4);app.height=22
+        app.predictions=catch_predictions.calculate(rows,{'id':'test','started':0,'ended':900})
+        app.key('END');self.assertGreater(app.scroll,0)
+        self.assertIn('Actual sold proceeds','\n'.join(app.body(10)))
+        app.key('HOME');self.assertEqual(app.scroll,0)
+        with patch.object(control_actions,'resume') as resume,patch.object(terminal_app,'save_config') as save:
+            app.key('h');app.buffer='12';app.finish_edit()
+            self.assertEqual(app.prediction_hours,12);resume.assert_not_called();save.assert_not_called()
+
     def test_pause_in_flight_prevents_duplicate_controller(self):
         (self.root/'STOP').write_text('Paused by user')
         with patch.object(control_actions,'alive',side_effect=lambda name='supervisor-pid.json':name=='supervisor-pid.json'), patch.object(control_actions,'starting',return_value=False), patch.object(control_actions.subprocess,'Popen') as spawn:
