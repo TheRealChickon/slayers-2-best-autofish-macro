@@ -66,8 +66,8 @@ class Recovery:
         with self.log.open('a') as f:f.write(json.dumps(row)+'\n')
         print(json.dumps(row),flush=True)
     def check_stop(self):
-        if any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)) and not self.stop.exists():
-            self.stop.write_text('Stopped by physical hotkey')
+        # The physical-only hotkey listener owns this request. Async key state
+        # also includes keys injected by unrelated automation.
         if self.stop.exists():
             self.inp.release();raise UserStop('Stopped by user')
     def select(self,focus=False):
@@ -82,11 +82,20 @@ class Recovery:
         if win32gui.IsIconic(self.hwnd):raise RecoveryError('Roblox lost focus')
         # Fullscreen/menu transitions can report a transient client shape.
         # Wait for a valid, stable rectangle with input released.
-        self.inp.release();last_rect=None;stable=0;until=time.monotonic()+8
+        self.inp.release();last_rect=None;stable=0;invalid=0;maximized=False;until=time.monotonic()+8
         while time.monotonic()<until:
+            self.progress(detail='window_transition')
             self.check_stop();rect=rectangle(self.hwnd)
             try:screen=ScreenSpace(rect)
             except ValueError:
+                invalid+=1
+                if (invalid>=5 and not maximized and win32gui.GetForegroundWindow()==self.hwnd
+                        and not any((RUN/name).exists() for name in ('STOP','PAUSE','F8_PAUSE'))):
+                    # Roblox may return to its default square window after a
+                    # presentation reset. Maximize this exact Player window
+                    # rather than launching another client or rejecting 1440p.
+                    win32gui.ShowWindow(self.hwnd,3);maximized=True
+                    self.event('client_maximized',reason='Restoring a widescreen client after display transition')
                 stable=0;self.sleep(.2,focus=False);continue
             stable=stable+1 if rect==last_rect else 1;last_rect=rect
             if stable>=3:
@@ -147,9 +156,14 @@ class Recovery:
         self.inp.release();self.guard()
         if find_window()!=self.hwnd:raise RecoveryError('Roblox window changed')
         code=0x7A;scan=USER.MapVirtualKeyW(code,0)
-        USER.keybd_event(code,scan,0,0)
-        try:self.sleep(.03,focus=False)
-        finally:USER.keybd_event(code,scan,2,0)
+        for attempt in range(2):
+            self.check_stop();self.inp.gate.check()
+            if (RUN/'PAUSE').exists():raise InputPaused('paused_manual')
+            self.inp.guard_press(True)
+            USER.keybd_event(code,scan,0,0)
+            try:self.sleep(.03,focus=False)
+            finally:USER.keybd_event(code,scan,2,0)
+            self.sleep(.75,focus=False)
         self.sct.reset();self.sleep(1,focus=False);self.select()
         self.event('display_surface_refreshed',width=self.screen.actual_width,height=self.screen.actual_height)
     def capture(self,tag=None):
@@ -188,6 +202,7 @@ class Recovery:
         self.restarts+=1;self.event('launching_game',attempt=self.restarts)
         launch_game(LAUNCH_URL,known_exe);deadline=time.monotonic()+100
         while time.monotonic()<deadline:
+            self.progress(detail='launching_wait')
             self.sleep(1,focus=False)
             try:self.select(focus=True);return
             except (RuntimeError,RecoveryError):continue
@@ -252,7 +267,9 @@ class Recovery:
     def recover(self,force_menu=False,equip_rod=True,allow_rejoin=True):
         self.inp.release();self.event('recovery_started',force_menu=force_menu)
         try:self.select()
-        except RuntimeError:self.launch()
+        except RuntimeError as error:
+            if getattr(error,'code',reason_code(str(error))) not in ('client_lost','disconnect'):raise
+            self.launch()
         deadline=time.monotonic()+180;pacer=MenuPacer();join_attempts=0;last_class=''
         while time.monotonic()<deadline:
             self.guard();self.progress(detail=last_class or 'inspecting');im=self.capture()

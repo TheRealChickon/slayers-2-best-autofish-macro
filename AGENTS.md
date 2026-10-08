@@ -44,7 +44,7 @@ visual evidence, and capture_wait is not successful farming. Preserve the user's
 monitor-off intent and never conceal a rendering/capture dependency.
 
 Persistent all-white capture faults may refresh only the Player presentation
-surface with F11, under enabled Overnight/autofocus, foreground ownership,
+surface with a pair of F11 toggles, under enabled Overnight/autofocus, foreground ownership,
 45 seconds of physical inactivity and no manual hold. Release fishing input,
 replace owned capture resources and reacquire stable coordinates afterwards.
 Limit to two refreshes per 90 minutes with 60 seconds between attempts. Never
