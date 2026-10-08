@@ -17,7 +17,7 @@ def manual(reason):
 class Watcher:
     def __init__(self,root,config):
         self.root,self.config=root,config
-        self.offsets={};self.seen=set();self.pending=[];self.paused_since=None;self.stale_since=None
+        self.offsets={};self.seen=set();self.pending=read_json(root/'monitor-pending.json').get('alerts',[]);self.paused_since=None;self.stale_since=None
         self.run_id=None;self.last_send=0
         try:
             for line in (root/'monitor-alerts.jsonl').read_text(encoding='utf-8').splitlines():
@@ -31,6 +31,7 @@ class Watcher:
         row={'at':time.time(),'id':key,'run_id':self.run_id,'message':message,**details}
         with (self.root/'monitor-alerts.jsonl').open('a',encoding='utf-8') as stream:stream.write(json.dumps(row)+'\n')
         self.pending.append(row)
+        atomic_json(self.root/'monitor-pending.json',{'alerts':self.pending})
 
     def poll(self,now=None):
         now=time.time() if now is None else now
@@ -86,6 +87,7 @@ class Watcher:
             result=safe_notify(self.config,prompt)
             atomic_json(self.root/'monitor-delivery.json',{'at':time.time(),'ok':True,'count':len(batch),'result':result})
             del self.pending[:len(batch)]
+            atomic_json(self.root/'monitor-pending.json',{'alerts':self.pending})
         except Exception as error:
             atomic_json(self.root/'monitor-delivery.json',{'at':time.time(),'ok':False,'error':str(error),'pending':len(self.pending)})
 
