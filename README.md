@@ -407,6 +407,10 @@ confirmed accidental slot toggle once, and bounds unreadable-rod retries locally
 Inventory filters are located by their visible labels; the search placeholder
 uses a crop that includes its full text at 1440p with normal window borders.
 The watcher also alerts for failed minigames and empty pickup rounds.
+Empty pickup decisions now retain bounded screenshots and OCR rows, and each T
+retry is logged. A confirmed 100% minigame permits up to ten seconds for a late
+loot prompt before an empty decision; a visible prompt still starts pickup as
+soon as its evidence is sufficient. This wait never authorizes a blind T hold.
 
 The read-only **Predictions** page (5) shows unique catches by item, worker-active
 time separately from elapsed time, items/hour, sample warnings and a configurable

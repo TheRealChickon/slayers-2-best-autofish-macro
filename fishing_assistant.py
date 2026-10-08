@@ -14,7 +14,7 @@ from tracking_watchdog import TrackingWatchdog
 from screen_space import ScreenSpace
 from inventory_watch import InventoryDriver, InventoryWatcher
 import landmarks
-from pickup_policy import classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate
+from pickup_policy import classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate,waiting_decision
 from faults import FishingFault, FaultRecorder, reason_code
 from full_pause import InputGate, InputPaused, PAUSE_FILE, resumed_stage
 from unattended_focus import TaggedInput
@@ -439,17 +439,16 @@ def main():
                     elif stage=='pickup_wait':
                         if now-since>.08 and now-last_pickup_scan>.08:
                             evidence,stable=pickup_text();now=time.monotonic();last_pickup_scan=now;prompt_seen=evidence.kind=='collect' and stable
-                            if evidence.kind=='reward' and stable:
+                            decision=waiting_decision(evidence,stable,now-since,last_tracking_cast==casts,end_percent)
+                            if decision=='reward':
                                 record_reward(evidence.text);screenshot('collected');start_cooldown(.45)
-                            elif prompt_seen:
+                            elif decision=='collect':
                                 last_prompt=evidence.text
                                 inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;last_toast_scan=0
                                 event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=evidence.text,scan_seconds=last_pickup_evidence['scan_seconds'],prompt_to_hold_seconds=round(since-(prompt_detected_at or since),3));screenshot('pickup')
-                            elif now-since>3.5 and evidence.kind=='empty' and stable:
-                                empty_round(.4)
-                            elif now-since>4 and evidence.kind in ('empty','other'):
-                                empty_round(1.0)
-                            elif now-since>7:
+                            elif decision=='empty':
+                                empty_round(.4 if evidence.kind=='empty' and stable else 1.0)
+                            elif decision=='timeout':
                                 raise FishingFault('pickup_timeout','Pickup prompt remained ambiguous after wide scans',evidence=last_pickup_evidence)
                     elif stage=='pickup':
                         # The tiny toast is much faster than another scene OCR.
