@@ -395,11 +395,13 @@ disconnect. Capture waits release input and retry locally; the bot does not
 turn monitors on. The process requests system wakefulness without a display
 power request. A stale Windows protocol association falls back to an existing
 Player executable without modifying the registry or credentials.
-Persistent white frames can refresh the Player's presentation surface with F11
+Persistent white frames can refresh the Player's presentation surface with a pair of F11 toggles
 after ten seconds of failed captures, only with Overnight enabled, Player already
 foreground, physical inactivity and no manual hold. This releases all fishing
 input and replaces the capture source; it never rejoins or changes monitor power.
 Refreshes are limited to two in 90 minutes, at least 60 seconds apart.
+An unsupported temporary Player window is maximized locally before stable-client
+validation; a resize/focus fault never launches another client in Farm here.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v

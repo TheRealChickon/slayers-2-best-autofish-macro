@@ -185,7 +185,7 @@ class Reliability(unittest.TestCase):
         import recovery
         from unittest.mock import Mock
         driver=recovery.Recovery.__new__(recovery.Recovery)
-        driver.hwnd=123;driver.inp=Mock();driver.guard=Mock();driver.sct=Mock();driver.select=Mock();driver.event=Mock()
+        driver.hwnd=123;driver.inp=Mock();driver.guard=Mock();driver.check_stop=Mock();driver.sct=Mock();driver.select=Mock();driver.event=Mock()
         driver.screen=Mock(actual_width=2560,actual_height=1440)
         driver.sleep=Mock(side_effect=recovery.UserStop('Stopped by user'))
         with patch.object(recovery,'find_window',return_value=123),patch.object(recovery,'USER') as user:
@@ -196,6 +196,30 @@ class Reliability(unittest.TestCase):
         with patch.object(recovery,'find_window',return_value=123),patch.object(recovery,'USER'):
             driver.refresh_display()
         driver.sct.reset.assert_called_once();driver.select.assert_called_once()
+
+    def test_local_window_failure_cannot_launch_another_client(self):
+        import recovery
+        from faults import FishingFault
+        from unittest.mock import Mock
+        driver=recovery.Recovery.__new__(recovery.Recovery)
+        driver.inp=Mock();driver.event=Mock();driver.launch=Mock()
+        driver.select=Mock(side_effect=FishingFault('window','Roblox client is still changing'))
+        with self.assertRaises(FishingFault):driver.recover(allow_rejoin=False)
+        driver.launch.assert_not_called()
+
+    def test_square_transition_maximizes_exact_player_then_validates_1440p(self):
+        import recovery
+        from unittest.mock import Mock
+        driver=recovery.Recovery.__new__(recovery.Recovery)
+        driver.check_stop=Mock();driver.inp=Mock();driver.event=Mock();driver.progress=Mock();driver.sleep=Mock()
+        with patch.object(recovery,'find_window',return_value=123),patch.object(recovery.win32gui,'IsIconic',return_value=False),\
+             patch.object(recovery.win32gui,'GetForegroundWindow',return_value=123),\
+             patch.object(recovery.win32gui,'ShowWindow') as show,\
+             patch.object(recovery,'rectangle',side_effect=[(0,23,1024,720)]*5+[(0,23,2560,1400)]*3),\
+             patch.object(recovery,'RUN',self.root):
+            driver.select()
+        show.assert_called_once_with(123,3)
+        self.assertEqual(driver.screen.actual_width,2560)
 
     def test_farm_here_never_rejoins_for_local_faults(self):
         self.assertFalse(startup_rejoin('here',True));self.assertTrue(startup_rejoin('full',True))

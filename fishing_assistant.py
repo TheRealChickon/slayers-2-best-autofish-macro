@@ -4,8 +4,9 @@ from ctypes import wintypes
 from pathlib import Path
 import cv2, mss, numpy as np, psutil, win32gui, win32process, win32api
 from rapidocr_onnxruntime import RapidOCR
+from pynput.keyboard import Listener,Key
 from metrics import Ledger, read as read_metrics, write as write_metrics, RUN
-from app_config import load_config
+from app_config import load_config,save_config
 from rod_detector import locate_rod, unselected_rod
 from fishing_vision import detect, ui_visible
 from tracking_control import ReelMotion
@@ -120,8 +121,6 @@ class Input:
             while time.monotonic()<until:
                 self.guard_press(True)
                 if (RUN/'STOP').exists():raise RuntimeError('Stopped by stop file')
-                if any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):
-                    raise RuntimeError('Stopped by Escape/F9/F12')
                 time.sleep(.01)
 
     def aim_cast(self,x,y,after_menu=False):
@@ -172,6 +171,12 @@ def main():
     # window remains the reliable guard there; a pointer hit test can flicker
     # outside for a frame and livelock the worker before its first cast.
     inp.gate=InputGate(inp,RUN,USER,pointer=load_config()['camera_mode']!='first_person');inp.gate.start()
+    def emergency_key(key):
+        if key in (Key.esc,Key.f9,Key.f12) and win32gui.GetForegroundWindow()==hwnd and not win32gui.IsIconic(hwnd):
+            stop.write_text('Stopped by physical hotkey')
+            save_config({'overnight_enabled':False,'overnight_auto_enable_idle':False})
+    emergency_listener=Listener(on_press=emergency_key,win32_event_filter=lambda message,data:not data.flags&0x10)
+    emergency_listener.start()
     prev=None;velocity=0.;target_velocity=0.;cycles=0;casts=0;missing_casts=0;track_frames=0;inside_frames=0;laststate=0;lastimage=0;last_rod_check=0
     first_person_active=False
     motion=ReelMotion();tracking_watchdog=TrackingWatchdog()
@@ -326,7 +331,6 @@ def main():
                     if stage in ('cooldown','casting') and (RUN/'RELOAD').exists():
                         (RUN/'RELOAD').unlink();inp.release()
                         raise FishingFault('worker_reload','Planned worker reload at a safe catch boundary')
-                    if any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):raise RuntimeError('Stopped by Escape/F9/F12')
                     inp.guard_press(True)
                     if not win32gui.IsWindow(hwnd):raise RuntimeError('Roblox window closed; rejoin required')
                     if rectangle(hwnd)!=rect:raise RuntimeError('Roblox moved or resized; reacquiring the client area')
@@ -538,6 +542,7 @@ def main():
             except Exception as diagnostic_error:event('diagnostic_error',message=str(diagnostic_error))
         event('stopped',reason=str(ex),code=failure_code);raise
     finally:
+        emergency_listener.stop()
         inp.gate.close()
         ledger.update((paused_at if paused_at is not None else time.monotonic())-started,casts,cycles,pickup_confirmed,failed,last_reward)
         prior=json.loads((RUN/'status.json').read_text()) if (RUN/'status.json').exists() else {}
