@@ -243,12 +243,20 @@ def main():
                 event('pickup_prompt_seen',cycle=cycles,text=evidence.text,scan_seconds=round(finished-scan_started,3))
             stable=stable or clear_collect(rows,after_minigame=last_tracking_cast==casts and cycles not in reward_gate.confirmed)
         last_pickup_evidence={'kind':evidence.kind,'text':evidence.text,'center':evidence.center,'stable':stable,'scan_seconds':round(finished-scan_started,3)}
+        if evidence.kind=='empty':last_pickup_evidence['ocr_rows']=rows
         if evidence.kind in ('other','ambiguous'):
             inp.grab(False)
             if stable and stage=='pickup':
                 event('wrong_interaction',evidence=last_pickup_evidence);screenshot('wrong-interaction')
                 raise FishingFault('pickup_other','Non-fishing interaction replaced pickup; local alignment required',evidence=last_pickup_evidence)
         return evidence,stable
+    def empty_round(delay):
+        message='No pickup prompt after repeated wide scans; continuing without holding T'
+        screenshot('empty-round')
+        report=diagnostics.save('empty_round',message,cycle=cycles,percent=end_percent,evidence=last_pickup_evidence)
+        event('empty_round',cycle=cycles,message=message,percent=end_percent,
+              evidence=last_pickup_evidence,diagnostic_sequence=report['sequence'])
+        start_cooldown(delay)
     def pickup_toast():
         # The toast sits beside the avatar's right shoulder. A narrow OCR pass
         # avoids the player title and waterfall that can hide its small X1 in
@@ -438,11 +446,9 @@ def main():
                                 inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;last_toast_scan=0
                                 event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=evidence.text,scan_seconds=last_pickup_evidence['scan_seconds'],prompt_to_hold_seconds=round(since-(prompt_detected_at or since),3));screenshot('pickup')
                             elif now-since>3.5 and evidence.kind=='empty' and stable:
-                                event('empty_round',cycle=cycles,message='No pickup prompt after repeated wide scans; continuing without holding T')
-                                start_cooldown(.4)
+                                empty_round(.4)
                             elif now-since>4 and evidence.kind in ('empty','other'):
-                                event('empty_round',cycle=cycles,message='No pickup prompt after repeated wide scans; continuing without holding T')
-                                start_cooldown(1.0)
+                                empty_round(1.0)
                             elif now-since>7:
                                 raise FishingFault('pickup_timeout','Pickup prompt remained ambiguous after wide scans',evidence=last_pickup_evidence)
                     elif stage=='pickup':
@@ -499,6 +505,8 @@ def main():
                             evidence,stable=pickup_text()
                             if evidence.kind=='collect' and stable:
                                 inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1
+                                event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=evidence.text,
+                                      scan_seconds=last_pickup_evidence['scan_seconds'])
                             else:stage='pickup_wait';since=time.monotonic()
                     elif stage=='cooldown':
                         if now-since>cooldown_delay:
