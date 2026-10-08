@@ -49,7 +49,7 @@ class InventoryDriver:
 
     def guard(self):
         self.inp.guard_press(True)
-        if any(self.user.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):
+        if not getattr(self.inp,'physical_stop_owned',False) and any(self.user.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):
             (RUN/'STOP').write_text('Stopped by physical hotkey')
         if (RUN/'STOP').exists():
             self.inp.release(); raise RuntimeError('Stopped by user during inventory check')
@@ -72,7 +72,7 @@ class InventoryDriver:
         self.guard();self.move_pointer(*self.screen.point(x,y))
 
     def click(self,x,y):
-        self.move(x,y);self.sleep(.10);self.move(x+1,y);self.sleep(.06);self.move(x,y);self.sleep(.10);self.inp.hold(True)
+        self.move(x,y);self.sleep(.10);self.move(x+1,y);self.sleep(.06);self.move(x,y);self.sleep(.10);self.move(x,y);self.inp.hold(True)
         try:self.sleep(.16)
         finally:self.inp.hold(False)
         self.sleep(.2)
@@ -135,6 +135,14 @@ class InventoryScanner:
         match=re.search(r'All\s*[\(\[]?\s*(\d+)',text,re.I)
         return int(match[1]) if match else None
 
+    def tab_target(self,frame,label):
+        x,y,w,h=620,100,300,600
+        rows=self.driver.text(frame[y:y+h,x:x+w])
+        matches=[r for r in rows if re.match(r'^'+re.escape(label)+r'\s*[\(\[]\d+',r[1],re.I)]
+        if len(matches)!=1:raise ValueError(label+' inventory filter is unreadable')
+        points=np.asarray(matches[0][0])
+        return x+int(points[:,0].mean()),y+int(points[:,1].mean())
+
     def open(self):
         d=self.driver;d.inp.release()
         if self.inventory_count(d.capture()) is None:
@@ -143,13 +151,14 @@ class InventoryScanner:
         frame=d.capture()
         labels=' '.join(r[1] for r in d.text(frame[340:470,10:340])).lower()
         if 'inventory' not in labels:raise RuntimeError('The inventory menu was not visible; recovery required')
-        d.click(155,395);d.click(812,186)
+        d.click(155,395);frame=d.capture();d.click(*self.tab_target(frame,'All'))
         # Never send movement or drop keys to clear a search. A missed textbox
         # click can let Roblox interpret Ctrl+A as movement underneath the menu.
         d.move(2060,1080);d.sleep(.3)
         frame=d.capture()
-        search=''.join(row[1] for row in d.text(frame[80:143,932:1245])).lower()
+        search=''.join(row[1] for row in d.text(frame[45:128,920:1250])).lower()
         if 'itemnamehere' not in re.sub(r'[^a-z]','',search):
+            cv2.imwrite(str(RUN/'inventory-search-unreadable.jpg'),frame,[cv2.IMWRITE_JPEG_QUALITY,85])
             raise ValueError('Clear the inventory search field for automatic item identification')
         return frame
 
@@ -211,7 +220,7 @@ class InventoryScanner:
         d.deadline=time.monotonic()+10
         try:
             self.open()
-            d.click(810,577)
+            d.click(*self.tab_target(d.capture(),'Fishing'))
             frame=d.capture()
             selected=frame[548:606,725:892]
             if np.mean(np.all(selected>180,axis=2))<.25:
