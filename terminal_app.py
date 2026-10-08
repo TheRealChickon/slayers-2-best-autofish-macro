@@ -43,18 +43,21 @@ def clip(line, width):
 
 
 class Terminal:
-    pages = ('Run', 'Items', 'Live log', 'Setup')
+    pages = ('Run', 'Items', 'Logs', 'Settings')
     categories = ('All', 'Catches', 'Recovery', 'Warnings')
-    run_modes = ('assist', 'spot', 'full', 'rejoin')
+    run_modes = ('assist', 'spot', 'full', 'here', 'rejoin')
     mode_details = {
         'assist': ('green', 'you cast / auto reel'),
         'spot': ('cyan', 'cast / reel / collect'),
         'full': ('gold', 'spawn / rejoin'),
+        'here': ('gold','current server / current location'),
         'rejoin': ('green', 'connection guard only'),
     }
-    settings_keys = ('Username', 'Mode', 'Rod slot', 'Auto rod', 'Camera', 'Heading',
-                     'Fishing titles', 'Cast point', 'Capture pointer',
-                     'Position correction', 'Save reference', 'Disable reference', 'Motion')
+    settings_groups=(('Account',('Username',)),('Fishing',('Mode','Rod slot','Auto rod','Fishing titles')),
+                     ('Overnight',('Overnight enabled','Auto focus','Focus grace seconds','Auto-enable after idle','Idle minutes')),
+                     ('Location and camera',('Cast point','Capture pointer','Camera','Heading','Position correction','Save reference','Disable reference')),
+                     ('Discord reports',('Discord webhook','Test webhook','Remove webhook')),('Display',('Motion',)))
+    settings_keys=tuple(key for _,keys in settings_groups for key in keys)
     setting_help = {
         'Username':'Roblox account for presence and reconnect checks.',
         'Mode':'Full fishes and rejoins; Rejoin only restores the connection; other modes work as labeled.',
@@ -69,6 +72,14 @@ class Terminal:
         'Save reference':'Capture your current fishing scene while the farmer is paused.',
         'Disable reference':'Turn off camera and position correction.',
         'Motion':'Reduce terminal effects and animations.'}
+    setting_help.update({'Overnight enabled':'Persistent intent: physical input yields; Stop or turning this off prevents auto restart.',
+        'Auto focus':'Restore only Roblox Player after physical inactivity and the focus grace; other automation gets a grace period.',
+        'Focus grace seconds':'Wait 5–300 seconds after focus loss before attempting safe takeover.',
+        'Auto-enable after idle':'Optional future activation after real-user inactivity; no clock/time-of-day condition.',
+        'Idle minutes':'Conservative physical-user inactivity interval for optional activation (1–120 minutes).',
+        'Discord webhook':'Encrypted locally; reports attach this run’s logs.',
+        'Test webhook':'Read-only verification of the configured webhook.',
+        'Remove webhook':'Remove the local encrypted webhook.'})
 
     def __init__(self):
         self.journal, self.feed = Journal(), LiveFeed()
@@ -77,6 +88,7 @@ class Terminal:
         self.query = ''
         self.category = 0
         self.follow = True
+        self.log_run_id = 'current'
         self.editing = None
         self.buffer = ''
         self.alive = True
@@ -102,7 +114,9 @@ class Terminal:
         self.data = snapshot(self.journal)
         self.config = load_config()
         self.effects.observe(self.journal.items, self.data['started'], time.time(), time.monotonic())
-        self.feed.update(self.data['started'], self.data['state'])
+        from run_log import select
+        log_run=select(data_directory(),self.log_run_id)
+        self.feed.update(log_run.get('started',self.data['started']),self.data['state'] if self.log_run_id=='current' else None,log_run.get('ended'))
         if self.page == 1:
             self.selection = min(self.selection, max(0, len(self.item_rows())-1))
 
@@ -161,6 +175,8 @@ class Terminal:
                 from discord_hourly import configure_secret
                 configure_secret(data_directory(), value)
                 self.toast('Discord webhook saved')
+            elif key in ('Focus grace seconds','Idle minutes'):
+                save_config({{'Focus grace seconds':'overnight_focus_grace_seconds','Idle minutes':'overnight_idle_minutes'}[key]:int(value)})
         except (ValueError, OSError) as error: self.toast(error, False)
 
     def activate(self):
@@ -214,6 +230,17 @@ class Terminal:
                 modes=list(MODES)
                 save_config({'mode':modes[(modes.index(self.config['mode'])+1)%len(modes)]})
                 self.config=load_config();return
+            if key in ('Overnight enabled','Auto focus','Auto-enable after idle'):
+                option={'Overnight enabled':'overnight_enabled','Auto focus':'overnight_autofocus','Auto-enable after idle':'overnight_auto_enable_idle'}[key]
+                changes={option:not self.config[option]}
+                if option=='overnight_enabled' and not changes[option]:changes['overnight_auto_enable_idle']=False
+                save_config(changes);self.config=load_config()
+                if self.config['overnight_enabled'] or self.config['overnight_auto_enable_idle']:
+                    from overnight_guard import ensure_guard
+                    ensure_guard()
+                return
+            if key in ('Focus grace seconds','Idle minutes'):
+                self.edit(key,self.config[{'Focus grace seconds':'overnight_focus_grace_seconds','Idle minutes':'overnight_idle_minutes'}[key]]);return
             if key in ('Auto rod', 'Motion', 'Fishing titles'):
                 option = {'Auto rod':'auto_rod','Motion':'reduced_motion','Fishing titles':'auto_fishing_titles'}[key]
                 save_config({option: not self.config[option]}); self.config = load_config()
@@ -251,6 +278,11 @@ class Terminal:
             except Exception as error: self.toast(error, False)
         elif self.page == 2 and key.lower() == 'f': self.follow = not self.follow
         elif self.page == 2 and key.lower() == 'g': self.category = (self.category+1) % 4; self.scroll = 0
+        elif self.page == 2 and key.lower() == 'r':
+            from run_log import list_runs
+            ids=['current']+[r['id'] for r in list_runs(data_directory())]
+            self.log_run_id=ids[(ids.index(self.log_run_id)+1)%len(ids)] if self.log_run_id in ids else 'current'
+            self.scroll=0;self.follow=True
         elif key in ('UP', 'DOWN', 'PGUP', 'PGDN', 'HOME', 'END'):
             step = -1 if key == 'UP' else 1 if key == 'DOWN' else -(self.height-12) if key == 'PGUP' else self.height-12
             if self.page == 2:
@@ -329,7 +361,8 @@ class Terminal:
             rows = self.feed.filtered(self.query, self.categories[self.category])
             visible = max(1, available-2)
             self.scroll = max(0, len(rows)-visible) if self.follow else min(self.scroll, max(0, len(rows)-visible))
-            result = [tint(self.categories[self.category] + ('   ● Following' if self.follow else '   History') + (f'   / {self.query}' if self.query else ''), 'gold'), '']
+            run_id=self.data.get('log_run',{}).get('id','current') if self.log_run_id=='current' else self.log_run_id
+            result = [tint(f'Run {run_id}   R previous runs   '+self.categories[self.category] + ('   ● Following' if self.follow else '   History') + (f'   / {self.query}' if self.query else ''), 'gold'), '']
             result += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+
                        tint(r['text'],event_tone(r))
                        for r in rows[self.scroll:self.scroll+visible]]
@@ -345,8 +378,25 @@ class Terminal:
                     ('Position correction','On' if self.reference_position else 'Off'),
                     ('Save fishing reference','Enter while paused'),('Disable reference','Enter while paused'),
                     ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On')]
-        rows=[tint(f"{'›' if i == self.selection else ' '}  {label:<23} {value}", 'selected' if i==self.selection else 'text') for i,(label,value) in enumerate(settings)]
-        return rows+['',tint(self.setting_help[self.settings_keys[self.selection]],'dim')]
+        values={key:value for key,(_,value) in zip(('Username','Mode','Rod slot','Auto rod','Camera','Heading','Fishing titles','Cast point','Capture pointer','Position correction','Save reference','Disable reference','Motion'),settings)}
+        values.update({'Overnight enabled':'On' if self.config['overnight_enabled'] else 'Off',
+            'Auto focus':'On' if self.config['overnight_autofocus'] else 'Off',
+            'Auto-enable after idle':'On' if self.config['overnight_auto_enable_idle'] else 'Off',
+            'Focus grace seconds':self.config['overnight_focus_grace_seconds'],
+            'Idle minutes':self.config['overnight_idle_minutes'],'Discord webhook':'Configured' if (data_directory()/'discord-webhook.dpapi').exists() else 'Not set',
+            'Test webhook':'Enter to verify','Remove webhook':'Enter to remove'})
+        rows=[];index=0;selected_line=0
+        for group,keys in self.settings_groups:
+            rows.append(tint(group.upper(),'gold'))
+            for key in keys:
+                if index==self.selection:selected_line=len(rows)
+                rows.append(tint(f"{'›' if index==self.selection else ' '}  {key:<25} {values[key]}",'selected' if index==self.selection else 'text'))
+                index+=1
+            rows.append('')
+        visible=max(1,available-2)
+        self.scroll=min(self.scroll,selected_line)
+        if selected_line>=self.scroll+visible:self.scroll=selected_line-visible+1
+        return rows[self.scroll:self.scroll+visible]+['',tint(self.setting_help[self.settings_keys[self.selection]],'dim')]
 
     def render(self, width, height):
         self.height = height
@@ -360,7 +410,7 @@ class Terminal:
         signal_width = min(width-4, 106)
         marker = signal_width//2 if self.config['reduced_motion'] or not active else int(time.monotonic()*7) % signal_width
         signal = ''.join('◆' if i == marker else '≈' if i % 5 == 0 else '─' for i in range(signal_width))
-        tab_names = ('RUN', 'CATCHES', 'RADIO', 'RIG') if width >= 90 else ('RUN', 'CATCH', 'LOG', 'RIG')
+        tab_names = ('RUN', 'CATCHES', 'LOGS', 'SETTINGS') if width >= 90 else ('RUN', 'CATCH', 'LOGS', 'SETUP')
         tab_gap = '    ' if width >= 90 else '  '
         lines = ['', '  '+tint('AUTOFISH  /  FIELD TERMINAL', 'gold')+'    '+tint(time.strftime('%H:%M'), 'dim'),
                  '  '+state+mode+'    '+tint(d['presence'], 'dim'), '',

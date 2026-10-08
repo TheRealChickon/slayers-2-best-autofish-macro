@@ -24,7 +24,7 @@ def snapshot(journal=None):
     live = actions.alive()
     starting = actions.starting() and not live
     paused, stop = (RUN / 'PAUSE').exists(), (RUN / 'STOP').exists()
-    f8_paused = live and supervisor.get('mode','full')=='full' and (RUN/'F8_PAUSE').exists()
+    f8_paused = live and supervisor.get('mode','full') in ('full','here') and (RUN/'F8_PAUSE').exists()
     stage = supervisor.get('stage', 'starting')
     if (live or starting) and stop:
         state = 'Pausing' if paused else 'Stopping'
@@ -69,11 +69,14 @@ def snapshot(journal=None):
         remaining=max(0,bait_observation['count']-max(0,rounds-bait_observation['hooks']))
         bait_source='inventory read'
     fresh = presence.get('ok') and time.time() - presence.get('checked_at', 0) < 120
+    from run_log import current
+    log_run=current(RUN)
     unknown = sum(qty for name, qty in journal.counts.items()
                   if name == 'Unidentified item' or name.endswith('(partial)'))
     return {
         'state': state, 'mode': supervisor.get('mode','full') if live else load_config()['mode'], 'running': live, 'starting': starting, 'stop_requested': stop,
         'paused': paused, 'started': totals.get('started'), 'updated': totals.get('updated'),
+        'log_run':log_run,
         'reason': reason,
         'collections': totals.get('rewards', 0), 'items': sum(journal.counts.values()),
         'logged_collections': len(journal.items), 'unread_items': unknown,

@@ -109,7 +109,7 @@ class DiscordHourlyTests(unittest.TestCase):
         (self.run / report.SECRET_FILE).write_bytes(b"encrypted")
         reporter = DiscordReporter(self.run)
         with patch("discord_service.send_due", side_effect=RuntimeError("Discord connection failed")):
-            self.assertEqual(reporter.poll_once(), 300)
+            self.assertEqual(reporter.poll_once(), 60)
         self.assertEqual(report.read_json(self.run / "discord-reporter-status.json")["state"], "retrying")
 
     def test_only_discord_webhook_hosts_accepted(self):

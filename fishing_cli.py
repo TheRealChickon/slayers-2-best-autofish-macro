@@ -102,6 +102,15 @@ def parser(prog='autofish'):
     logs.add_argument('--activity', action='store_true', help='Show recovery/control events instead of items')
     logs.add_argument('--filter', default='')
     logs.add_argument('--json', action='store_true', help='One JSON object per line')
+    logs.add_argument('--run', default='current', help='Current run or ID from autofish runs')
+    runs=sub.add_parser('runs',help='List archived runs independently of lifetime counters')
+    runs.add_argument('--json',action='store_true')
+    night=sub.add_parser('overnight',help='Persistent opt-in unattended farming settings')
+    night.add_argument('operation',choices=('status','on','off'),nargs='?',default='status')
+    night.add_argument('--autofocus',choices=('on','off'))
+    night.add_argument('--auto-idle',choices=('on','off'))
+    night.add_argument('--idle-minutes',type=int)
+    night.add_argument('--focus-grace',type=int)
     watch = sub.add_parser('watch', help='Live colored status; Ctrl+C exits the view')
     watch.add_argument('--interval', type=float, default=2, metavar='SECONDS')
     plan = sub.add_parser('plan', help='Estimate bait for a future session using the observed hook rate')
@@ -148,17 +157,24 @@ def log_line(row, activity=False, colors=False):
 
 
 def stream_logs(args, journal, colors):
+    from run_log import select, rows as run_rows
+    from app_config import data_directory
     if args.tail < 0:
         raise ValueError('--tail must be zero or greater')
     seen, previous_run = set(), None
     first = True
     while True:
         data = snapshot(journal)
+        selected=select(data_directory(),getattr(args,'run','current'))
+        run_start=selected.get('started',data['started']);run_end=selected.get('ended')
         if data['started'] != previous_run:
             seen.clear()
             previous_run = data['started']
             first = True
-        rows = journal.activity if args.activity else journal.items
+        if args.activity:
+            from live_feed import describe
+            rows=[{**r,'kind':r.get('event',''),'message':describe(r)} for r in run_rows(data_directory(),selected)]
+        else:rows=[r for r in journal.items if (run_start or 0)<=r['at'] and (run_end is None or r['at']<=run_end)]
         rows = [r for r in rows if args.filter.lower() in json.dumps(r).lower()]
         # Include the occurrence index so two equal-timestamp drops remain distinct.
         keyed = [(json.dumps(row, sort_keys=True) + ':' + str(i), row) for i, row in enumerate(rows)]
@@ -175,6 +191,29 @@ def stream_logs(args, journal, colors):
 
 def execute(args, colors=False):
     command = args.command or 'status'
+    if command=='overnight':
+        from app_config import load_config,save_config
+        changes={}
+        if args.operation!='status':changes['overnight_enabled']=args.operation=='on'
+        for option,key in (('autofocus','overnight_autofocus'),('auto_idle','overnight_auto_enable_idle')):
+            if getattr(args,option) is not None:changes[key]=getattr(args,option)=='on'
+        for option,key in (('idle_minutes','overnight_idle_minutes'),('focus_grace','overnight_focus_grace_seconds')):
+            if getattr(args,option) is not None:changes[key]=getattr(args,option)
+        if args.operation=='off':changes['overnight_auto_enable_idle']=False
+        config=save_config(changes) if changes else load_config()
+        if config['overnight_enabled'] or config['overnight_auto_enable_idle']:
+            from overnight_guard import ensure_guard
+            ensure_guard()
+        print(json.dumps({k:v for k,v in config.items() if k.startswith('overnight_')},indent=2))
+        return 0
+    if command=='runs':
+        from run_log import list_runs
+        from app_config import data_directory
+        rows=list_runs(data_directory())
+        if args.json:print(json.dumps(rows,indent=2))
+        else:
+            for row in rows:print(row['id']+'  '+('Finished' if row.get('ended') else 'Live')+'  '+row.get('reason',''))
+        return 0
     if command=='start':
         from start_picker import start
         return start(args, colors)

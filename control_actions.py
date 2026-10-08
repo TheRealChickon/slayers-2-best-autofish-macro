@@ -78,6 +78,7 @@ def stop():
     with guard():
         (RUN / 'STOP').write_text('Stopped by user')
         (RUN / 'PAUSE').unlink(missing_ok=True)
+        save_config({'overnight_enabled':False,'overnight_auto_enable_idle':False})
         event('stop', 'Stopped by user; saved totals retained.')
     return 'Stop requested. Saved totals are retained.'
 
@@ -100,17 +101,23 @@ def seconds_until_local_clock(value):
     return remaining
 
 
-def resume(mode=None,until=None):
+def resume(mode=None,until=None,automatic=False):
     global _starting
     mode = mode or load_config().get('mode','full')
     if mode not in MODES:raise ValueError('Unknown controller mode')
-    if until and mode!='full':raise ValueError('--until is available for Full farmer only')
+    if until and mode not in ('full','here'):raise ValueError('--until is available for Full farmer only (or Farm here)')
     seconds=seconds_until_local_clock(until) if until else 0
     with guard():
         refuse_peer_controller()
         if alive('calibration-pid.json'):
             return 'Reference setup is running. Stop cancels it.'
         live, pending = alive(), starting()
+        if automatic:
+            if not load_config()['overnight_enabled']:return 'Overnight is off.'
+            if (RUN/'PAUSE').exists() or (RUN/'F8_PAUSE').exists():return 'Manual pause retained.'
+            if (RUN/'STOP').exists():
+                if (RUN/'STOP').read_text().strip()!='Supervisor stopped':return 'Manual stop retained.'
+            if live or pending:return 'Controller already active.'
         if live or pending:
             if until:return 'Already running. Pause first to set a timed stop, then Continue again.'
             if (RUN / 'PAUSE').exists() or (RUN / 'STOP').exists():
@@ -131,6 +138,7 @@ def resume(mode=None,until=None):
         try:previous_mode=json.loads((RUN/'supervisor.json').read_text()).get('mode')
         except (OSError,ValueError):previous_mode=None
         resume_rejoin_counters = mode=='rejoin' and previous_mode=='rejoin' and (RUN/'PAUSE').exists()
+        resume_log_run=automatic or (RUN/'PAUSE').exists()
         save_config({'mode':mode})
         (RUN / 'PAUSE').unlink(missing_ok=True)
         (RUN / 'STOP').unlink(missing_ok=True)
@@ -138,8 +146,8 @@ def resume(mode=None,until=None):
         args = ([sys.executable,str(ROOT/'rejoin_only.py'),'--respect-stop'] +
                 (['--resume-counters'] if resume_rejoin_counters else []) if mode=='rejoin' else
                 [sys.executable,str(ROOT/'minigame_assist.py'),'--respect-stop','--mode',mode] if mode in ('assist','spot') else
-                [sys.executable, str(ROOT / 'recovery.py'), '--seconds', str(seconds), '--rejoin',
-                 '--focus', '--resume-counters', '--respect-stop'])
+                [sys.executable, str(ROOT / 'recovery.py'), '--seconds', str(seconds)]+(['--here'] if mode=='here' else ['--rejoin'])+[
+                 '--focus', '--resume-counters', '--respect-stop']+(['--resume-log-run'] if resume_log_run else []))
         try:
             with (RUN / 'supervisor-stdout.log').open('a') as out, (RUN / 'supervisor-stderr.log').open('a') as err:
                 _starting = subprocess.Popen(args, stdout=out, stderr=err, creationflags=subprocess.CREATE_NO_WINDOW)
@@ -154,6 +162,9 @@ def resume(mode=None,until=None):
                    ('Continuing the saved run until '+until+' local time. Rejoining and equipping the rod...' if until else
                     'Continuing the saved run. Rejoining and equipping the rod...'))
         event('continue',message)
+        if load_config()['overnight_enabled'] or load_config()['overnight_auto_enable_idle']:
+            from overnight_guard import ensure_guard
+            ensure_guard()
         return message
 
 

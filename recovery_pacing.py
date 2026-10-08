@@ -3,6 +3,16 @@ import math
 import re
 
 
+def main_menu_target(rows):
+    # The diamond icon is often OCR'd as a leading middle dot in "·PLAY".
+    # Require the surrounding main-menu labels and the left-side button area.
+    labels={re.sub(r'[^a-z]','',row['text'].lower()) for row in rows}
+    if not {'customize','slots'}<=labels:return None
+    candidates=[row for row in rows if re.sub(r'[^a-z]','',row['text'].lower())=='play'
+                and row.get('score',0)>=.82 and 0<=row['center'][0]<=450 and 400<=row['center'][1]<=1000]
+    return candidates[0]['center'] if len(candidates)==1 else None
+
+
 class MenuPacer:
     def __init__(self):
         self.kind=None;self.target=None;self.since=0;self.samples=0

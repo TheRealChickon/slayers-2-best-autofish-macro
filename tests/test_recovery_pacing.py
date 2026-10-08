@@ -134,7 +134,9 @@ class RecoveryPacing(unittest.TestCase):
                 return rows[:1] if box is None or state['covered'] else rows
             return {'game_menu':[{'text':'Back to main menu','center':(800,700)}],
                 'confirm_menu':[{'text':'Go back to the main menu','center':(1000,700)}],
-                'main_menu':[{'text':'Play','center':(600,700)}],
+                'main_menu':[{'text':'·PLAY','score':.855,'center':(96,629)},
+                             {'text':'CUSTOMIZE','score':.98,'center':(138,690)},
+                             {'text':'SLOTS','score':.96,'center':(95,812)}],
                 'world_selection':[{'text':'Ouwland Last played','center':(520,680)}],
                 'loading':[]}[kind]
         def click(*args):
