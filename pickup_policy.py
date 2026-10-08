@@ -86,6 +86,16 @@ class RewardGate:
         self.confirmed.add(cycle);return True
 
 
+def waiting_decision(evidence,stable,elapsed,fresh_round=False,percent=None):
+    """A completed catch may render its loot later than the result percentage."""
+    if stable and evidence.kind in ('collect','reward'):return evidence.kind
+    empty_limit=10 if fresh_round and percent==100 else 3.5
+    if evidence.kind=='empty' and elapsed>(empty_limit if stable else max(4,empty_limit)):return 'empty'
+    if evidence.kind=='other' and elapsed>4:return 'empty'
+    if elapsed>max(7,empty_limit+1):return 'timeout'
+    return 'wait'
+
+
 class PickupGate:
     def __init__(self):
         self.previous = None

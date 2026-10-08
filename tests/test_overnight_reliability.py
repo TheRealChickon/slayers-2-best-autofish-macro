@@ -130,6 +130,17 @@ class Reliability(unittest.TestCase):
         self.assertEqual(len(watcher.pending),2)
         self.assertIn('75%',watcher.pending[0]['message'])
 
+    def test_late_loot_after_success_is_not_recast_before_prompt_appears(self):
+        from pickup_policy import Pickup,waiting_decision
+        absent=Pickup('empty');prompt=Pickup('collect','Golden Fish T Collect')
+        self.assertEqual(waiting_decision(absent,True,3.7,True,100),'wait')
+        self.assertEqual(waiting_decision(absent,True,8,True,100),'wait')
+        self.assertEqual(waiting_decision(prompt,True,8.1,True,100),'collect')
+        self.assertEqual(waiting_decision(absent,True,10.1,True,100),'empty')
+        self.assertEqual(waiting_decision(absent,True,3.7,False,100),'empty')
+        self.assertEqual(waiting_decision(absent,True,3.7,True,0),'empty')
+        self.assertEqual(waiting_decision(prompt,False,1,True,100),'wait')
+
     def test_failed_native_alert_survives_watcher_restart_until_acknowledged(self):
         watcher=Watcher(self.root,{})
         watcher.alert('test-native-failure','Minigame stalled')
