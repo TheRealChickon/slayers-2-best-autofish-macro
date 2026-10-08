@@ -120,6 +120,15 @@ class Reliability(unittest.TestCase):
         self.assertEqual(len(watcher.pending),1)
         self.assertFalse(discord.read_json(self.root/'monitor-delivery.json')['ok'])
 
+    def test_failed_native_alert_survives_watcher_restart_until_acknowledged(self):
+        watcher=Watcher(self.root,{})
+        watcher.alert('test-native-failure','Minigame stalled')
+        with patch('overnight_watch.safe_notify',side_effect=RuntimeError('app pipe unavailable')):watcher.deliver()
+        restarted=Watcher(self.root,{})
+        self.assertEqual([r['id'] for r in restarted.pending],['test-native-failure'])
+        with patch('overnight_watch.safe_notify',return_value={'ok':True}):restarted.deliver()
+        self.assertEqual(Watcher(self.root,{}).pending,[])
+
     def test_unattended_focus_cannot_override_activity_manual_pause_or_expiry(self):
         self.assertTrue(allowed(200,10,100,1000,500))
         self.assertFalse(allowed(200,10,190,1000,500))
