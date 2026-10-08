@@ -43,7 +43,7 @@ def clip(line, width):
 
 
 class Terminal:
-    pages = ('Run', 'Items', 'Logs', 'Settings')
+    pages = ('Run', 'Items', 'Logs', 'Settings', 'Predictions')
     categories = ('All', 'Catches', 'Recovery', 'Warnings')
     run_modes = ('assist', 'spot', 'full', 'here', 'rejoin')
     mode_details = {
@@ -97,6 +97,7 @@ class Terminal:
         self.notice = ''
         self.notice_until = 0
         self.hours = 8.0
+        self.prediction_hours=8.;self.prediction_at=0.;self.predictions={}
         self.height = 30
         self.last_lines = []
         self.changed_at = time.monotonic()
@@ -113,6 +114,10 @@ class Terminal:
             self.toast(text, ok)
         self.data = snapshot(self.journal)
         self.config = load_config()
+        if self.page==4 and time.monotonic()-self.prediction_at>=5:
+            from catch_predictions import load
+            self.predictions=load(data_directory(),self.data.get('log_run') or {},self.prediction_hours)
+            self.prediction_at=time.monotonic()
         self.effects.observe(self.journal.items, self.data['started'], time.time(), time.monotonic())
         from run_log import select
         log_run=select(data_directory(),self.log_run_id)
@@ -165,6 +170,10 @@ class Terminal:
                 hours = float(value)
                 if not math.isfinite(hours) or hours <= 0: raise ValueError('Enter positive hours')
                 self.hours = hours
+            elif key=='Prediction hours':
+                value=float(value)
+                if not math.isfinite(value) or not .25<=value<=168:raise ValueError('Enter 0.25–168 hours')
+                self.prediction_hours=value;self.prediction_at=0
             elif key == 'Bait left':
                 remaining = int(value)
                 if remaining < 0: raise ValueError('Bait cannot be negative')
@@ -180,6 +189,8 @@ class Terminal:
         except (ValueError, OSError) as error: self.toast(error, False)
 
     def activate(self):
+        if self.page==4:
+            self.edit('Prediction hours',self.prediction_hours);return
         if self.page == 0:
             if self.selection < len(self.run_modes):
                 mode=self.run_modes[self.selection]
@@ -267,7 +278,7 @@ class Terminal:
         if key.lower() == 'q': self.alive = False
         elif key in ('RIGHT', 'TAB'): self.switch(self.page+1)
         elif key in ('LEFT', 'BACKTAB'): self.switch(self.page-1)
-        elif key in ('1', '2', '3', '4'): self.switch(int(key)-1)
+        elif key in ('1', '2', '3', '4','5'): self.switch(int(key)-1)
         elif key == 'ENTER': self.activate()
         elif key == '/' and self.page in (1, 2): self.edit('Search', self.query)
         elif key.lower() == 'c': self.job(actions.resume)
@@ -283,9 +294,13 @@ class Terminal:
             ids=['current']+[r['id'] for r in list_runs(data_directory())]
             self.log_run_id=ids[(ids.index(self.log_run_id)+1)%len(ids)] if self.log_run_id in ids else 'current'
             self.scroll=0;self.follow=True
+        elif self.page==4 and key.lower()=='h':self.edit('Prediction hours',self.prediction_hours)
         elif key in ('UP', 'DOWN', 'PGUP', 'PGDN', 'HOME', 'END'):
             step = -1 if key == 'UP' else 1 if key == 'DOWN' else -(self.height-12) if key == 'PGUP' else self.height-12
-            if self.page == 2:
+            if self.page == 4:
+                limit=max(0,len(self.prediction_rows())-max(1,self.height-12))
+                self.scroll=0 if key=='HOME' else limit if key=='END' else max(0,min(limit,self.scroll+step))
+            elif self.page == 2:
                 rows = self.feed.filtered(self.query, self.categories[self.category])
                 limit = max(0, len(rows)-max(1, self.height-12))
                 if self.follow: self.scroll = limit
@@ -295,8 +310,36 @@ class Terminal:
                 count = len(self.run_modes)+3 if self.page == 0 else len(self.settings_keys) if self.page == 3 else len(self.item_rows())
                 self.selection = 0 if key == 'HOME' else max(0, count-1) if key == 'END' else max(0, min(count-1, self.selection+step))
 
+    def prediction_rows(self):
+        p=self.predictions
+        if not p:return ['Reading current-run catch logs…']
+        rate='unknown' if p['items_per_hour'] is None else f"{p['items_per_hour']:.1f} items/active hour"
+        rows=[tint(f"Run {p['run_id']}  ·  Forecast {p['hours']:g}h  ·  H/Enter duration",'gold'),
+              f"Worker-active {duration(p['active_seconds'])}   ·   Elapsed {duration(p['elapsed_seconds'])}",
+              f"{p['unique_catches']} unique catches / {p['quantity']} units   ·   Observed {rate}"]
+        rows.extend(tint(w,'gold') for w in p['warnings'])
+        rows+=['',tint('ITEM                     CATCHES / UNITS    /HOUR    PROJECTED    WEN/EACH','dim')]
+        for item in p['items']:
+            rate='—' if item['items_per_hour'] is None else f"{item['items_per_hour']:.1f}"
+            projected='insufficient' if item['projected_quantity'] is None else f"~{item['projected_quantity']:.1f}"
+            price='Unknown' if item['unit_price_wen'] is None else str(item['unit_price_wen'])
+            rows.append(f"{item['name'][:24]:<24} {item['catches']:>6} / {item['quantity']:<5} {rate:>8} {projected:>12} {price:>11}")
+        value='Unknown' if p['known_price_subtotal_wen'] is None else f"{p['known_price_subtotal_wen']:,} Wen"
+        projected_value='Unavailable' if p['projected_known_price_subtotal_wen'] is None else f"~{p['projected_known_price_subtotal_wen']:,.0f} Wen"
+        sold='No confirmed sales logged' if p['actual_sold_proceeds_wen'] is None else f"{p['actual_sold_proceeds_wen']:,} Wen"
+        rows+=['',f"Estimated NPC value: known-price subtotal {value}",
+               f"Projected known-price subtotal for {p['hours']:g}h: {projected_value}",
+               f"Unpriced units: {p['unknown_price_quantity']}  ·  Actual sold proceeds: {sold}",
+               tint('Worker-active time includes casting, pickup and inventory work.','dim'),
+               tint('Projections assume the observed pace continues. Prices are user-provided.','dim'),
+               tint('Crustadon/Krathulon 110 Wen is historical only; current price unknown.','dim')]
+        return rows
+
     def body(self, available):
         d = self.data
+        if self.page==4:
+            rows=self.prediction_rows();self.scroll=min(self.scroll,max(0,len(rows)-available))
+            return rows[self.scroll:self.scroll+available]
         if self.page == 0:
             if d.get('mode') == 'rejoin':
                 guard = d.get('rejoin') or {}
@@ -410,7 +453,7 @@ class Terminal:
         signal_width = min(width-4, 106)
         marker = signal_width//2 if self.config['reduced_motion'] or not active else int(time.monotonic()*7) % signal_width
         signal = ''.join('◆' if i == marker else '≈' if i % 5 == 0 else '─' for i in range(signal_width))
-        tab_names = ('RUN', 'CATCHES', 'LOGS', 'SETTINGS') if width >= 90 else ('RUN', 'CATCH', 'LOGS', 'SETUP')
+        tab_names = ('RUN', 'CATCHES', 'LOGS', 'SETTINGS','PREDICTIONS') if width >= 90 else ('RUN', 'CATCH', 'LOGS', 'SETUP','PREDICT')
         tab_gap = '    ' if width >= 90 else '  '
         lines = ['', '  '+tint('AUTOFISH  /  FIELD TERMINAL', 'gold')+'    '+tint(time.strftime('%H:%M'), 'dim'),
                  '  '+state+mode+'    '+tint(d['presence'], 'dim'), '',
@@ -432,7 +475,7 @@ class Terminal:
             help_text = ('← → pages   ↑ ↓ choose   Enter select' if self.page in (0,3)
                          else '↑ ↓ scroll   / search   Enter inspect' if self.page==1
                          else '↑ ↓ scroll   / search   F follow   G filter' if self.page==2
-                         else '↑ ↓ scroll   1–4 pages')
+                         else 'H / Enter forecast hours   1–5 pages')
         lines += ['  '+tint(help_text, 'dim'), '  '+tint('C continue   P pause   S stop   Q close view', 'dim'), '']
         return [clip(line, width-1) for line in lines[:height-1]]
 

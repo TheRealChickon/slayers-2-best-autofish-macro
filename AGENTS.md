@@ -49,3 +49,10 @@ surface with a pair of F11 toggles, under enabled Overnight/autofocus, foregroun
 replace owned capture resources and reacquire stable coordinates afterwards.
 Limit to two refreshes per 90 minutes with 60 seconds between attempts. Never
 use this repair to issue monitor power commands or restart/rejoin Farm here.
+
+Catch predictions are read-only calculations from this run's logs. Deduplicate
+stable catch/cycle IDs, merge overlapping worker activity, exclude recorded
+pauses/recovery, and bound orphan intervals by their last event with a warning.
+Do not produce forecasts when activity records are incomplete or samples are
+small. Unknown prices stay unknown; distinguish NPC estimates from confirmed
+sale proceeds. Never restart the farmer merely to expose the Predictions tab.

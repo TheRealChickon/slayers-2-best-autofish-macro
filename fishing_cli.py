@@ -105,6 +105,10 @@ def parser(prog='autofish'):
     logs.add_argument('--run', default='current', help='Current run or ID from autofish runs')
     runs=sub.add_parser('runs',help='List archived runs independently of lifetime counters')
     runs.add_argument('--json',action='store_true')
+    predictions=sub.add_parser('predictions',help='Read-only current or archived run catch projections')
+    predictions.add_argument('--hours',type=float,default=8)
+    predictions.add_argument('--run',default='current')
+    predictions.add_argument('--json',action='store_true')
     night=sub.add_parser('overnight',help='Persistent opt-in unattended farming settings')
     night.add_argument('operation',choices=('status','on','off'),nargs='?',default='status')
     night.add_argument('--autofocus',choices=('on','off'))
@@ -135,7 +139,7 @@ def parser(prog='autofish'):
     webhook=sub.add_parser('webhook', help='Set or inspect the hourly Discord webhook')
     webhook.add_argument('operation', choices=('status','set','verify','remove'), nargs='?', default='status')
     tui=sub.add_parser('tui', help='Keyboard interface with live logs and settings')
-    tui.add_argument('--page', choices=('run','items','log','setup'), default='run')
+    tui.add_argument('--page', choices=('run','items','log','setup','predictions'), default='run')
     sub.add_parser('shell', help='Interactive command prompt; does not start fishing')
     from control_api import COMMANDS
     api = sub.add_parser('api', help='Versioned JSON interface for local integrations')
@@ -191,6 +195,17 @@ def stream_logs(args, journal, colors):
 
 def execute(args, colors=False):
     command = args.command or 'status'
+    if command=='predictions':
+        from app_config import data_directory
+        from run_log import select
+        from catch_predictions import load
+        p=load(data_directory(),select(data_directory(),args.run),args.hours)
+        if args.json:print(json.dumps(p,indent=2))
+        else:
+            from terminal_app import Terminal,ANSI
+            view=Terminal.__new__(Terminal);view.predictions=p
+            print('\n'.join(ANSI.sub('',line) for line in view.prediction_rows()))
+        return 0
     if command=='overnight':
         from app_config import load_config,save_config
         changes={}
@@ -284,7 +299,7 @@ def execute(args, colors=False):
         return 0
     if command == 'tui':
         from terminal_app import Terminal
-        client=Terminal();client.switch(('run','items','log','setup').index(args.page))
+        client=Terminal();client.switch(('run','items','log','setup','predictions').index(args.page))
         return client.run()
     if command == 'shell':
         return shell(colors)
