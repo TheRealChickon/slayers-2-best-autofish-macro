@@ -355,6 +355,11 @@ def shell(colors):
 
 
 def main(argv=None, prog='autofish'):
+    # Redirected Windows output otherwise uses an ANSI code page and aborts
+    # a full archived log on arrows/item names that it cannot encode.
+    if os.name=='nt':
+        for stream in (sys.stdout,sys.stderr):
+            if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='replace')
     args = parser(prog).parse_args(argv)
     colors = enable_color(args.color) and not args.no_color
     if colors and args.command in ('watch', 'shell', 'tui'):
