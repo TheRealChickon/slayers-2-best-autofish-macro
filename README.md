@@ -340,6 +340,67 @@ To remove the app, stop it first, close both views, delete its desktop shortcuts
 
 ## Development
 
+Overnight reliability update: native 2560×1440 and normal widescreen window borders
+are supported. Reconnect waits for a stable client rectangle. Twelve seconds of
+unchanged minigame markers triggers a typed recovery with a current screenshot;
+moving rounds retain a separate 120-second upper bound. Pickup checks use a small
+crop first and a wide fallback. A clear adjacent T and Collect can start pickup
+immediately; uncertain prompts still require repeated evidence.
+
+The Logs view shows only the current run. Press **R** on that page to
+cycle through saved runs. `autofish runs` lists IDs; `autofish logs --activity -f`
+follows this run and `autofish logs --activity --run ID --all` reads a whole saved
+run. Ending a run saves `runs/ID/run.json`, `events.jsonl` and `events.log` in the
+configured data directory. Pause/continue and worker recovery preserve the run;
+a new start after Stop creates a new log run. Lifetime counters stay separate.
+
+Hourly Discord reports use the current run and attach its interval's JSONL log.
+Stopping sends a final report with that run's log (gzip for large logs). The
+reporter handles empty HTTP 204 responses and rate-limit retry timing; reporting
+failures never stop game input. The webhook remains encrypted locally.
+
+An optional `overnight_watch.py` runs without a window, checks saved state every
+three seconds and sends authorized errors to an existing Codex chat through the
+desktop app's MCP tools. Its local `monitor.local.json` supplies Node/MCP paths,
+chat ID and expiry; it does not contain a webhook URL. It never controls Roblox,
+clears STOP/PAUSE or starts a controller. Monitor status and delivery results are
+saved separately. Codex's 30-minute heartbeat is configured in the app.
+
+Use Settings → Overnight or `autofish overnight on` for persistent unattended
+intent. Physical input yields temporarily; it does not disable the setting.
+Only the verified Roblox Player receives input. Focus takeover requires the
+configured grace (5–300 seconds), physical inactivity, and no recent competing
+injected input. The observer keeps event timestamps only; bot input is tagged
+and never counted as physical activity. `autofish overnight off` disarms both
+automatic restart and future idle activation. Stop disarms them too; explicit
+Pause/F8 stays paused until Continue. Keyboard Stop applies to physical keys
+inside Roblox, so other automated applications cannot silently stop the bot.
+
+Optional `--auto-idle on --idle-minutes 10` can enable Overnight after physical
+inactivity with Player open and autofocus on. This has no clock/night condition.
+An intent guard performs bounded restarts for unexpected exits, with at most
+three restarts in 90 minutes; manual stops, challenges and exhausted local repair
+require the user. Turning the tag off prevents every automatic restart.
+
+Farm here uses the full cast/reel/collect worker in the current server/location
+and does not rejoin or restore a different saved scene at startup. Window/focus,
+capture, pickup and minigame faults are repaired locally with bounded attempts.
+Only positive disconnect/client-loss evidence permits rejoining. Full farmer
+retains its separate spawn/rejoin startup. Fish here remains the F8-controlled
+pointer mode for compatibility.
+
+Capture sessions close and replace failed GDI contexts. Blank white/black game
+frames are unavailable visual evidence, never a successful minigame or a
+disconnect. Capture waits release input and retry locally; the bot does not
+turn monitors on. The process requests system wakefulness without a display
+power request. A stale Windows protocol association falls back to an existing
+Player executable without modifying the registry or credentials.
+Persistent white frames can refresh the Player's presentation surface with F11
+after ten seconds of failed captures, only with Overnight enabled, Player already
+foreground, physical inactivity and no manual hold. This releases all fishing
+input and replaces the capture source; it never rejoins or changes monitor power.
+Refreshes are limited to two in 90 minutes, at least 60 seconds apart.
+
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe health_check.py

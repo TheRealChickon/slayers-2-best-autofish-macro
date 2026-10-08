@@ -60,10 +60,11 @@ class LiveFeed:
         self.version = 0
         self.state = None
 
-    def update(self, started, state=None):
-        if started != self.started:
+    def update(self, started, state=None, ended=None):
+        if (started,ended) != (self.started,getattr(self,'ended',None)):
             self.__init__()
             self.started = started
+            self.ended = ended
         changed = False
         paths = sorted(RUN.glob('events-*.jsonl')) + [RUN/'recovery.jsonl', RUN/'controls.jsonl']
         for path in paths:
@@ -81,6 +82,7 @@ class LiveFeed:
                     try:row = json.loads(line)
                     except ValueError:continue
                     if row.get('at', 0) < (started or 0):continue
+                    if ended is not None and row.get('at',0)>ended:continue
                     kind = row.get('event', '')
                     # Screen/OCR transitions are diagnostics, not new recoveries.
                     # Keep them in raw logs; show actual actions and outcomes here.
@@ -98,7 +100,7 @@ class LiveFeed:
             changed = True
         if changed:
             self.rows.sort(key=lambda row:row['at'])
-            self.rows = self.rows[-4000:]
+            if ended is None:self.rows = self.rows[-4000:]
             self.version += 1
         return changed
 

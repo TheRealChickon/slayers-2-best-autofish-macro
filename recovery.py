@@ -8,10 +8,10 @@ from pynput.keyboard import Listener, Key
 from fishing_assistant import ROOT, RUN, USER, Input, find_window, rectangle,move_pointer
 from metrics import new_run, write as write_metrics
 import presence_watch
-from app_config import load_config
+from app_config import load_config,save_config
 from rod_detector import locate_rod, selected_rod, unselected_rod
 from screen_space import ScreenSpace
-from recovery_pacing import MenuPacer, private_join_target
+from recovery_pacing import MenuPacer, private_join_target,main_menu_target
 from faults import FaultRecorder, FishingFault, RecoveryPolicy, reason_code
 from performance import PerformanceRecorder
 from metrics import read as read_metrics
@@ -19,8 +19,26 @@ import landmarks
 from title_manager import TitleManager
 from discord_service import DiscordReporter
 from full_pause import InputGate, InputPaused, F8Toggle, PAUSE_FILE
+from fishing_vision import ui_visible
+from farm_policy import HereRecovery,startup_rejoin
+from capture_session import CaptureSession
+from display_repair import DisplayRepair
 
 LAUNCH_URL='roblox://placeId='+str(load_config()['place_id'])
+
+
+def launch_game(url,known_exe=None):
+    try:os.startfile(url);return
+    except OSError:
+        # Updates can leave the per-user URI association pointing at a
+        # removed version. Use the already installed/running Player executable
+        # directly; do not edit Windows associations or account credentials.
+        if not known_exe or not Path(known_exe).is_file():
+            for p in psutil.process_iter(['name','exe']):
+                if (p.info.get('name') or '').lower()=='robloxplayerbeta.exe' and p.info.get('exe'):
+                    known_exe=p.info['exe'];break
+        if not known_exe or not Path(known_exe).is_file():raise RecoveryError('Roblox Player launcher unavailable; user action required')
+        subprocess.Popen([known_exe,url],creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
 
 
 def confirm_menu_button_visible(im):
@@ -37,11 +55,12 @@ class RecoveryError(Exception):pass
 
 class Recovery:
     def __init__(self):
-        self.inp=Input();self.hwnd=None;self.rect=None;self.ocr=RapidOCR();self.sct=mss.MSS();self.shots=0
+        self.inp=Input();self.hwnd=None;self.rect=None;self.ocr=RapidOCR();self.sct=CaptureSession(self.event);self.shots=0
         self.inp.gate=InputGate(self.inp,RUN,USER);self.inp.gate.start()
         self.stop=RUN/'STOP';self.log=RUN/'recovery.jsonl';self.last_action='';self.last_action_at=0;self.restarts=0;self.progress=lambda **kw:None
         self.diagnostics=FaultRecorder(RUN,'recovery-'+time.strftime('%Y%m%d-%H%M%S'))
         self.last_screen_kind=''
+        self.exit_template=cv2.imread(str(ROOT/'assets'/'exit.png'))
     def event(self,event,**kw):
         row={'at':time.time(),'event':event,**kw}
         with self.log.open('a') as f:f.write(json.dumps(row)+'\n')
@@ -61,9 +80,21 @@ class Recovery:
             except win32gui.error:pass  # Windows may refuse background focus; guard waits safely.
             self.sleep(.4,focus=False)
         if win32gui.IsIconic(self.hwnd):raise RecoveryError('Roblox lost focus')
-        self.rect=rectangle(self.hwnd)
-        try:self.screen=ScreenSpace(self.rect)
-        except ValueError as error:raise RecoveryError('Roblox window needs adjustment: '+str(error))
+        # Fullscreen/menu transitions can report a transient client shape.
+        # Wait for a valid, stable rectangle with input released.
+        self.inp.release();last_rect=None;stable=0;until=time.monotonic()+8
+        while time.monotonic()<until:
+            self.check_stop();rect=rectangle(self.hwnd)
+            try:screen=ScreenSpace(rect)
+            except ValueError:
+                stable=0;self.sleep(.2,focus=False);continue
+            stable=stable+1 if rect==last_rect else 1;last_rect=rect
+            if stable>=3:
+                self.rect=rect;self.screen=screen
+                self.event('client_ready',width=screen.actual_width,height=screen.actual_height)
+                return
+            self.sleep(.2,focus=False)
+        raise FishingFault('window','Roblox client is still changing; retrying safely',rect=last_rect)
     def guard(self):
         self.check_stop()
         self.inp.gate.check()
@@ -89,6 +120,9 @@ class Recovery:
             self.inp.gate.interrupted.set();raise InputPaused('paused_focus') from error
     def click(self,x,y,hold=.18):
         self.move(x,y);self.sleep(.30);self.move(x+1,y);self.sleep(.15);self.move(x,y);self.sleep(.30)
+        # Menu transitions can warp the OS pointer back to screen centre
+        # during the hover delay. Reposition immediately before pressing.
+        self.move(x,y)
         self.inp.hold(True)
         try:self.sleep(hold)
         finally:self.inp.hold(False)
@@ -107,6 +141,17 @@ class Recovery:
         self.key('M');self.sleep(.45)  # world -> game menu
         self.move(350,980)
         self.event('camera_cursor_released')
+    def refresh_display(self):
+        # F11 refreshes the Player's own presentation surface. It does not
+        # rejoin, alter Windows settings or issue a monitor power command.
+        self.inp.release();self.guard()
+        if find_window()!=self.hwnd:raise RecoveryError('Roblox window changed')
+        code=0x7A;scan=USER.MapVirtualKeyW(code,0)
+        USER.keybd_event(code,scan,0,0)
+        try:self.sleep(.03,focus=False)
+        finally:USER.keybd_event(code,scan,2,0)
+        self.sct.reset();self.sleep(1,focus=False);self.select()
+        self.event('display_surface_refreshed',width=self.screen.actual_width,height=self.screen.actual_height)
     def capture(self,tag=None):
         self.guard();im=self.screen.capture(self.sct)
         if tag:
@@ -129,6 +174,9 @@ class Recovery:
         self.inp.release();self.check_stop()
         while (RUN/PAUSE_FILE).exists():self.sleep(.1,focus=False)
         if self.restarts>=3:raise RecoveryError('Three game restart attempts failed')
+        known_exe=None
+        if self.hwnd and win32gui.IsWindow(self.hwnd):
+            known_exe=psutil.Process(win32process.GetWindowThreadProcessId(self.hwnd)[1]).exe()
         if restart and self.hwnd and win32gui.IsWindow(self.hwnd):
             # Restart only the selected Roblox game client, as requested.
             pid=win32process.GetWindowThreadProcessId(self.hwnd)[1]
@@ -138,7 +186,7 @@ class Recovery:
             try:proc.wait(8)
             except psutil.TimeoutExpired:raise RecoveryError('Roblox did not close for restart')
         self.restarts+=1;self.event('launching_game',attempt=self.restarts)
-        os.startfile(LAUNCH_URL);deadline=time.monotonic()+100
+        launch_game(LAUNCH_URL,known_exe);deadline=time.monotonic()+100
         while time.monotonic()<deadline:
             self.sleep(1,focus=False)
             try:self.select(focus=True);return
@@ -201,7 +249,7 @@ class Recovery:
         finally:self.inp.hold(False)
         self.event('private_join_released',seconds=round(time.monotonic()-started,2),reason=reason)
         return True
-    def recover(self,force_menu=False,equip_rod=True):
+    def recover(self,force_menu=False,equip_rod=True,allow_rejoin=True):
         self.inp.release();self.event('recovery_started',force_menu=force_menu)
         try:self.select()
         except RuntimeError:self.launch()
@@ -209,10 +257,15 @@ class Recovery:
         while time.monotonic()<deadline:
             self.guard();self.progress(detail=last_class or 'inspecting');im=self.capture()
             rows=self.text(im);text=' '.join(r['text'].lower() for r in rows)
+            play_target=main_menu_target(rows)
             self.guard();now=time.monotonic();target=None
             skip=[r for r in rows if re.sub(r'[^a-z]','',r['text'].lower())=='skiploading']
             cancel=[r for r in rows if r['text'].strip().lower()=='cancel']
-            if any(term in text for term in ['disconnected','connection lost','connection error','failed to connect','same account launched','error code:']):
+            if any(term in text for term in ('banned','captcha','security challenge','verify you are human')):
+                raise FishingFault('user_required','Roblox requires user action; automatic recovery suspended')
+            if isinstance(im,np.ndarray) and getattr(self,'exit_template',None) is not None and ui_visible(im[1360:1430,1190:1370],self.exit_template):
+                kind='minigame';target=(1280,1395)
+            elif any(term in text for term in ['disconnected','connection lost','connection error','failed to connect','same account launched','error code:']):
                 kind='disconnect'
                 reconnect=[r for r in rows if re.fullmatch(r'(reconnect|rejoin|retry)',r['text'].strip(),re.I)]
                 target=reconnect[0]['center'] if len(reconnect)==1 else None
@@ -230,8 +283,8 @@ class Recovery:
                 target=private_join_target(self.text(im,(820,1190,920,250)))
             elif any('ouwlan' in r['text'].lower() for r in rows) and 'last played' in text:
                 kind='world_selection';target=(520,680)
-            elif any(r['text'].strip().lower()=='play' for r in rows):
-                kind='main_menu';target=next(r['center'] for r in rows if r['text'].strip().lower()=='play')
+            elif play_target is not None:
+                kind='main_menu';target=play_target
             elif self.world_visible(im) and ('mistfall' in text.replace(' ','') or re.search(r'lv\.?\s*\d+',text)):
                 kind='world'
             else:kind='loading'
@@ -239,11 +292,21 @@ class Recovery:
             pacer.observe(kind,target,now)
             if kind!=last_class:self.event('screen',kind=kind);last_class=kind
             if kind=='disconnect' and pacer.ready(kind,now):
+                allow_rejoin=True  # Positive visible evidence, including Farm here.
                 self.capture(kind);self.event('disconnect_observed',text=text[:600])
                 if target:
                     self.click(*target);pacer.acted(kind,time.monotonic(),18)
                 else:
                     self.launch(restart=True);pacer.acted(kind,time.monotonic(),12);deadline=time.monotonic()+180
+            elif kind=='minigame' and pacer.ready(kind,now):
+                # End an interrupted/stalled minigame locally; changing server
+                # is unnecessary. Every click still uses the normal input gate.
+                self.click(*target);self.event('local_minigame_cancelled');pacer.acted(kind,time.monotonic(),3)
+            elif kind in ('game_menu','confirm_menu') and not allow_rejoin:
+                if pacer.ready(kind,now):
+                    self.key('M');self.event('local_menu_closed');pacer.acted(kind,time.monotonic(),2)
+            elif kind in ('main_menu','world_selection','private_join') and not allow_rejoin:
+                raise FishingFault('user_required','Farm here needs an existing game world; startup does not join a server')
             elif kind=='world':
                 if force_menu:
                     if pacer.ready('open_menu',now):
@@ -266,6 +329,7 @@ class Recovery:
                     join_attempts+=1;pacer.joined(time.monotonic(),join_attempts);force_menu=False
             elif target is not None and kind!='disconnect' and pacer.ready(kind,now):
                 self.capture(kind);self.click(*target)
+                if kind=='main_menu':self.move(350,980)  # Uncover PLAY for a fresh retry observation.
                 action,delay={'skip_loading':('skip_optional_loading',8),'vendor_dialog':('closed_vendor_dialog',1),
                     'confirm_menu':('confirm_menu',4),'game_menu':('back_to_main_menu',1),
                     'world_selection':('select_ouwland',1),'main_menu':('play',1)}[kind]
@@ -277,7 +341,11 @@ class Recovery:
 
 def main():
     import argparse
-    parser=argparse.ArgumentParser();parser.add_argument('--seconds',type=int,default=0);parser.add_argument('--rejoin',action='store_true');parser.add_argument('--focus',action='store_true');parser.add_argument('--restart',action='store_true');parser.add_argument('--bait-stock',type=int,default=-1);parser.add_argument('--resume-counters',action='store_true');parser.add_argument('--respect-stop',action='store_true');a=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--seconds',type=int,default=0);parser.add_argument('--rejoin',action='store_true');parser.add_argument('--focus',action='store_true');parser.add_argument('--restart',action='store_true');parser.add_argument('--bait-stock',type=int,default=-1);parser.add_argument('--resume-counters',action='store_true');parser.add_argument('--respect-stop',action='store_true')
+    parser.add_argument('--resume-log-run',action='store_true')
+    parser.add_argument('--unattended-until',type=float,default=0,help='Authorized overnight focus recovery expiry (epoch seconds)')
+    parser.add_argument('--here',action='store_true',help='Keep current server/location; rejoin only after positive disconnect evidence')
+    a=parser.parse_args()
     RUN.mkdir(parents=True,exist_ok=True)
     lock=RUN/'supervisor-pid.json'
     if lock.exists():
@@ -288,39 +356,83 @@ def main():
     if stop.exists():
         if a.respect_stop:raise UserStop('Start cancelled by stop request')
         stop.unlink()
+    resume_log_run=a.resume_log_run or (RUN/'PAUSE').exists()
     (RUN/'PAUSE').unlink(missing_ok=True)
     (RUN/'RECOVER').unlink(missing_ok=True)
     if not a.resume_counters:
         new_run()
         write_metrics('bait.json',{'starting_stock':a.bait_stock if a.bait_stock>=0 else None,'bait_per_hook':1,'note':'One bait per hook. Fishing continues without bait.'})
-    driver=Recovery();deadline=time.monotonic()+a.seconds if a.seconds>0 else float('inf');recoveries=0;last_error='';child=None;exit_code=0;started=time.time()
-    policy=RecoveryPolicy();performance=PerformanceRecorder(read_metrics('totals.json').get('started'))
+    driver=Recovery();deadline=time.monotonic()+a.seconds if a.seconds>0 else float('inf');recoveries=0;last_error='';child=None;exit_code=0;failure_code='';started=time.time()
+    from run_log import begin, finish
+    log_run=begin(RUN,resume_log_run)
+    from unattended_focus import PhysicalActivity,allowed as focus_allowed
+    physical=PhysicalActivity()
+    physical.start()
+    focus_paused_at=None;focus_retry_at=0
+    def unattended_focus(stage):
+        nonlocal focus_paused_at,focus_retry_at
+        now=time.monotonic()
+        if stage!='paused_focus':focus_paused_at=None;return
+        focus_paused_at=focus_paused_at or now
+        manual=stop.exists() or (RUN/'PAUSE').exists() or (RUN/PAUSE_FILE).exists()
+        settings=load_config()
+        enabled=settings['overnight_enabled'] and settings['overnight_autofocus']
+        expires=a.unattended_until if a.unattended_until else float('inf')
+        if not enabled:expires=0
+        if not focus_allowed(now,focus_paused_at,physical.last,expires,time.time(),manual,
+                             settings['overnight_focus_grace_seconds'],physical.last_other_input) or now<focus_retry_at:return
+        focus_retry_at=now+60
+        h=driver.hwnd
+        if h and win32gui.IsWindow(h):
+            driver.inp.release()
+            try:
+                if win32gui.IsIconic(h):win32gui.ShowWindow(h,9)
+                win32gui.SetForegroundWindow(h)
+                if win32gui.GetForegroundWindow()==h:
+                    if time.monotonic()-physical.last>=45 and not (stop.exists() or (RUN/'PAUSE').exists() or (RUN/PAUSE_FILE).exists()):
+                        # A pointer left on the second screen would otherwise
+                        # keep the worker's normal safety gate paused forever.
+                        screen=ScreenSpace(rectangle(h))
+                        if load_config()['camera_mode']!='first_person':move_pointer(*screen.point(*load_config()['cast_point']))
+                    driver.event('unattended_focus_restored',physical_idle_seconds=round(now-physical.last,1))
+                    focus_paused_at=None
+                else:driver.event('unattended_focus_wait',message='Windows refused focus; input remains paused')
+            except (win32gui.error,RuntimeError,ValueError):
+                driver.inp.release();driver.event('unattended_focus_wait',message='Focus or client changed; input remains paused')
+    driver.event('run_started',run_id=log_run['id'],resumed=resume_log_run)
+    policy=RecoveryPolicy();here_policy=HereRecovery();here_disconnect=False;here_retries=0;display_repair=DisplayRepair()
+    performance=PerformanceRecorder(read_metrics('totals.json').get('started'))
     titles_checked=False
     camera_unlock_attempts=0
     # Temporary: restored when this process exits. No persistent Windows setting is changed.
-    ctypes.windll.kernel32.SetThreadExecutionState(0x80000003)
+    ctypes.windll.kernel32.SetThreadExecutionState(0x80000001)
     def paused_changed(paused):
         driver.inp.gate.poll()
         driver.event('f8_paused' if paused else 'f8_resumed')
     toggle=F8Toggle(RUN,lambda:driver.hwnd,paused_changed)
     def emergency_key(key):
         if key==Key.f8:toggle.press()
-        if key in (Key.esc,Key.f9,Key.f12):stop.write_text('Stopped by physical hotkey')
+        if key in (Key.esc,Key.f9,Key.f12) and driver.hwnd and win32gui.GetForegroundWindow()==driver.hwnd:
+            stop.write_text('Stopped by physical hotkey')
+            save_config({'overnight_enabled':False,'overnight_auto_enable_idle':False})
     def released_key(key):
         if key==Key.f8:toggle.release()
-    listener=Listener(on_press=emergency_key,on_release=released_key);listener.start()
+    listener=Listener(on_press=emergency_key,on_release=released_key,win32_event_filter=lambda message,data:not data.flags&0x10);listener.start()
     presence_stop=presence_watch.start()
     discord_reporter=DiscordReporter(RUN);discord_reporter.start()
     def status(stage,**kw):
         if (RUN/PAUSE_FILE).exists():stage='paused_manual'
         performance.tick(stage,read_metrics('status.json'),read_metrics('totals.json'))
-        write_metrics('supervisor.json',{'running':True,'pid':os.getpid(),'updated':time.time(),'started':started,'stage':stage,'mode':'full','manual_paused':(RUN/PAUSE_FILE).exists(),'recoveries':max(0,recoveries-1),'last_error':last_error,'runs_until_stopped':a.seconds<=0,**kw})
+        write_metrics('supervisor.json',{'running':True,'pid':os.getpid(),'updated':time.time(),'started':started,'stage':stage,'mode':'here' if a.here else 'full','manual_paused':(RUN/PAUSE_FILE).exists(),'recoveries':max(0,recoveries-1),'last_error':last_error,'runs_until_stopped':a.seconds<=0,'unattended_until':a.unattended_until,'overnight_enabled':load_config()['overnight_enabled'],'physical_idle_seconds':round(time.monotonic()-physical.last,1),**kw})
+        unattended_focus(stage)
     driver.progress=lambda **kw:status('recovering',**kw)
     try:
         try:driver.select(focus=a.focus and not (RUN/PAUSE_FILE).exists())
-        except RuntimeError:driver.launch()
+        except RuntimeError as error:
+            if getattr(error,'code',reason_code(str(error))) not in ('client_lost','disconnect'):raise
+            driver.launch()
         if a.restart:driver.launch(restart=True)
-        force=a.rejoin
+        force=startup_rejoin('here' if a.here else 'full',a.rejoin)
         while time.monotonic()<deadline:
             while driver.inp.gate.reason() or not driver.inp.gate.acknowledge():
                 driver.check_stop();driver.inp.release();status(driver.inp.gate.reason() or 'paused_focus');time.sleep(.1)
@@ -328,8 +440,9 @@ def main():
             if time.monotonic()>=deadline:break
             status('recovering')
             try:
-                driver.recover(force_menu=force)
-                target_heading=load_config()['camera_heading']
+                driver.recover(force_menu=force,allow_rejoin=not a.here or here_disconnect)
+                here_disconnect=False
+                target_heading=None if a.here else load_config()['camera_heading']
                 if target_heading is not None and landmarks.profile() is None:
                     landmarks.restore_heading(driver,target_heading)
                     actual_heading=landmarks.heading(driver,driver.capture())
@@ -338,7 +451,8 @@ def main():
                         raise FishingFault('alignment','Saved fishing heading could not be restored',
                             target=target_heading,actual=actual_heading)
                     driver.event('saved_heading_ready',heading=round(actual_heading,1))
-                landmarks.align(driver)
+                if not a.here:landmarks.align(driver)
+                display_repair.progress()
                 if load_config()['auto_fishing_titles'] and not titles_checked:
                     try:TitleManager(driver).run()
                     except ValueError as title_error:
@@ -374,11 +488,29 @@ def main():
                 if 'window needs' in last_error:raise
                 code=getattr(ex,'code',reason_code(last_error))
                 driver.diagnostics.save(code,last_error,**getattr(ex,'details',{}))
+                if code=='capture_unavailable':
+                    settings=load_config();now=time.monotonic()
+                    manual=any((RUN/name).exists() for name in ('STOP','PAUSE','F8_PAUSE'))
+                    ownership_idle=physical.last_other_input is None or now-physical.last_other_input>=settings['overnight_focus_grace_seconds']
+                    if display_repair.allowed(now,getattr(ex,'details',{}).get('blank_color')=='white',
+                            settings['overnight_enabled'] and settings['overnight_autofocus'],now-physical.last,
+                            driver.hwnd==win32gui.GetForegroundWindow(),manual,ownership_idle):
+                        display_repair.attempted(now)
+                        driver.event('display_surface_refresh_started',attempt=len(display_repair.attempts))
+                        try:driver.refresh_display()
+                        except (InputPaused,RuntimeError,RecoveryError) as display_error:
+                            driver.inp.release();driver.event('display_surface_refresh_wait',reason=str(display_error))
+                    status('capture_wait');driver.sleep(3,focus=False);force=False;continue
                 if code=='alignment':
                     # A local reference must never make the bot wander or enter
                     # a relaunch storm. Rejoin once, then wait for adjustment.
                     if force:raise
                     force=True;continue
+                if code=='user_required':raise
+                if a.here:
+                    here_retries+=1
+                    if here_retries>3:raise FishingFault('user_required','Farm here local recovery exhausted; current server retained')
+                    status('retry_wait');driver.sleep(3,focus=False);force=False;continue
                 status('restarting')
                 try:driver.launch(restart=bool(driver.hwnd and win32gui.IsWindow(driver.hwnd)))
                 except (RuntimeError,RecoveryError) as restart_error:
@@ -394,6 +526,7 @@ def main():
             while child.poll() is None:
                 driver.check_stop()
                 worker=read_metrics('status.json')
+                if a.here and worker.get('updated',0)>=worker_started and worker.get('reward_banners_observed',0)>0:here_policy.progress();here_retries=0
                 stage='paused_manual' if (RUN/PAUSE_FILE).exists() else 'paused_focus' if worker.get('updated',0)>=worker_started and worker.get('stage')=='paused_focus' else 'fishing'
                 status(stage,worker_pid=child.pid);time.sleep(.1)
             child=None
@@ -405,11 +538,15 @@ def main():
             if reason.startswith('Pickup prompt still present'):
                 driver.event('pickup_exhausted_rejoining',reason=reason)
             code=child_status.get('failure_code') or reason_code(reason)
-            action=policy.choose(code,time.monotonic(),landmarks.profile() is not None)
+            action=here_policy.choose(code) if a.here else policy.choose(code,time.monotonic(),landmarks.profile() is not None)
             driver.event('recovery_decision',code=code,action=action)
             if action=='stop_unstable_position':
                 raise FishingFault('unstable_fishing_position',
                     'Fishing position failed after three separate rejoins within 90 minutes; check that the saved spawn is safely back from the water edge')
+            if action in ('stop','attention'):
+                raise FishingFault('user_required','Local recovery needs user attention; automatic restart suspended')
+            if a.here:
+                here_disconnect=action=='rejoin';force=False
             if action=='local':
                 force=False;driver.event('local_repair',reason=reason)
             elif action=='wait_focus' and win32gui.IsWindow(driver.hwnd):
@@ -419,7 +556,7 @@ def main():
                 force=False
             driver.sleep(1,focus=False)
     except BaseException as ex:
-        last_error=str(ex);exit_code=0 if isinstance(ex,UserStop) else 1;driver.event('supervisor_stopped',reason=last_error)
+        last_error=str(ex);failure_code=getattr(ex,'code',reason_code(last_error));exit_code=0 if isinstance(ex,UserStop) else 1;driver.event('supervisor_stopped',reason=last_error)
         if not isinstance(ex,UserStop):
             try:
                 try:driver.capture('failure')
@@ -443,11 +580,21 @@ def main():
                 except psutil.NoSuchProcess:pass
                 USER.mouse_event(4,0,0,0,0);USER.keybd_event(ord('T'),USER.MapVirtualKeyW(ord('T'),0),2,0)
         driver.inp.gate.close()
+        driver.sct.close()
         listener.stop()
         presence_stop.set()
+        physical.stop()
         discord_reporter.stop()
         ctypes.windll.kernel32.SetThreadExecutionState(0x80000000)
-        (RUN/'supervisor.json').write_text(json.dumps({'running':False,'pid':os.getpid(),'updated':time.time(),'started':started,'stage':'stopped','recoveries':max(0,recoveries-1),'reason':last_error or 'session_limit'},indent=2))
+        write_metrics('supervisor.json',{'running':False,'pid':os.getpid(),'updated':time.time(),'started':started,'stage':'stopped','mode':'here' if a.here else 'full','recoveries':max(0,recoveries-1),'reason':last_error or 'session_limit','failure_code':failure_code or 'session_limit'})
+        finish(RUN,last_error or 'session_limit')
+        if not (RUN/'PAUSE').exists():
+            try:
+                from discord_hourly import send_run_end
+                send_run_end(RUN)
+            except Exception as error:
+                from discord_hourly import atomic_json
+                atomic_json(RUN/'discord-final-report.json',{'sent':False,'at':time.time(),'run_id':log_run['id'],'error':str(error)})
     return exit_code
 
 if __name__=='__main__':sys.exit(main())

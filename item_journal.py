@@ -9,6 +9,7 @@ class Journal:
     def __init__(self):
         self.started=None;self.offsets={};self.prompts={};self.cycles={};self.items=[];self.activity=[];self.counts=collections.Counter();self.launches=0;self.joins=0;self.version=0;self.by_id={};self.corrections={}
         self.join_pending=False
+        self.seen_banners=set()
 
     def update(self,started):
         if started!=self.started:
@@ -32,6 +33,9 @@ class Journal:
                     cycle=(key,row.get('cycle',self.cycles.get(key)))
                     if kind=='pickup_hold':self.prompts[cycle]=row.get('text','')
                     if kind=='reward_observed' and is_reward_banner(row.get('text','')):
+                        banner=(key,row.get('cycle'),re.sub(r'[^a-z0-9]','',row.get('text','').casefold()))
+                        if row.get('cycle') is not None and banner in self.seen_banners:continue
+                        self.seen_banners.add(banner)
                         raw=row.get('text','');m=re.search(r'\bx\s*(\d+)\b',raw,re.I);qty=int(m[1]) if m else 1
                         item={'at':row['at'],'item':item_name(raw,self.prompts.get(cycle,'')),'quantity':qty,'raw':raw,'session':path.stem.removeprefix('events-'),'reward_id':row.get('reward_id')}
                         self.items.append(item);self.counts[item['item']]+=qty;changed=True

@@ -70,15 +70,32 @@ def classify_toast(rows):
     return Pickup('reward', f"{name['text'].strip()} X{quantity}", tuple(name['center']))
 
 
+def clear_collect(rows,after_minigame=False):
+    """An explicit T beside a strong Collect label supplies two visual cues."""
+    if classify(rows).kind!='collect':return False
+    keys=[r for r in rows if r.get('score',0)>=.90 and r['text'].strip().upper()=='T']
+    labels=[r for r in rows if r.get('score',0)>=.94 and re.fullmatch('collect',r['text'].strip(),re.I)]
+    return (len(keys)==len(labels)==1 and math.dist(keys[0]['center'],labels[0]['center'])<150
+            or after_minigame and len(labels)==1 and labels[0]['score']>=.97)
+
+
+class RewardGate:
+    def __init__(self):self.confirmed=set()
+    def accept(self,cycle):
+        if cycle in self.confirmed:return False
+        self.confirmed.add(cycle);return True
+
+
 class PickupGate:
     def __init__(self):
         self.previous = None
         self.at = 0
         self.count = 0
 
-    def observe(self, evidence, now):
+    def observe(self, evidence, now, scan_seconds=0):
         same = (self.previous is not None and self.previous.kind == evidence.kind
-                and math.dist(self.previous.center, evidence.center) < 180 and now-self.at < 1.5)
+                and math.dist(self.previous.center, evidence.center) < 180
+                and now-self.at < max(1.5, scan_seconds+.75))
         self.count = self.count+1 if same else 1
         self.previous, self.at = evidence, now
         return self.count >= 2

@@ -9,20 +9,23 @@ from app_config import load_config
 from rod_detector import locate_rod, unselected_rod
 from fishing_vision import detect, ui_visible
 from tracking_control import ReelMotion
+from tracking_watchdog import TrackingWatchdog
 from screen_space import ScreenSpace
 from inventory_watch import InventoryDriver, InventoryWatcher
 import landmarks
-from pickup_policy import classify as classify_pickup, classify_toast, same_reward, PickupGate
+from pickup_policy import classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate
 from faults import FishingFault, FaultRecorder, reason_code
 from full_pause import InputGate, InputPaused, PAUSE_FILE, resumed_stage
+from unattended_focus import TaggedInput
+from capture_session import CaptureSession
 
 ROOT = Path(__file__).resolve().parent
-USER = ctypes.windll.user32
+USER = TaggedInput(ctypes.windll.user32)
 USER.SetProcessDPIAware()
 
 # Normal hooks arrive within about seven seconds in the observed sessions.
 # Two missed hooks can be ordinary bad luck; wait for a third before rejoining.
-BITE_WAIT_TIMEOUT_SECONDS = 15
+BITE_WAIT_TIMEOUT_SECONDS = 10
 MISSED_CASTS_BEFORE_REJOIN = 3
 
 def move_pointer(x,y):
@@ -56,7 +59,8 @@ def find_window():
             if psutil.Process(win32process.GetWindowThreadProcessId(h)[1]).name().lower()=='robloxplayerbeta.exe': found.append(h)
         except (psutil.Error,OSError): pass
     win32gui.EnumWindows(visit,None)
-    if len(found)!=1: raise RuntimeError(f'Expected one Roblox window, found {len(found)}')
+    if not found:raise FishingFault('client_lost','Roblox Player window closed; found 0 game windows')
+    if len(found)!=1:raise FishingFault('user_required','Multiple Roblox Player windows need user selection')
     return found[0]
 
 def rectangle(h):
@@ -170,9 +174,9 @@ def main():
     inp.gate=InputGate(inp,RUN,USER,pointer=load_config()['camera_mode']!='first_person');inp.gate.start()
     prev=None;velocity=0.;target_velocity=0.;cycles=0;casts=0;missing_casts=0;track_frames=0;inside_frames=0;laststate=0;lastimage=0;last_rod_check=0
     first_person_active=False
-    motion=ReelMotion()
+    motion=ReelMotion();tracking_watchdog=TrackingWatchdog()
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_toast_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
-    cooldown_delay=1.0
+    cooldown_delay=1.0;prompt_detected_at=None;reward_gate=RewardGate()
     last_reference_check=0;reference_matcher=None;paused_at=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
     diagnostics=FaultRecorder(RUN,session);pickup_gate=PickupGate();last_pickup_evidence={};failure_code='';failure_details={}
@@ -184,10 +188,13 @@ def main():
             'held_mouse':False,'held_t':False,'cycles':cycles,'casts':casts})
     def record_reward(raw):
         nonlocal pickup_confirmed,last_reward
+        if not reward_gate.accept(cycles):
+            inp.grab(False);event('duplicate_reward_ignored',cycle=cycles);return False
         inp.grab(False);pickup_confirmed+=1;last_reward=raw
         reward_id=f'{session}:{cycles}:{pickup_confirmed}'
         event('reward_observed',cycle=cycles,text=raw,reward_id=reward_id)
         inventory.observe(raw,last_prompt,reward_id)
+        return True
     def start_cooldown(seconds):
         nonlocal stage,since,cooldown_delay
         stage='cooldown';since=time.monotonic();cooldown_delay=seconds
@@ -201,20 +208,35 @@ def main():
         result,_=ocr(im)
         return ' '.join(r[1] for r in result or [] if r[2]>.8)
     def pickup_text():
-        nonlocal last_pickup_evidence
+        nonlocal last_pickup_evidence,prompt_detected_at
         # Prompt height changes with the camera. The previous crop missed
         # Collect above y=480, causing blind T holds on otherwise empty rounds.
-        x,y,w,h=480,150,1630,1110
-        im=screen.capture(sct,(x,y,w,h))
-        scale=1 if now-since>2 else .75
-        results,_=ocr(cv2.resize(im,None,fx=scale,fy=scale))
-        inp.guard_press(True)
-        rows=[{'text':r[1],'score':float(r[2]),
-               'center':(x+float(np.mean(np.array(r[0])[:,0]))/scale,
-                         y+float(np.mean(np.array(r[0])[:,1]))/scale)} for r in results or []]
-        evidence=classify_pickup(rows)
-        stable=pickup_gate.observe(evidence,time.monotonic())
-        last_pickup_evidence={'kind':evidence.kind,'text':evidence.text,'center':evidence.center,'stable':stable}
+        scan_started=time.monotonic()
+        # Read the shoulder prompt first. A moving/occluded prompt still gets
+        # the wide fallback; no missing prompt authorizes a blind T press.
+        if last_pickup_evidence.get('kind')=='collect':
+            cx,cy=last_pickup_evidence['center']
+            narrow=(max(480,min(1660,int(cx)-240)),max(150,min(1030,int(cy)-110)),480,220)
+        else:narrow=(1080,480,660,460)
+        evidence=None
+        for x,y,w,h in (narrow,(480,150,1630,1110)):
+            im=screen.capture(sct,(x,y,w,h))
+            scale=1 if w<1000 else .75
+            results,_=ocr(cv2.resize(im,None,fx=scale,fy=scale),use_cls=False)
+            inp.guard_press(True)
+            rows=[{'text':r[1],'score':float(r[2]),
+                   'center':(x+float(np.mean(np.array(r[0])[:,0]))/scale,
+                             y+float(np.mean(np.array(r[0])[:,1]))/scale)} for r in results or []]
+            evidence=classify_pickup(rows)
+            if evidence.kind!='empty':break
+        finished=time.monotonic()
+        stable=pickup_gate.observe(evidence,finished,finished-scan_started)
+        if evidence.kind=='collect':
+            if prompt_detected_at is None:
+                prompt_detected_at=finished
+                event('pickup_prompt_seen',cycle=cycles,text=evidence.text,scan_seconds=round(finished-scan_started,3))
+            stable=stable or clear_collect(rows,after_minigame=last_tracking_cast==casts and cycles not in reward_gate.confirmed)
+        last_pickup_evidence={'kind':evidence.kind,'text':evidence.text,'center':evidence.center,'stable':stable,'scan_seconds':round(finished-scan_started,3)}
         if evidence.kind in ('other','ambiguous'):
             inp.grab(False)
             if stable and stage=='pickup':
@@ -229,7 +251,7 @@ def main():
         # extend well past the third-person shoulder crop.
         x,y,w,h=(1180,670,620,180) if first_person_active else (1240,670,310,180)
         im=screen.capture(sct,(x,y,w,h))
-        results,_=ocr(cv2.resize(im,None,fx=1.5,fy=1.5))
+        results,_=ocr(cv2.resize(im,None,fx=1.5,fy=1.5),use_cls=False)
         inp.guard_press(True)
         rows=[{'text':r[1],'score':float(r[2]),
                'center':(float(np.mean(np.array(r[0])[:,0])),float(np.mean(np.array(r[0])[:,1])))}
@@ -240,7 +262,7 @@ def main():
         return ui_visible(im,exit_template)
     event('started',pid=os.getpid(),session=session)
     try:
-        with mss.MSS() as sct:
+        with CaptureSession(event) as sct:
             inventory=InventoryWatcher(InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer),event,inventory_progress)
             needs_inventory_start=True;inventory_open=False
             while now-started<limit:
@@ -260,7 +282,7 @@ def main():
                         write_metrics('status.json',state);time.sleep(.1)
                     pause_seconds=time.monotonic()-paused_at;started+=pause_seconds;since+=pause_seconds;lastseen+=pause_seconds
                     paused_at=None
-                    inp.cast_target=None;cast_needs_settle=True
+                    inp.cast_target=None;cast_needs_settle=True;tracking_watchdog.reset()
                     previous_stage=stage;stage=resumed_stage(stage,cast_press_started is not None)
                     if previous_stage=='casting' and cast_press_started is not None:
                         casts+=1;event('cast',cast=casts,interrupted=True)
@@ -301,6 +323,9 @@ def main():
                             now=time.monotonic();since=now;cast_needs_settle=True
                     if (RUN/'RECOVER').exists():
                         (RUN/'RECOVER').unlink();raise RuntimeError('Roblox presence requested reconnect after stalled activity')
+                    if stage in ('cooldown','casting') and (RUN/'RELOAD').exists():
+                        (RUN/'RELOAD').unlink();inp.release()
+                        raise FishingFault('worker_reload','Planned worker reload at a safe catch boundary')
                     if any(USER.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):raise RuntimeError('Stopped by Escape/F9/F12')
                     inp.guard_press(True)
                     if not win32gui.IsWindow(hwnd):raise RuntimeError('Roblox window closed; rejoin required')
@@ -308,12 +333,15 @@ def main():
                     roi=screen.capture(sct,(1850,400,140,600))
                     d=detect(roi)
                     if d is not None and not ui_active():d=None
-                    if d is None and stage!='tracking' and now-last_gui_scan>5:
+                    if d is None and stage in ('casting','waiting','cooldown') and now-last_gui_scan>8:
                         gui=screen.capture(sct,(760,410,1040,580))
                         raw_gui=read_text(cv2.resize(gui,None,fx=.75,fy=.75)).lower();last_gui_scan=time.monotonic()
                         if any(t in raw_gui for t in ('disconnected','connection lost','connection error','failed to connect','same account launched','error code','reconnect')):
                             inp.release();event('disconnect_gui',text=raw_gui);raise RuntimeError('Disconnect GUI detected; rejoin required')
                     if d is not None:
+                        if tracking_watchdog.observe(d,now):
+                            inp.release();screenshot('frozen-minigame')
+                            raise FishingFault('tracking_frozen','Minigame markers frozen for 12 seconds; rejoin required',detection=d)
                         last_game_activity=time.time()
                         if stage!='tracking':
                             inventory.begin_round()
@@ -322,6 +350,7 @@ def main():
                             fresh_hook=casts!=last_tracking_cast
                             if fresh_hook:cycles+=1;last_tracking_cast=casts
                             event('minigame' if fresh_hook else 'tracking_reacquired',cycle=cycles,cast=casts);screenshot('start');prompt_seen=False;pickup_tries=0;last_prompt=''
+                            prompt_detected_at=None
                         lastseen=now
                         if a.gain is None:
                             inp.hold(motion.step(d,now))
@@ -337,8 +366,12 @@ def main():
                         telemetry.write(f"{now-started:.3f},{cycles},{d['ball']:.1f},{d['target']:.1f},{d['height']:.1f},{velocity:.1f},{int(inp.mouse)},{int(d['inside'])}\n")
                         if a.record and now-lastimage>.1:
                             cv2.imwrite(str(RUN/f'{session}-track-{cycles}-{int((now-since)*10):04d}.jpg'),roi);lastimage=now
-                        if now-since>75:raise RuntimeError('Minigame stalled for 75 seconds')
+                        if now-since>120:
+                            inp.release();screenshot('minigame-timeout')
+                            raise FishingFault('tracking_timeout','Minigame did not finish within 120 seconds; rejoin required')
                     elif stage=='tracking':
+                        tracking_watchdog.reset()
+                        motion.suspend();prev=None
                         if now-lastseen>.12: inp.hold(False)
                         if now-lastseen>.16 and not ui_active():
                             inp.release();im=screenshot('end');raw=read_text(cv2.resize(im[1280:1360,1180:1380],None,fx=3,fy=3))
@@ -349,7 +382,9 @@ def main():
                             event('minigame_ended',cycle=cycles,seconds=round(now-since,2),percent=end_percent)
                             stage='pickup_wait';since=time.monotonic();prev=None;last_pickup_scan=0
                             if consecutive_failed>=5:raise RuntimeError('Five consecutive failed rounds; stopped for review')
-                        elif now-lastseen>5:raise RuntimeError('Fishing UI visible but marker detection missing for five seconds')
+                        elif now-lastseen>12:
+                            screenshot('missing-markers')
+                            raise FishingFault('tracking_lost','Fishing UI visible but marker detection missing for 12 seconds')
                     elif stage=='casting':
                         if now-last_rod_check>12 and load_config()['auto_rod']:
                             frame=screen.capture(sct)
@@ -389,13 +424,14 @@ def main():
                                     missed_casts=missing_casts,wait_seconds=BITE_WAIT_TIMEOUT_SECONDS)
                             stage='pickup_wait';since=now
                     elif stage=='pickup_wait':
-                        if now-since>.2 and now-last_pickup_scan>.2:
-                            evidence,stable=pickup_text();last_pickup_scan=time.monotonic();prompt_seen=evidence.kind=='collect' and stable
+                        if now-since>.08 and now-last_pickup_scan>.08:
+                            evidence,stable=pickup_text();now=time.monotonic();last_pickup_scan=now;prompt_seen=evidence.kind=='collect' and stable
                             if evidence.kind=='reward' and stable:
                                 record_reward(evidence.text);screenshot('collected');start_cooldown(.45)
                             elif prompt_seen:
                                 last_prompt=evidence.text
-                                inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;last_toast_scan=0;screenshot('pickup');event('pickup_hold',attempt=pickup_tries,prompt_seen=True,text=evidence.text)
+                                inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;last_toast_scan=0
+                                event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=evidence.text,scan_seconds=last_pickup_evidence['scan_seconds'],prompt_to_hold_seconds=round(since-(prompt_detected_at or since),3));screenshot('pickup')
                             elif now-since>3.5 and evidence.kind=='empty' and stable:
                                 event('empty_round',cycle=cycles,message='No pickup prompt after repeated wide scans; continuing without holding T')
                                 start_cooldown(.4)
@@ -405,19 +441,28 @@ def main():
                             elif now-since>7:
                                 raise FishingFault('pickup_timeout','Pickup prompt remained ambiguous after wide scans',evidence=last_pickup_evidence)
                     elif stage=='pickup':
-                        if now-since>.25 and now-last_pickup_scan>.25:
-                            evidence,stable=pickup_text();last_pickup_scan=time.monotonic()
-                            if now-since>1.35 and evidence.kind=='reward' and stable:
-                                record_reward(evidence.text);screenshot('collected');start_cooldown(.25);continue
-                        # Confirm the small toast twice while T is held. This
-                        # avoids waiting four seconds when wide OCR misses X1.
-                        if now-since>1.55 and now-last_toast_scan>.45:
+                        # The tiny toast is much faster than another scene OCR.
+                        if now-since>.55 and now-last_toast_scan>.20:
                             last_toast_scan=time.monotonic()
                             first=pickup_toast()
                             if first.kind=='reward':
-                                time.sleep(.08);second=pickup_toast()
+                                time.sleep(.06);second=pickup_toast()
                                 if same_reward(first,second):
                                     record_reward(second.text);screenshot('collected');start_cooldown(.25);continue
+                            now=time.monotonic()
+                        if now-since>.45 and now-last_pickup_scan>.15:
+                            evidence,stable=pickup_text();last_pickup_scan=time.monotonic()
+                            now=time.monotonic()
+                            if evidence.kind=='reward' and stable:
+                                record_reward(evidence.text);screenshot('collected');start_cooldown(.12);continue
+                            if evidence.kind=='empty' and stable and inp.t:
+                                inp.grab(False);event('pickup_released',cycle=cycles,reason='Prompt disappeared')
+                            elif evidence.kind=='collect' and stable and not inp.t:
+                                if pickup_tries>=3:raise FishingFault('pickup_timeout','Collect remained after three state-driven attempts')
+                                inp.grab(True);pickup_tries+=1;since=time.monotonic()
+                                event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=evidence.text)
+                        # Confirm the small toast twice while T is held. This
+                        # avoids waiting four seconds when wide OCR misses X1.
                         if now-since>4.0:
                             inp.grab(False);evidence,stable=pickup_text()
                             # A banner can appear just as the T hold ends. Confirm
@@ -444,7 +489,7 @@ def main():
                                 event('pickup_attempted',cycle=cycles,attempts=pickup_tries)
                             since=time.monotonic()
                     elif stage=='pickup_retry_wait':
-                        if now-since>.5:
+                        if now-since>.08:
                             if pickup_tries>=3:raise RuntimeError('Pickup prompt still present after three held-T attempts')
                             evidence,stable=pickup_text()
                             if evidence.kind=='collect' and stable:
@@ -473,6 +518,7 @@ def main():
                     if now-laststate>1:
                         status={'running':True,'pid':os.getpid(),'session':session,'updated':time.time(),'elapsed':round(now-started,1),'stage':stage,'cycles':cycles,'casts':casts,'completed_100_percent':completed,'failed_rounds':failed,'unknown_rounds':unknown,'reward_banners_observed':pickup_confirmed,'last_reward':last_reward,'track_frames':track_frames,'inside_fraction':round(inside_frames/max(1,track_frames),3),'last_detection':d,'held_mouse':inp.mouse,'held_t':inp.t}
                         status['last_game_activity']=last_game_activity
+                        status['capture_resets']=sct.resets
                         write_metrics('status.json',status);laststate=now
                         ledger.update(now-started,casts,cycles,pickup_confirmed,failed,last_reward)
                     time.sleep(max(.001,1/60-(time.monotonic()-tick)))
@@ -485,14 +531,17 @@ def main():
     except BaseException as ex:
         last_reason=str(ex);failure_code=getattr(ex,'code',reason_code(last_reason));failure_details=getattr(ex,'details',{})
         if failure_code not in ('manual_stop','session_limit','focus'):
-            try:diagnostics.save(failure_code,last_reason,pickup=last_pickup_evidence,**failure_details)
+            inp.release()
+            try:
+                screenshot('failure')
+                diagnostics.save(failure_code,last_reason,pickup=last_pickup_evidence,**failure_details)
             except Exception as diagnostic_error:event('diagnostic_error',message=str(diagnostic_error))
         event('stopped',reason=str(ex),code=failure_code);raise
     finally:
         inp.gate.close()
         ledger.update((paused_at if paused_at is not None else time.monotonic())-started,casts,cycles,pickup_confirmed,failed,last_reward)
         prior=json.loads((RUN/'status.json').read_text()) if (RUN/'status.json').exists() else {}
-        prior.update(running=False,updated=time.time(),ended=time.time(),reason=last_reason,failure_code=failure_code,held_mouse=False,held_t=False,casts=casts,cycles=cycles,reward_banners_observed=pickup_confirmed,failed_rounds=failed,last_reward=last_reward);(RUN/'status.json').write_text(json.dumps(prior,indent=2))
+        prior.update(running=False,updated=time.time(),ended=time.time(),reason=last_reason,failure_code=failure_code,held_mouse=False,held_t=False,casts=casts,cycles=cycles,reward_banners_observed=pickup_confirmed,failed_rounds=failed,last_reward=last_reward);write_metrics('status.json',prior)
         log.close();telemetry.close()
 
 if __name__=='__main__':main()

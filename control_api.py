@@ -34,7 +34,8 @@ def dispatch(command, request_id=None, limit=50):
                 feed = LiveFeed()
                 # State comes from status. Do not manufacture a new state event
                 # on every poll by passing the current state to a fresh feed.
-                feed.update(state['started'])
+                log_run=state.get('log_run') or {}
+                feed.update(log_run.get('started',state['started']),ended=log_run.get('ended'))
                 rows = feed.rows[-limit:]
                 result = {'started': state['started'], 'events': rows}
         response.update(ok=True, data=result)

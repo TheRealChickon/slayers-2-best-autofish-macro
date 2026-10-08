@@ -185,10 +185,10 @@ class IsolatedState(unittest.TestCase):
     def test_run_page_launches_each_explicit_mode_without_changing_focus_itself(self):
         app=terminal_app.Terminal()
         with patch.object(app,'job',side_effect=lambda fn:fn()), patch.object(control_actions,'resume') as resume:
-            for index,mode in enumerate(('assist','spot','full','rejoin')):
+            for index,mode in enumerate(('assist','spot','full','here','rejoin')):
                 app.selection=index;app.key('ENTER')
                 resume.assert_called_with(mode)
-            app.key('END');self.assertEqual(app.selection,6)
+            app.key('END');self.assertEqual(app.selection,7)
 
     def test_run_modes_and_stop_reason_are_visible_with_keyboard_scrolling(self):
         (self.root/'STOP').write_text('Stopped by F12 in Roblox')
@@ -202,7 +202,7 @@ class IsolatedState(unittest.TestCase):
             self.assertIn(text,normal)
         for text in ('reel', 'cast', 'collect', 'rejoin'):
             self.assertIn(text,normal)
-        for index,label in enumerate(('Minigame only','Fish here','Full farmer','Auto rejoin','Pause','Stop','Export log')):
+        for index,label in enumerate(('Minigame only','Fish here','Full farmer','Farm here','Auto rejoin','Pause','Stop','Export log')):
             app.selection=index
             self.assertIn('› '+label,'\n'.join(app.render(65,22)))
 
