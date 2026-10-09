@@ -1,5 +1,7 @@
 """Cooperative full-farmer pause, shared by supervisor and fishing worker."""
 import threading
+import time
+from client_geometry import client_rect,enable_physical_coordinates
 import win32gui
 
 PAUSE_FILE = 'F8_PAUSE'
@@ -32,15 +34,23 @@ class F8Toggle:
 
 class InputGate:
     """Release input during slow OCR and invalidate decisions made before a pause."""
-    def __init__(self, inp, root, user, pointer=False):
+    def __init__(self, inp, root, user, pointer=False, activity=None, competing_grace=30):
         self.inp, self.root, self.user, self.pointer = inp, root, user, pointer
+        self.activity = activity
+        self.activity_baseline = activity.last if activity else None
+        self.competing_grace = competing_grace
         self.interrupted = threading.Event()
         self.done = threading.Event()
         self.thread = None
         self.needs_mouse_sync = self.needs_t_sync = False
 
     def reason(self):
-        if (self.root/PAUSE_FILE).exists(): return 'paused_manual'
+        if (self.root/PAUSE_FILE).exists() or (self.root/'PAUSE').exists(): return 'paused_manual'
+        if self.activity:
+            now=time.monotonic()
+            if self.activity.last>self.activity_baseline and now-self.activity.last<45:return 'paused_human'
+            other=self.activity.last_other_input
+            if other is not None and now-other<self.competing_grace:return 'paused_competing_input'
         h = self.inp.hwnd
         if h and win32gui.IsWindow(h):
             if win32gui.IsIconic(h) or win32gui.GetForegroundWindow() != h: return 'paused_focus'
@@ -59,7 +69,9 @@ class InputGate:
 
     def poll(self):
         with self.inp.lock:
-            if self.reason() or (self.root/'STOP').exists() or (self.inp.hwnd and not win32gui.IsWindow(self.inp.hwnd)):
+            changed=(getattr(self.inp,'client_rect',None) is not None and self.inp.hwnd
+                     and win32gui.IsWindow(self.inp.hwnd) and client_rect(win32gui,self.inp.hwnd)!=self.inp.client_rect)
+            if changed or self.reason() or (self.root/'STOP').exists() or (self.inp.hwnd and not win32gui.IsWindow(self.inp.hwnd)):
                 self.interrupted.set()
                 self.needs_mouse_sync |= self.inp.mouse
                 self.needs_t_sync |= self.inp.t
@@ -81,6 +93,7 @@ class InputGate:
 
     def start(self):
         def watch():
+            enable_physical_coordinates(self.user)
             while not self.done.wait(.015):
                 self.poll()
         self.thread = threading.Thread(target=watch, daemon=True, name='FullFishingFocus')

@@ -30,6 +30,5 @@ def capture_pointer():
     if win32gui.GetAncestor(win32gui.WindowFromPoint(pointer), 2) != hwnd:
         raise ValueError('Place the pointer over the Roblox game world and try again')
     screen = ScreenSpace(rectangle(hwnd))
-    x = round((pointer[0] - screen.rect[0]) / screen.sx)
-    y = round((pointer[1] - screen.rect[1]) / screen.sy)
+    x,y = (round(value) for value in screen.unpoint(*pointer))
     return validate((x, y))

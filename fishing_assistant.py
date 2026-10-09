@@ -12,18 +12,20 @@ from fishing_vision import detect, ui_visible
 from tracking_control import ReelMotion
 from tracking_watchdog import TrackingWatchdog
 from screen_space import ScreenSpace
+from client_geometry import ClientAreaChanged, ClientStability, client_rect, enable_physical_coordinates
+from prompt_ocr import read_cached_prompt
 from inventory_watch import InventoryDriver, InventoryWatcher
 import landmarks
-from pickup_policy import classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate,waiting_decision,retain_collect_hold,CollectHoldMotion
+from pickup_policy import classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate,waiting_decision,retain_collect_hold,CollectHoldMotion,PickupSearch
 from reward_evidence import reward_quantity
 from faults import FishingFault, FaultRecorder, reason_code
 from full_pause import InputGate, InputPaused, PAUSE_FILE, resumed_stage
-from unattended_focus import TaggedInput
+from unattended_focus import TaggedInput,PhysicalActivity
 from capture_session import CaptureSession
 
 ROOT = Path(__file__).resolve().parent
 USER = TaggedInput(ctypes.windll.user32)
-USER.SetProcessDPIAware()
+enable_physical_coordinates(USER)
 
 # Normal hooks arrive within about seven seconds in the observed sessions.
 # Two missed hooks can be ordinary bad luck; wait for a third before rejoining.
@@ -67,19 +69,19 @@ def find_window():
 
 def rectangle(h):
     # Client pixels exclude the title bar and resize border in windowed mode.
-    l,t,r,b=win32gui.GetClientRect(h)
-    x,y=win32gui.ClientToScreen(h,(0,0))
-    return x,y,x+r-l,y+b-t
+    return client_rect(win32gui,h)
 
 class Input:
     def __init__(self,hwnd=None):
         self.mouse=False; self.t=False; self.hwnd=hwnd
-        self.cast_target=None
+        self.cast_target=None;self.client_rect=None
         self.lock=threading.RLock(); self.gate=None;self.physical_stop_owned=False
     def guard_press(self,down):
         if down and self.gate is not None:self.gate.check()
         if down and self.hwnd is not None and (not win32gui.IsWindow(self.hwnd) or win32gui.IsIconic(self.hwnd) or win32gui.GetForegroundWindow()!=self.hwnd):
             raise RuntimeError('Roblox lost focus; all inputs released')
+        if down and self.client_rect is not None and rectangle(self.hwnd)!=self.client_rect:
+            raise ClientAreaChanged('Roblox client changed; fresh coordinates required')
     def hold(self,down):
         with self.lock:
             self.guard_press(down)
@@ -96,7 +98,9 @@ class Input:
             if down!=self.t:
                 scan=USER.MapVirtualKeyW(ord('T'),0)
                 USER.keybd_event(ord('T'),scan,0 if down else 2,0); self.t=down
-    def release(self): self.hold(False); self.grab(False)
+    def release(self):
+        try:self.hold(False)
+        finally:self.grab(False)
 
     def zoom_first_person(self):
         """Use Roblox's zoom limit, with the same focus and pause guard as casts."""
@@ -165,13 +169,15 @@ def main():
     hwnd=find_window();rect=rectangle(hwnd)
     screen=ScreenSpace(rect)
     if a.focus:win32gui.SetForegroundWindow(hwnd);time.sleep(.3)
-    ocr=RapidOCR()
+    ocr=RapidOCR();prompt_ocr=RapidOCR(det_limit_side_len=384)
     exit_template=cv2.imread(str(ROOT/'assets'/'exit.png'))
     inp=Input(hwnd);started=time.monotonic();now=started;stage='casting';since=now;lastseen=now;ledger=Ledger();last_gui_scan=0;last_tracking_cast=None;last_game_activity=time.time()
     # Roblox captures and recenters the cursor in first person. The foreground
     # window remains the reliable guard there; a pointer hit test can flicker
     # outside for a frame and livelock the worker before its first cast.
-    inp.gate=InputGate(inp,RUN,USER,pointer=load_config()['camera_mode']!='first_person');inp.gate.start()
+    physical=PhysicalActivity();physical.start()
+    inp.client_rect=rect;client_stability=ClientStability(rect)
+    inp.gate=InputGate(inp,RUN,USER,pointer=load_config()['camera_mode']!='first_person',activity=physical,competing_grace=load_config()['overnight_focus_grace_seconds']);inp.gate.start()
     def emergency_key(key):
         if key in (Key.esc,Key.f9,Key.f12) and win32gui.GetForegroundWindow()==hwnd and not win32gui.IsIconic(hwnd):
             stop.write_text('Stopped by physical hotkey')
@@ -186,7 +192,7 @@ def main():
     cooldown_delay=1.0;prompt_detected_at=None;reward_gate=RewardGate();collect_motion=CollectHoldMotion()
     last_reference_check=0;reference_matcher=None;paused_at=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
-    diagnostics=FaultRecorder(RUN,session);pickup_gate=PickupGate();last_pickup_evidence={};failure_code='';failure_details={}
+    diagnostics=FaultRecorder(RUN,session);pickup_gate=PickupGate();pickup_search=PickupSearch();last_pickup_evidence={};failure_code='';failure_details={}
     telemetry=open(RUN/f'tracking-{session}.csv','w',buffering=1);telemetry.write('time,cycle,ball,target,height,velocity,held,inside\n')
     def event(kind,**kw):log.write(json.dumps({'at':time.time(),'event':kind,**kw})+'\n');print(json.dumps({'event':kind,**kw}),flush=True)
     def inventory_progress(**kw):
@@ -221,15 +227,16 @@ def main():
         scan_started=time.monotonic()
         # Read the shoulder prompt first. A moving/occluded prompt still gets
         # the wide fallback; no missing prompt authorizes a blind T press.
-        if last_pickup_evidence.get('kind')=='collect':
-            cx,cy=last_pickup_evidence['center']
-            narrow=(max(480,min(1660,int(cx)-240)),max(150,min(1030,int(cy)-110)),480,220)
-        else:narrow=(1080,480,660,460)
         evidence=None
-        for x,y,w,h in (narrow,(480,150,1630,1110)):
+        for x,y,w,h in pickup_search.boxes(scan_started):
             im=screen.capture(sct,(x,y,w,h))
             scale=1 if w<1000 else .75
-            results,_=ocr(cv2.resize(im,None,fx=scale,fy=scale),use_cls=False)
+            image=cv2.resize(im,None,fx=scale,fy=scale)
+            if w==480:
+                results,_=read_cached_prompt(image,ocr,prompt_ocr,
+                    after_minigame=last_tracking_cast==casts and cycles not in reward_gate.confirmed,
+                    guard=lambda:inp.guard_press(True))
+            else:results,_=ocr(image,use_cls=False)
             inp.guard_press(True)
             rows=[{'text':r[1],'score':float(r[2]),
                    'center':(x+float(np.mean(np.array(r[0])[:,0]))/scale,
@@ -243,6 +250,7 @@ def main():
                 prompt_detected_at=finished
                 event('pickup_prompt_seen',cycle=cycles,text=evidence.text,scan_seconds=round(finished-scan_started,3))
             stable=stable or clear_collect(rows,after_minigame=last_tracking_cast==casts and cycles not in reward_gate.confirmed)
+        pickup_search.remember(evidence,stable,finished)
         last_pickup_evidence={'kind':evidence.kind,'text':evidence.text,'center':evidence.center,'stable':stable,'scan_seconds':round(finished-scan_started,3)}
         if evidence.kind=='empty':last_pickup_evidence['ocr_rows']=rows
         if evidence.kind in ('other','ambiguous'):
@@ -273,7 +281,7 @@ def main():
               for r in results or []]
         return classify_toast(rows)
     def ui_active():
-        im=screen.capture(sct,(1190,1360,180,70))
+        im=screen.capture_ui(sct,(1190,1360,180,70))
         return ui_visible(im,exit_template)
     event('started',pid=os.getpid(),session=session)
     try:
@@ -290,7 +298,7 @@ def main():
                         if not reason and inp.gate.acknowledge():break
                         state={'running':True,'pid':os.getpid(),'session':session,'updated':time.time(),
                             'stage':reason or 'paused_focus','manual_paused':(RUN/PAUSE_FILE).exists(),
-                            'wait_reason':'Paused — F8 to resume' if reason=='paused_manual' else 'Waiting for Roblox and pointer',
+                            'wait_reason':{'paused_manual':'Paused - F8 to resume','paused_human':'Waiting for 45 seconds without physical input','paused_competing_input':'Waiting for competing input to settle'}.get(reason,'Waiting for Roblox and pointer'),
                             'elapsed':round(paused_at-started,1),'casts':casts,'cycles':cycles,
                             'completed_100_percent':completed,'failed_rounds':failed,'reward_banners_observed':pickup_confirmed,
                             'last_reward':last_reward,'last_game_activity':last_game_activity,'held_mouse':False,'held_t':False}
@@ -303,11 +311,36 @@ def main():
                         casts+=1;event('cast',cast=casts,interrupted=True)
                     cast_press_started=None
                     if stage!=previous_stage:since=time.monotonic()
-                    pickup_gate=PickupGate();last_pickup_scan=0;laststate=0
+                    pickup_gate=PickupGate();pickup_search.reset();last_pickup_scan=0;laststate=0
                     event('input_resumed',stage=stage,paused_seconds=round(pause_seconds,2))
                 try:
                     tick=time.monotonic();now=tick
                     if stop.exists():raise RuntimeError('Stopped by stop file')
+                    fresh_rect=rectangle(hwnd)
+                    if fresh_rect!=rect:
+                        inp.release();motion.suspend();prev=None;inp.cast_target=None
+                        if now-laststate>1:
+                            wait_state=read_metrics('status.json')
+                            wait_state.update(running=True,pid=os.getpid(),session=session,updated=time.time(),
+                                stage='window_wait',held_mouse=False,held_t=False,casts=casts,cycles=cycles,
+                                reward_banners_observed=pickup_confirmed,client_rect=fresh_rect,
+                                wait_reason='Waiting for a stable readable Roblox client')
+                            write_metrics('status.json',wait_state);laststate=now
+                        if not client_stability.observe(fresh_rect,now):
+                            time.sleep(.03);continue
+                        try:new_screen=ScreenSpace(fresh_rect)
+                        except ValueError:
+                            time.sleep(.1);continue
+                        screen=new_screen;rect=fresh_rect;inp.client_rect=rect
+                        inventory.scanner.screen=screen
+                        tracking_watchdog.reset();pickup_gate=PickupGate();pickup_search.reset()
+                        last_pickup_evidence={};last_pickup_scan=last_toast_scan=0
+                        cast_needs_settle=True;lastseen=now
+                        previous_stage=stage;stage=resumed_stage(stage,cast_press_started is not None)
+                        if previous_stage=='casting' and cast_press_started is not None:
+                            casts+=1;event('cast',cast=casts,interrupted=True)
+                        cast_press_started=None;since=now
+                        event('client_reacquired',rect=rect,stage=stage,ui_scale=screen.ui_scale)
                     inp.guard_press(True)
                     if inventory_open:
                         inventory.scanner.close();inventory_open=False
@@ -343,8 +376,7 @@ def main():
                         raise FishingFault('worker_reload','Planned worker reload at a safe catch boundary')
                     inp.guard_press(True)
                     if not win32gui.IsWindow(hwnd):raise RuntimeError('Roblox window closed; rejoin required')
-                    if rectangle(hwnd)!=rect:raise RuntimeError('Roblox moved or resized; reacquiring the client area')
-                    roi=screen.capture(sct,(1850,400,140,600))
+                    roi=screen.capture_ui(sct,(1850,400,140,600))
                     d=detect(roi)
                     if d is not None and not ui_active():d=None
                     if d is None and stage in ('casting','waiting','cooldown') and now-last_gui_scan>8:
@@ -544,9 +576,12 @@ def main():
                         status={'running':True,'pid':os.getpid(),'session':session,'updated':time.time(),'elapsed':round(now-started,1),'stage':stage,'cycles':cycles,'casts':casts,'completed_100_percent':completed,'failed_rounds':failed,'unknown_rounds':unknown,'reward_banners_observed':pickup_confirmed,'last_reward':last_reward,'track_frames':track_frames,'inside_fraction':round(inside_frames/max(1,track_frames),3),'last_detection':d,'held_mouse':inp.mouse,'held_t':inp.t}
                         status['last_game_activity']=last_game_activity
                         status['capture_resets']=sct.resets
+                        status['client_rect']=rect;status['client_ui_scale']=screen.ui_scale
                         write_metrics('status.json',status);laststate=now
                         ledger.update(now-started,casts,cycles,pickup_confirmed,failed,last_reward)
                     time.sleep(max(.001,1/60-(time.monotonic()-tick)))
+                except ClientAreaChanged:
+                    inp.release();motion.suspend();prev=None;inp.cast_target=None
                 except InputPaused:
                     inp.gate.interrupted.set();inp.release()
                 except RuntimeError as error:
@@ -563,7 +598,7 @@ def main():
             except Exception as diagnostic_error:event('diagnostic_error',message=str(diagnostic_error))
         event('stopped',reason=str(ex),code=failure_code);raise
     finally:
-        emergency_listener.stop()
+        emergency_listener.stop();physical.stop()
         inp.gate.close()
         ledger.update((paused_at if paused_at is not None else time.monotonic())-started,casts,cycles,pickup_confirmed,failed,last_reward)
         prior=json.loads((RUN/'status.json').read_text()) if (RUN/'status.json').exists() else {}

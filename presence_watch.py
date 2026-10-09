@@ -19,7 +19,7 @@ def recovery_needed(presence,absent_since,supervisor,worker,now):
     return (presence.get('ok') and presence.get('type')!=2 and absent_since is not None
             and now-absent_since>=45 and supervisor.get('running') and supervisor.get('stage')=='fishing'
             and not supervisor.get('manual_paused') and not worker.get('manual_paused')
-            and worker.get('stage') not in ('paused_manual','paused_focus')
+            and worker.get('stage') not in ('paused_manual','paused_focus','paused_human','paused_competing_input','window_wait')
             and not (worker.get('stage')=='inventory' and now-worker.get('updated',0)<20)
             and now-worker.get('last_game_activity',now)>75)
 

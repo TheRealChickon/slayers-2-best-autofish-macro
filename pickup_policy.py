@@ -126,6 +126,30 @@ class CollectHoldMotion:
                 and math.dist(previous.center,evidence.center)<=35)
 
 
+class PickupSearch:
+    """Reuse a recent verified prompt location, never its authorization."""
+    wide = (480,150,1630,1110)
+    default = (1080,480,660,460)
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.center = None
+        self.seen_at = None
+
+    def remember(self, evidence, stable, now):
+        if stable and evidence.kind == 'collect':
+            self.center, self.seen_at = evidence.center, now
+
+    def boxes(self, now):
+        if self.center is None or not 0<=now-self.seen_at<=45:
+            return self.default,self.wide
+        cx,cy = self.center
+        narrow = (max(480,min(1630,int(cx)-240)),max(150,min(1040,int(cy)-110)),480,220)
+        return narrow,self.wide
+
+
 class PickupGate:
     def __init__(self):
         self.previous = None

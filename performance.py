@@ -10,6 +10,7 @@ def phase(supervisor, worker):
     if supervisor != 'fishing': return 'recovery'
     return {'tracking':'minigame','waiting_marker':'minigame','waiting':'bite_wait','casting':'casting','cast_press':'casting','equipping':'casting','equip_wait':'casting',
             'assist_waiting':'manual_wait','select_spot':'manual_wait','spot_paused':'manual_wait','assist_paused':'manual_wait','waiting_rod':'manual_wait','spot_blocked':'manual_wait','spot_attention':'manual_wait','checking_spot':'pickup',
+            'paused_human':'manual_wait','paused_competing_input':'focus_wait','window_wait':'focus_wait',
             'pickup_wait':'pickup','pickup':'pickup','pickup_retry_wait':'pickup','inventory':'inventory',
             'cooldown':'cooldown'}.get(worker.get('stage'), 'starting')
 
