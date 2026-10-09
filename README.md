@@ -89,9 +89,9 @@ The account is configurable. Each account must own a fishing rod, have it in a v
 
 ## Resolution notes
 
-No manual calibration is required for the supported 16:9 layout. Window borders and title bars are excluded from the measurements, and another monitor or window origin is supported. Moving or resizing Roblox releases input and causes the supervisor to reacquire the client area.
+Window borders and title bars are excluded from the measurements. Per-monitor DPI coordinates, another monitor and negative desktop origins are supported. Moving or resizing Roblox releases input, waits for stable geometry and refreshes the mapping in the same worker. A change during OCR also blocks the next press until coordinates are refreshed.
 
-The same coordinate mapping is tested with 720p and 4K image fixtures, but those sizes have not had a full live fishing run. Very small windows can make text unreadable. An ultrawide, 4:3, or differently scaled game UI may rearrange controls; use a 16:9 window in that case. The bot reports an unsupported shape instead of clicking guessed locations. This is resolution adaptation, not automatic navigation to a fishing spot.
+Fixtures cover 960 x 540 through 4K, 3440 x 1440, 5120 x 1440, 1280 x 1024 and 1920 x 1200 client areas. Earlier 1080p/1440p layouts have live history; the new candidate has offline fixture/replay validation and has not yet been deployed for a live multi-resolution run. Marker geometry and the separate Exit template must agree before reeling. Custom game UI scale or relocated controls can still require additional fixtures. Clients below 960 x 540 pixels wait safely because text may be unreadable. The 2560 x 1440 reference canvas is an internal coordinate system, not a required desktop resolution.
 
 ## Desktop shortcuts
 
@@ -443,3 +443,8 @@ The suite covers real 1080p inventory crops, input guards, duplicate prevention,
 Tests use isolated temporary state and mocked controls; they do not drive Roblox. Live game validation is still needed after changing vision or input logic. Python 3.12 on Windows x64 is the tested runtime.
 
 Game artwork in `assets/` is used as visual reference and UI thumbnails. This is an independent tool, not an official Roblox or game project.
+
+
+## Bounded live telemetry
+
+See [READONLY-MCP.md](READONLY-MCP.md) for the local status/recent-events/metrics adapter, limits and existing AnythingMCP hosting boundary. It reads existing telemetry without controlling the farmer. Remote MCP activation remains pending a verified authorized telemetry transport.

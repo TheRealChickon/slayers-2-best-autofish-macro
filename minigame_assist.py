@@ -143,7 +143,7 @@ def read_scene(frame, ocr):
 
 def safe_cast_pointer(screen):
     x,y=win32gui.GetCursorPos()
-    x=(x-screen.rect[0])/screen.sx;y=(y-screen.rect[1])/screen.sy
+    x,y=screen.unpoint(x,y)
     # A pointer left on the hotbar could unequip the rod instead of casting.
     return 260<=x<=2240 and 160<=y<=1240
 
@@ -285,7 +285,7 @@ def main(argv=None):
                         if hwnd is not None and hwnd!=selected and spot:
                             spot.armed=False  # A new Roblox process needs the player to rearm.
                             spot.paused=True
-                        inp.release();tracker.suspend();screen=ScreenSpace(rect);hwnd=selected;inp.hwnd=hwnd
+                        inp.release();tracker.suspend();screen=ScreenSpace(rect);hwnd=selected;inp.hwnd=hwnd;inp.client_rect=rect
                         resuming=True
                     if (spot and (not spot.armed or spot.paused)) or (not spot and assist_paused):
                         inp.release()
@@ -302,9 +302,9 @@ def main(argv=None):
                         resuming=False;event('focus_resumed',message='Roblox foreground; checking the current scene.')
                     else:active_time+=delta
                     wait_reason=''
-                    roi=screen.capture(sct,(1850,400,140,600))
+                    roi=screen.capture_ui(sct,(1850,400,140,600))
                     detection=detect(roi)
-                    ui=screen.capture(sct,(1190,1360,180,70))
+                    ui=screen.capture_ui(sct,(1190,1360,180,70))
                     visible=ui_visible(ui,template)
                     was_active=tracker.active
                     down=tracker.step(detection,visible,tick)

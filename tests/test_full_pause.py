@@ -96,7 +96,7 @@ class FullPauseTests(unittest.TestCase):
         present={'ok':True,'type':0};sup={'running':True,'stage':'fishing'}
         worker={'last_game_activity':0}
         self.assertTrue(presence_watch.recovery_needed(present,0,sup,worker,200))
-        for state in ('paused_manual','paused_focus'):
+        for state in ('paused_manual','paused_focus','paused_human','paused_competing_input','window_wait'):
             self.assertFalse(presence_watch.recovery_needed(present,0,sup,{**worker,'stage':state},200))
         self.assertFalse(presence_watch.recovery_needed(present,0,{**sup,'manual_paused':True},worker,200))
 
@@ -115,7 +115,7 @@ class FullPauseTests(unittest.TestCase):
                 self.gui.GetForegroundWindow.return_value=1;phase[0]=4
         def status(name,value):
             if name=='status.json':seen.append(dict(value));(self.root/name).write_text(json.dumps(value))
-        screen=Mock();screen.capture.return_value=np.zeros((1440,2560,3),np.uint8);screen.point.return_value=(1600,800)
+        screen=Mock();screen.ui_scale=1.;screen.capture.return_value=np.zeros((1440,2560,3),np.uint8);screen.point.return_value=(1600,800)
         inventory=Mock();inventory.check_pending.return_value=None
         with patch.object(fishing,'RUN',self.root),patch.object(fishing,'find_window',return_value=1), \
                 patch.object(fishing,'rectangle',return_value=(0,0,2560,1440)),patch.object(fishing,'ScreenSpace',return_value=screen), \
@@ -124,7 +124,7 @@ class FullPauseTests(unittest.TestCase):
                 patch.object(fishing,'write_metrics',side_effect=status),patch.object(fishing,'move_pointer'), \
                 patch.object(fishing,'locate_rod',return_value=None),patch.object(fishing.mss,'MSS'), \
                 patch.object(fishing.time,'monotonic',side_effect=lambda:now[0]),patch.object(fishing.time,'sleep',side_effect=sleep), \
-                patch.object(InputGate,'start'),patch.object(fishing.cv2,'imread',return_value=None), \
+                patch.object(InputGate,'start'),patch.object(fishing,'PhysicalActivity',return_value=Mock(last=100.,last_other_input=None)),patch.object(fishing.cv2,'imread',return_value=None), \
                 patch.object(sys,'argv',['fishing_assistant.py','--seconds','7']),patch('builtins.print'):
             fishing.main()
         paused=[s for s in seen if s.get('stage') in ('paused_manual','paused_focus')]

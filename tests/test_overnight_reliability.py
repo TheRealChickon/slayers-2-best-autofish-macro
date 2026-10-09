@@ -33,7 +33,7 @@ class Reliability(unittest.TestCase):
         for rect in ((0,0,2560,1440),(8,31,2552,1400),(8,31,1912,1020)):
             s=ScreenSpace(rect)
             self.assertEqual(s.point(1280,720),(round((rect[0]+rect[2])/2),round((rect[1]+rect[3])/2)))
-        with self.assertRaises(ValueError):ScreenSpace((0,0,1280,1024))
+        self.assertEqual(ScreenSpace((0,0,1280,1024)).point(1280,720),(640,512))
 
     def test_two_observations_even_when_ocr_is_slow(self):
         gate=PickupGate();evidence=Pickup('collect','Collect',(1320,700))
@@ -275,7 +275,7 @@ class Reliability(unittest.TestCase):
         with self.assertRaises(FishingFault):driver.recover(allow_rejoin=False)
         driver.launch.assert_not_called()
 
-    def test_square_transition_maximizes_exact_player_then_validates_1440p(self):
+    def test_readable_non_widescreen_client_does_not_force_maximization(self):
         import recovery
         from unittest.mock import Mock
         driver=recovery.Recovery.__new__(recovery.Recovery)
@@ -286,8 +286,8 @@ class Reliability(unittest.TestCase):
              patch.object(recovery,'rectangle',side_effect=[(0,23,1024,720)]*5+[(0,23,2560,1400)]*3),\
              patch.object(recovery,'RUN',self.root):
             driver.select()
-        show.assert_called_once_with(123,3)
-        self.assertEqual(driver.screen.actual_width,2560)
+        show.assert_not_called()
+        self.assertEqual(driver.screen.actual_width,1024)
 
     def test_farm_here_never_rejoins_for_local_faults(self):
         self.assertFalse(startup_rejoin('here',True));self.assertTrue(startup_rejoin('full',True))

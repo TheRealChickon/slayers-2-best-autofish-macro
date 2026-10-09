@@ -117,7 +117,7 @@ class Resolution(unittest.TestCase):
         screen=ScreenSpace((100,200,2020,1280))
         self.assertEqual(screen.point(1280,720),(1060,740))
         self.assertEqual(screen.point(0,0),(100,200))
-        with self.assertRaises(ValueError):ScreenSpace((0,0,1280,1024))
+        self.assertEqual(ScreenSpace((0,0,1280,1024)).point(1280,720),(640,512))
 
     def test_minigame_survives_normalization_at_common_sizes(self):
         reference=np.zeros((1440,2560,3),np.uint8)
