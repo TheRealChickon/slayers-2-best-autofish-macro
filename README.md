@@ -464,3 +464,14 @@ storage and an intact F8 pause. This improves fault evidence and removes a possi
 secondary GDI failure; it does not establish or repair the underlying cause of a
 blank Player presentation surface. Live rendering and display transitions remain
 unverified. No monitor-power, surface-refresh or automatic-recovery policy changes.
+
+## Pending loot and client changes
+
+The combined candidate reconciles visible ground loot before another cast after
+worker replacement, pause, inventory/camera work or client geometry changes.
+Each transition invalidates scene evidence and cached prompt coordinates; only
+fresh scene evidence permits collection or casting. Recovered pickups remain
+separate from newly hooked rounds in status and bait counters. STOP retains
+priority over F8 and pending-loot collection, including during OCR. Mocked
+regressions cover these interactions and negative-origin ultrawide resizing.
+Live deployment and combined rendering behavior have not been verified.
