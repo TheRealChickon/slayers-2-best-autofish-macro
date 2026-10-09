@@ -103,6 +103,14 @@ def waiting_decision(evidence,stable,elapsed,fresh_round=False,percent=None):
     return 'wait'
 
 
+def before_cast_decision(evidence,stable,elapsed):
+    """Reconcile ground loot before casting; a toast alone is not a new catch."""
+    if stable and evidence.kind=='collect':return 'collect'
+    if stable and evidence.kind in ('empty','reward') and elapsed>=.35:return 'clear'
+    if elapsed>7:return 'timeout'
+    return 'wait'
+
+
 def retain_collect_hold(evidence,elapsed,confirmed_reward=False):
     """An OCR miss can hide a prompt during its already-authorized hold."""
     return not confirmed_reward and evidence.kind not in ('other','ambiguous') and elapsed<4
