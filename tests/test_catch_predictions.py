@@ -5,6 +5,17 @@ from catch_predictions import calculate
 
 
 class Predictions(unittest.TestCase):
+    def test_inventory_stack_does_not_inflate_catches_or_projections(self):
+        rows=[self.row(0,'started'),
+              self.row(1,'reward_observed',cycle=1,text='X2964 Bait'),
+              self.row(2,'reward_observed',cycle=2,text='Bait X100'),
+              self.row(3,'reward_observed',cycle=3,text='Golden Fish X2'),
+              self.row(4,'reward_observed',cycle=4,text='Lost Mask NEW')]
+        result=calculate(rows,{'started':0},now=700,live_source='events-20261009-010000.jsonl')
+        self.assertEqual(result['unique_catches'],2)
+        self.assertEqual(result['quantity'],3)
+        self.assertFalse(any('bait' in i['name'].lower() for i in result['items']))
+
     def row(self,at,event,session='20261009-010000',**kw):
         return {'at':at,'event':event,'source':'events-'+session+'.jsonl',**kw}
 

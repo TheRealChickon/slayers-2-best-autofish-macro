@@ -13,6 +13,19 @@ from discord_service import DiscordReporter
 
 
 class DiscordHourlyTests(unittest.TestCase):
+    def test_inventory_quantity_is_excluded_from_interval_and_run_totals(self):
+        self.run.joinpath('current-run.json').write_text(json.dumps({'id':'run-1','started':0,'ended':None}))
+        self.rows('events-one.jsonl',
+                  {'at':10,'event':'reward_observed','cycle':1,'text':'X2964 Bait','reward_id':'bad'},
+                  {'at':20,'event':'reward_observed','cycle':2,'text':'Coral X2','reward_id':'first'},
+                  {'at':40,'event':'reward_observed','cycle':3,'text':'Golden Fish X1','reward_id':'second'})
+        before=self.run.joinpath('events-one.jsonl').read_bytes()
+        result=report.summarize(self.run,30,50,now=50)
+        self.assertEqual(result['rewards'],1)
+        self.assertEqual(result['items'],{'Golden Fish':1})
+        self.assertEqual(result['totals']['rewards'],2)
+        self.assertEqual(self.run.joinpath('events-one.jsonl').read_bytes(),before)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

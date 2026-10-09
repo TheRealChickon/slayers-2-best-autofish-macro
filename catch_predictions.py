@@ -3,6 +3,7 @@ import collections
 import math
 import re
 import time
+from reward_evidence import reward_quantity
 
 # User-provided prices. Historical Crustadon/Krathulon 110 is intentionally absent.
 PRICES={'ouwfish':33,'ouwfwesh':33,'coral':33,'clownfish':66,'goldenfish':66}
@@ -67,10 +68,9 @@ def calculate(rows,run,hours=8,now=None,live_source=None):
             if key in catches:continue
             if event=='reward_observed':
                 raw=row.get('text','')
-                if re.search(r'collect|climb|purchase',raw,re.I):continue
+                quantity=reward_quantity(raw)
+                if quantity is None:continue
                 name=item_name(raw,prompts.get(key,''))
-                quantity=re.search(r'\bx\s*(\d+)\b',raw,re.I)
-                quantity=int(quantity.group(1)) if quantity else 1
             else:name=row.get('item','Unidentified item');quantity=row.get('quantity',1)
             if not isinstance(quantity,int) or not 1<=quantity<=999:continue
             catches[key]={'name':name,'quantity':quantity}
