@@ -19,7 +19,7 @@ def setup(position=False, boxes=None):
     from fishing_assistant import USER
     record={'pid':os.getpid(),'created':psutil.Process().create_time()}
     with controls.guard():
-        if any(controls.alive(name) for name in ('supervisor-pid.json','pid.json','calibration-pid.json')) or controls.starting():
+        if any(controls.alive(name) for name in ('supervisor-pid.json','pid.json','calibration-pid.json','route-recorder-pid.json')) or controls.starting():
             raise RuntimeError('Pause fishing and wait for input to release before saving a reference')
         initial=marker_state();write('calibration-pid.json',record)
     class SetupDriver(Recovery):

@@ -56,6 +56,7 @@ class Terminal:
     settings_groups=(('Account',('Username',)),('Fishing',('Mode','Rod slot','Auto rod','Fishing titles')),
                      ('Overnight',('Overnight enabled','Auto focus','Focus grace seconds','Auto-enable after idle','Idle minutes')),
                      ('Location and camera',('Cast point','Capture pointer','Camera','Heading','Position correction','Save reference','Disable reference')),
+                     ('Bait route',('Record bait route','Open bait recordings')),
                      ('Discord reports',('Discord webhook','Test webhook','Remove webhook')),('Display',('Motion',)))
     settings_keys=tuple(key for _,keys in settings_groups for key in keys)
     setting_help = {
@@ -71,7 +72,9 @@ class Terminal:
         'Position correction':'Use a saved scene reference to fix small spawn drift.',
         'Save reference':'Capture your current fishing scene while the farmer is paused.',
         'Disable reference':'Turn off camera and position correction.',
-        'Motion':'Reduce terminal effects and animations.'}
+        'Motion':'Reduce terminal effects and animations.',
+        'Record bait route':'Pause Fishing first. F7 records the selected game; F6 saves checkpoints; F10 finishes. No replay.',
+        'Open bait recordings':'Open local game video, timed physical inputs and checkpoint images.'}
     setting_help.update({'Overnight enabled':'Persistent intent: physical input yields; Stop or turning this off prevents auto restart.',
         'Auto focus':'Restore only Roblox Player after physical inactivity and the focus grace; other automation gets a grace period.',
         'Focus grace seconds':'Wait 5–300 seconds after focus loss before attempting safe takeover.',
@@ -215,6 +218,12 @@ class Terminal:
                 self.switch(2); self.query = name; self.category = 1; self.follow = True
         elif self.page == 3:
             key = self.settings_keys[self.selection]
+            if key=='Record bait route':
+                from bait_route_recorder import launch
+                self.job(launch);return
+            if key=='Open bait recordings':
+                path=data_directory()/'bait-routes';path.mkdir(parents=True,exist_ok=True)
+                os.startfile(str(path));return
             if key == 'Capture pointer':
                 self.toast('Move the pointer over Roblox water; capturing in 4 seconds')
                 def capture():
@@ -440,6 +449,7 @@ class Terminal:
                     ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On')]
         values={key:value for key,(_,value) in zip(('Username','Mode','Rod slot','Auto rod','Camera','Heading','Fishing titles','Cast point','Capture pointer','Position correction','Save reference','Disable reference','Motion'),settings)}
         values.update({'Overnight enabled':'On' if self.config['overnight_enabled'] else 'Off',
+            'Record bait route':'Enter while paused','Open bait recordings':'Video, inputs and checkpoints',
             'Auto focus':'On' if self.config['overnight_autofocus'] else 'Off',
             'Auto-enable after idle':'On' if self.config['overnight_auto_enable_idle'] else 'Off',
             'Focus grace seconds':self.config['overnight_focus_grace_seconds'],

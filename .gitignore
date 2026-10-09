@@ -9,6 +9,7 @@
 *.jsonl
 *.log
 *.mp4
+*.avi
 *.tmp
 __pycache__/
 *.pyc

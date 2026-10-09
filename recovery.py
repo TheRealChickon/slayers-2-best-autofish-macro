@@ -380,10 +380,14 @@ def main():
     a=parser.parse_args()
     RUN.mkdir(parents=True,exist_ok=True)
     lock=RUN/'supervisor-pid.json'
-    if lock.exists():
-        prior=json.loads(lock.read_text())
-        if psutil.pid_exists(prior['pid']) and abs(psutil.Process(prior['pid']).create_time()-prior['created'])<1:raise RuntimeError('Fishing supervisor already running')
-    lock.write_text(json.dumps({'pid':os.getpid(),'created':psutil.Process().create_time()}))
+    import control_actions as controls
+    with controls.guard():
+        if controls.alive('route-recorder-pid.json'):
+            raise UserStop('Bait route recorder is open; close it before starting Fishing')
+        if lock.exists():
+            prior=json.loads(lock.read_text())
+            if psutil.pid_exists(prior['pid']) and abs(psutil.Process(prior['pid']).create_time()-prior['created'])<1:raise RuntimeError('Fishing supervisor already running')
+        lock.write_text(json.dumps({'pid':os.getpid(),'created':psutil.Process().create_time()}))
     stop=RUN/'STOP'
     if stop.exists():
         if a.respect_stop:raise UserStop('Start cancelled by stop request')

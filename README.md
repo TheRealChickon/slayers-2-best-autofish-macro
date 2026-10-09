@@ -239,6 +239,51 @@ It supports status, items, recent events, pause, resume, and stop. See [INTEGRAT
 
 ## Items and bait
 
+### Record a bait route
+
+The recorder teaches a future restocking route; it does not replay, buy, teleport,
+reset, or resume the farmer. It records only physical inputs while your selected
+Roblox Player window is foreground, game video, and native-resolution PNG
+checkpoints. Raw mouse device deltas are included for camera turns and shift lock,
+alongside normalized cursor positions for menus. Recordings stay in the configured
+local data folder and are excluded from Git.
+
+1. Use **Pause** in Fishing and wait for the controller to stop. F8 alone leaves
+   the supervisor alive, so use the app/CLI Pause before recording. Existing run
+   counters, spawn, configuration and manual stop flags are retained.
+2. Open **Settings → Record bait route**, double-click `Record-Bait-Route.cmd`,
+   or run `autofish route record`. Opening the recorder does not record anything.
+3. At your fishing spot, bring the intended Roblox window forward and press
+   **F7** with other keys/buttons released. That window is selected for this take,
+   even when multiple Player windows exist.
+4. Demonstrate the shrine teleport, walk to the bait seller, and purchase.
+   Press **F6** while standing still at the shrine menu, shrine arrival, important
+   turns, seller, shop, and visible bait count after buying. Leave each view on
+   screen briefly. Checkpoints are numbered; video supplies their context.
+5. Perform your normal reset to your existing saved fishing spawn. Wait for the
+   character to return and the fishing view to settle, then press **F6**, followed
+   by **F10** to finish and save. The reset menu's Escape/R/Enter inputs are recorded.
+
+**F7** also pauses/resumes; **F8** pauses. Changing apps, minimizing, moving or
+resizing Roblox, or losing capture pauses recording. Return to the same game and
+press F7 to resume; other app input and pixels are discarded. **F9/F12**, closing
+the recorder, Fishing Pause/Stop, an input capture failure, low disk space, or the
+20-minute recording limit save a partial demonstration. Pause/Stop during startup
+cancels the recorder. Continue and automatic farmer startup are blocked while the
+recorder is open; close it before explicitly continuing your saved run.
+
+Use **Open recordings** or `autofish route folder` to open `bait-routes/` in the
+data folder. Each unique take contains `route.json`, `video.mp4`, `events.jsonl`,
+`frames.jsonl`, and `checkpoints/*.png`. Input `t` excludes pauses; `wall_t` includes
+them. The frame index maps video time to actual observation time, so capture rate
+variation is visible. `autofish route status` shows the recorder's liveness and
+latest saved take. An unclosed/crashed take remains marked incomplete/running;
+its video may need repair. Keep all files together for the later route analysis.
+
+The shrine and shopping recognizers still need to be built and tested from your
+demonstration. A saved checkpoint is evidence for that work, not proof that the
+macro can navigate or buy bait yet.
+
 The item journal records confirmed quantity/NEW reward banners, original OCR text, quantity, and time. A round without a reward is normal. Unread or partial names are retained instead of silently discarded. OCR can misread text; the original observation remains in the log.
 
 **Identify unknown drops** is enabled by default in Settings. On the first use, the bot attempts a baseline inventory scan. After that, inventory opens only for unresolved catches, between fishing rounds, with **at least ten minutes between attempts**. There are no timer-only scans, and empty rounds without a Collect prompt do not request a scan or create an item entry. Each attempt has a **20-second scanning budget**, followed by closing the menu; a native OCR call already in progress may finish first. Unreadable scans back off for 20, 40, then at most 60 minutes. Fishing continues during the wait. Cached thumbnails make later scans faster and supply artwork to the window.
