@@ -473,7 +473,7 @@ def main():
         actions.refuse_peer_controller()
         if actions.alive(LEASE):
             saved = json.loads((storage / LEASE).read_text())
-            if saved['pid'] != os.getpid():
+            if saved['pid'] not in (os.getpid(), psutil.Process().ppid()):
                 raise RuntimeError('A bait route recorder is already open')
         if actions.alive() or actions.alive('pid.json') or actions.starting() or actions.alive('calibration-pid.json'):
             raise RuntimeError('Pause Fishing and wait for the controller to stop before recording a route')
