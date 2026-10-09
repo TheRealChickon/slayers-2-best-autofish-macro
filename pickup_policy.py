@@ -101,6 +101,24 @@ def retain_collect_hold(evidence,elapsed,confirmed_reward=False):
     return not confirmed_reward and evidence.kind not in ('other','ambiguous') and elapsed<4
 
 
+class CollectHoldMotion:
+    """One fresh retry when an airborne collect target has moved and settled."""
+    def __init__(self):
+        self.origin=None;self.previous=None;self.started=0;self.at=0
+
+    def start(self,evidence,now):
+        self.origin=evidence.center;self.previous=None;self.started=self.at=now
+
+    def observe(self,evidence,stable,now,attempt):
+        previous=self.previous;age=now-self.at
+        self.previous=evidence;self.at=now
+        return (self.origin is not None and attempt==1 and stable
+                and evidence.kind=='collect' and previous is not None and previous.kind=='collect'
+                and now-self.started>=.65 and age<=1.5
+                and math.dist(self.origin,evidence.center)>180
+                and math.dist(previous.center,evidence.center)<=35)
+
+
 class PickupGate:
     def __init__(self):
         self.previous = None

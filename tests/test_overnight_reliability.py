@@ -154,6 +154,31 @@ class Reliability(unittest.TestCase):
             self.assertFalse(retain_collect_hold(Pickup(kind),.7))
         self.assertFalse(retain_collect_hold(Pickup('empty'),4))
 
+    def test_airborne_target_retries_once_only_after_two_settled_scans(self):
+        from pickup_policy import Pickup,CollectHoldMotion
+        motion=CollectHoldMotion();motion.start(Pickup('collect',center=(1370,285)),0)
+        self.assertFalse(motion.observe(Pickup('collect',center=(1380,610)),True,1,1))
+        self.assertTrue(motion.observe(Pickup('collect',center=(1382,625)),True,1.4,1))
+        self.assertFalse(motion.observe(Pickup('collect',center=(1380,629)),True,1.8,2))
+
+    def test_stationary_or_still_moving_target_does_not_reset_a_valid_hold(self):
+        from pickup_policy import Pickup,CollectHoldMotion
+        motion=CollectHoldMotion();motion.start(Pickup('collect',center=(1370,680)),0)
+        for at,center in ((1,(1380,686)),(1.4,(1379,692))):
+            self.assertFalse(motion.observe(Pickup('collect',center=center),True,at,1))
+        motion.start(Pickup('collect',center=(1370,285)),0)
+        self.assertFalse(motion.observe(Pickup('collect',center=(1380,480)),True,1,1))
+        self.assertFalse(motion.observe(Pickup('collect',center=(1380,650)),True,1.4,1))
+
+    def test_movement_retry_requires_fresh_collect_evidence_after_occlusion(self):
+        from pickup_policy import Pickup,CollectHoldMotion
+        motion=CollectHoldMotion();motion.start(Pickup('collect',center=(1370,285)),0)
+        motion.observe(Pickup('collect',center=(1380,610)),True,1,1)
+        self.assertFalse(motion.observe(Pickup('other',center=(1380,610)),True,1.2,1))
+        self.assertFalse(motion.observe(Pickup('collect',center=(1380,615)),True,1.5,1))
+        self.assertFalse(motion.observe(Pickup('collect',center=(1380,617)),False,1.8,1))
+        self.assertFalse(motion.observe(Pickup('collect',center=(1380,619)),True,4,1))
+
     def test_failed_native_alert_survives_watcher_restart_until_acknowledged(self):
         watcher=Watcher(self.root,{})
         watcher.alert('test-native-failure','Minigame stalled')
