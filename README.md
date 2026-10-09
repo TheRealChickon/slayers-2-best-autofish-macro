@@ -414,6 +414,11 @@ soon as its evidence is sufficient. This wait never authorizes a blind T hold.
 An OCR miss during an already-verified pickup no longer aborts its held T early.
 Reward confirmation, focus/manual guards and other interaction evidence still
 release it immediately, with the existing four-second maximum for each attempt.
+If the first held Collect target moves more than 180 reference pixels and then
+settles across two fresh Collect scans, one early retry avoids waiting for the
+full timeout after an ineffective airborne press. Stationary, moving, stale or
+competing interactions cannot trigger this retry; the existing three-attempt cap
+and input guards still apply.
 
 The read-only **Predictions** page (5) shows unique catches by item, worker-active
 time separately from elapsed time, items/hour, sample warnings and a configurable
