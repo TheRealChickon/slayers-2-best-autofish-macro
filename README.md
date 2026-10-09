@@ -448,3 +448,19 @@ Game artwork in `assets/` is used as visual reference and UI thumbnails. This is
 ## Bounded live telemetry
 
 See [READONLY-MCP.md](READONLY-MCP.md) for the local status/recent-events/metrics adapter, limits and existing AnythingMCP hosting boundary. It reads existing telemetry without controlling the farmer. Remote MCP activation remains pending a verified authorized telemetry transport.
+
+
+## Capture failure evidence
+
+Capture retries remain bounded to three attempts with owned-resource replacement.
+Each failed attempt records its region, blank-frame classification and available
+MSS API/error code; native handle arguments are omitted. A closed capture session
+cannot grab or recreate resources. After worker context exit, fault diagnostics
+save the original error and previously cached frames with their existing timestamps,
+without requesting a fresh screenshot from closed resources.
+
+Mocked regressions cover black/white/API failures, close semantics, original fault
+storage and an intact F8 pause. This improves fault evidence and removes a possible
+secondary GDI failure; it does not establish or repair the underlying cause of a
+blank Player presentation surface. Live rendering and display transitions remain
+unverified. No monitor-power, surface-refresh or automatic-recovery policy changes.

@@ -593,7 +593,8 @@ def main():
         if failure_code not in ('manual_stop','session_limit','focus'):
             inp.release()
             try:
-                screenshot('failure')
+                # The CaptureSession context already exited. Save the original
+                # fault and timestamped cached frames without capturing again.
                 diagnostics.save(failure_code,last_reason,pickup=last_pickup_evidence,**failure_details)
             except Exception as diagnostic_error:event('diagnostic_error',message=str(diagnostic_error))
         event('stopped',reason=str(ex),code=failure_code);raise
