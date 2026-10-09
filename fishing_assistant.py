@@ -14,7 +14,7 @@ from tracking_watchdog import TrackingWatchdog
 from screen_space import ScreenSpace
 from inventory_watch import InventoryDriver, InventoryWatcher
 import landmarks
-from pickup_policy import classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate,waiting_decision,retain_collect_hold,CollectHoldMotion
+from pickup_policy import classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate,waiting_decision,before_cast_decision,retain_collect_hold,CollectHoldMotion
 from reward_evidence import reward_quantity
 from faults import FishingFault, FaultRecorder, reason_code
 from full_pause import InputGate, InputPaused, PAUSE_FILE, resumed_stage
@@ -184,6 +184,7 @@ def main():
     motion=ReelMotion();tracking_watchdog=TrackingWatchdog()
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_toast_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
     cooldown_delay=1.0;prompt_detected_at=None;reward_gate=RewardGate();collect_motion=CollectHoldMotion()
+    needs_scene_check=True;scene_check_started=None;hooked_cycles=0;last_wait_pickup_check=0
     last_reference_check=0;reference_matcher=None;paused_at=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
     diagnostics=FaultRecorder(RUN,session);pickup_gate=PickupGate();last_pickup_evidence={};failure_code='';failure_details={}
@@ -192,7 +193,7 @@ def main():
     def inventory_progress(**kw):
         write_metrics('status.json',{'running':True,'pid':os.getpid(),'session':session,'updated':time.time(),
             'stage':'inventory','inventory':kw,'last_game_activity':last_game_activity,
-            'held_mouse':False,'held_t':False,'cycles':cycles,'casts':casts})
+            'held_mouse':False,'held_t':False,'cycles':hooked_cycles,'casts':casts})
     def record_reward(raw):
         nonlocal pickup_confirmed,last_reward
         if not reward_gate.accept(cycles):
@@ -291,7 +292,7 @@ def main():
                         state={'running':True,'pid':os.getpid(),'session':session,'updated':time.time(),
                             'stage':reason or 'paused_focus','manual_paused':(RUN/PAUSE_FILE).exists(),
                             'wait_reason':'Paused — F8 to resume' if reason=='paused_manual' else 'Waiting for Roblox and pointer',
-                            'elapsed':round(paused_at-started,1),'casts':casts,'cycles':cycles,
+                            'elapsed':round(paused_at-started,1),'casts':casts,'cycles':hooked_cycles,
                             'completed_100_percent':completed,'failed_rounds':failed,'reward_banners_observed':pickup_confirmed,
                             'last_reward':last_reward,'last_game_activity':last_game_activity,'held_mouse':False,'held_t':False}
                         write_metrics('status.json',state);time.sleep(.1)
@@ -304,6 +305,8 @@ def main():
                     cast_press_started=None
                     if stage!=previous_stage:since=time.monotonic()
                     pickup_gate=PickupGate();last_pickup_scan=0;laststate=0
+                    needs_scene_check=stage in ('casting','waiting','cooldown','equipping')
+                    scene_check_started=None
                     event('input_resumed',stage=stage,paused_seconds=round(pause_seconds,2))
                 try:
                     tick=time.monotonic();now=tick
@@ -311,7 +314,7 @@ def main():
                     inp.guard_press(True)
                     if inventory_open:
                         inventory.scanner.close();inventory_open=False
-                    if needs_inventory_start:
+                    if needs_inventory_start and not needs_scene_check and stage=='casting':
                         needs_inventory_start=False;inventory_open=True
                         inventory.start();inventory_open=False;now=time.monotonic();since=now
                         supervisor_started=read_metrics('supervisor.json').get('started')
@@ -328,7 +331,7 @@ def main():
                                     base_rounds=read_metrics('totals.json').get('rounds',0)
                                 if not isinstance(base_rounds,int):base_rounds=0
                                 write_metrics('bait-observation.json',{'at':time.time(),'count':bait_count,
-                                    'hooks':base_rounds+cycles,'supervisor_started':supervisor_started})
+                                    'hooks':base_rounds+hooked_cycles,'supervisor_started':supervisor_started})
                                 event('bait_read',count=bait_count)
                             except ValueError as error:
                                 event('bait_unreadable',message=str(error))
@@ -336,6 +339,8 @@ def main():
                             inp.zoom_first_person();event('camera_zoom',mode='first_person');screenshot('camera-first-person')
                             first_person_active=True
                             now=time.monotonic();since=now;cast_needs_settle=True
+                        # Menu/camera work invalidates the previous empty-scene read.
+                        needs_scene_check=True;scene_check_started=None;pickup_gate=PickupGate()
                     if (RUN/'RECOVER').exists():
                         (RUN/'RECOVER').unlink();raise RuntimeError('Roblox presence requested reconnect after stalled activity')
                     if stage in ('cooldown','casting') and (RUN/'RELOAD').exists():
@@ -352,7 +357,33 @@ def main():
                         raw_gui=read_text(cv2.resize(gui,None,fx=.75,fy=.75)).lower();last_gui_scan=time.monotonic()
                         if any(t in raw_gui for t in ('disconnected','connection lost','connection error','failed to connect','same account launched','error code','reconnect')):
                             inp.release();event('disconnect_gui',text=raw_gui);raise RuntimeError('Disconnect GUI detected; rejoin required')
+                    if d is None and stage=='waiting' and not needs_scene_check and now-last_wait_pickup_check>.75:
+                        # A cast can be ignored while an existing drop owns the
+                        # interaction. Do not wait for the bite timeout to find it.
+                        needs_scene_check=True;scene_check_started=None;pickup_gate=PickupGate()
+                    if d is None and needs_scene_check and stage in ('casting','waiting','cooldown','equipping'):
+                        # Local worker replacement must not abandon loot from the
+                        # interrupted worker. Repeat this check after pause and at
+                        # every cast boundary; only fresh evidence authorizes T.
+                        if scene_check_started is None:scene_check_started=time.monotonic()
+                        evidence,stable=pickup_text();now=time.monotonic()
+                        decision=before_cast_decision(evidence,stable,now-scene_check_started)
+                        if decision=='collect':
+                            if cycles==0 or cycles in reward_gate.confirmed or last_tracking_cast!=casts:
+                                cycles+=1;last_tracking_cast=casts;end_percent=None
+                            inventory.begin_round();prompt_seen=True;pickup_tries=0;last_prompt=evidence.text
+                            needs_scene_check=False;scene_check_started=None
+                            stage='pickup_wait';since=now-.1;last_pickup_scan=0
+                            event('pending_pickup_recovered',cycle=cycles,text=evidence.text)
+                        elif decision=='clear':
+                            needs_scene_check=False;scene_check_started=None;last_wait_pickup_check=now
+                            if needs_inventory_start and stage=='casting':continue
+                        elif decision=='timeout':
+                            raise FishingFault('pickup_timeout','Cannot confirm a clear scene before casting; pending loot retained',evidence=last_pickup_evidence)
+                        else:
+                            time.sleep(.08);continue
                     if d is not None:
+                        needs_scene_check=False;scene_check_started=None
                         if tracking_watchdog.observe(d,now):
                             inp.release();screenshot('frozen-minigame')
                             raise FishingFault('tracking_frozen','Minigame markers frozen for 12 seconds; rejoin required',detection=d)
@@ -362,7 +393,7 @@ def main():
                             inp.grab(False);stage='tracking';since=now;prev=None;velocity=0;target_velocity=0;missing_casts=0
                             motion.suspend()
                             fresh_hook=casts!=last_tracking_cast
-                            if fresh_hook:cycles+=1;last_tracking_cast=casts
+                            if fresh_hook:cycles+=1;hooked_cycles+=1;last_tracking_cast=casts
                             event('minigame' if fresh_hook else 'tracking_reacquired',cycle=cycles,cast=casts);screenshot('start');prompt_seen=False;pickup_tries=0;last_prompt=''
                             prompt_detected_at=None
                         lastseen=now
@@ -420,10 +451,11 @@ def main():
                             cast_needs_settle=False
                             inp.hold(True);cast_press_started=time.monotonic()
                         elif cast_press_started is not None and time.monotonic()-cast_press_started>=.16:
-                            inp.hold(False);cast_press_started=None;casts+=1;event('cast',cast=casts);stage='waiting';since=time.monotonic()
+                            inp.hold(False);cast_press_started=None;casts+=1;event('cast',cast=casts);stage='waiting';since=time.monotonic();last_wait_pickup_check=since
                     elif stage=='equipping':
                         if now-since>.65:
                             inp.guard_press(True);move_pointer(*screen.point(*load_config()['cast_point']));stage='casting';since=now
+                            needs_scene_check=True;scene_check_started=None;pickup_gate=PickupGate()
                     elif stage=='waiting':
                         if now-since>BITE_WAIT_TIMEOUT_SECONDS:
                             missing_casts+=1;event('no_minigame',count=missing_casts);screenshot('missing')
@@ -540,12 +572,13 @@ def main():
                                 pickup_confirmed+=1;last_reward=f"{recovered['item']} X{recovered['quantity']} (inventory)"
                             inventory.end_round()
                             stage='casting';now=time.monotonic();since=now;cast_press_started=None
+                            needs_scene_check=True;scene_check_started=None;pickup_gate=PickupGate()
                     if now-laststate>1:
-                        status={'running':True,'pid':os.getpid(),'session':session,'updated':time.time(),'elapsed':round(now-started,1),'stage':stage,'cycles':cycles,'casts':casts,'completed_100_percent':completed,'failed_rounds':failed,'unknown_rounds':unknown,'reward_banners_observed':pickup_confirmed,'last_reward':last_reward,'track_frames':track_frames,'inside_fraction':round(inside_frames/max(1,track_frames),3),'last_detection':d,'held_mouse':inp.mouse,'held_t':inp.t}
+                        status={'running':True,'pid':os.getpid(),'session':session,'updated':time.time(),'elapsed':round(now-started,1),'stage':stage,'cycles':hooked_cycles,'recovered_pickups':cycles-hooked_cycles,'casts':casts,'completed_100_percent':completed,'failed_rounds':failed,'unknown_rounds':unknown,'reward_banners_observed':pickup_confirmed,'last_reward':last_reward,'track_frames':track_frames,'inside_fraction':round(inside_frames/max(1,track_frames),3),'last_detection':d,'held_mouse':inp.mouse,'held_t':inp.t}
                         status['last_game_activity']=last_game_activity
                         status['capture_resets']=sct.resets
                         write_metrics('status.json',status);laststate=now
-                        ledger.update(now-started,casts,cycles,pickup_confirmed,failed,last_reward)
+                        ledger.update(now-started,casts,hooked_cycles,pickup_confirmed,failed,last_reward)
                     time.sleep(max(.001,1/60-(time.monotonic()-tick)))
                 except InputPaused:
                     inp.gate.interrupted.set();inp.release()
@@ -565,9 +598,9 @@ def main():
     finally:
         emergency_listener.stop()
         inp.gate.close()
-        ledger.update((paused_at if paused_at is not None else time.monotonic())-started,casts,cycles,pickup_confirmed,failed,last_reward)
+        ledger.update((paused_at if paused_at is not None else time.monotonic())-started,casts,hooked_cycles,pickup_confirmed,failed,last_reward)
         prior=json.loads((RUN/'status.json').read_text()) if (RUN/'status.json').exists() else {}
-        prior.update(running=False,updated=time.time(),ended=time.time(),reason=last_reason,failure_code=failure_code,held_mouse=False,held_t=False,casts=casts,cycles=cycles,reward_banners_observed=pickup_confirmed,failed_rounds=failed,last_reward=last_reward);write_metrics('status.json',prior)
+        prior.update(running=False,updated=time.time(),ended=time.time(),reason=last_reason,failure_code=failure_code,held_mouse=False,held_t=False,casts=casts,cycles=hooked_cycles,recovered_pickups=cycles-hooked_cycles,reward_banners_observed=pickup_confirmed,failed_rounds=failed,last_reward=last_reward);write_metrics('status.json',prior)
         log.close();telemetry.close()
 
 if __name__=='__main__':main()
