@@ -160,6 +160,27 @@ class InventoryScanner:
         points=np.asarray(matches[0][0])
         return x+int(points[:,0].mean()),y+int(points[:,1].mean())
 
+    def confirm_empty_search(self,frame):
+        crop=frame[45:128,920:1250]
+        self.search_evidence={'crop':[920,45,1250,128],'readings':[]}
+        for scale in (1,2):
+            rows=self.driver.text(crop if scale==1 else cv2.resize(crop,None,fx=scale,fy=scale))
+            # OCR can return the words of this single-line placeholder in
+            # detection order. Only screen order can establish its exact text.
+            rows=sorted(rows,key=lambda r:float(np.asarray(r[0])[:,0].mean()))
+            text=''.join(row[1] for row in rows)
+            self.search_evidence['readings'].append({'scale':scale,
+                'rows':[{'text':r[1],'score':float(r[2])} for r in rows], 'text':text})
+            if re.sub(r'[^a-z]','',text.lower())=='itemnamehere':return
+        details={'at':time.time(),'reason':'empty_search_unconfirmed',
+            'search':self.search_evidence,'frame':'inventory-search-unreadable.jpg'}
+        try:
+            details['frame_saved']=bool(cv2.imwrite(str(RUN/details['frame']),frame,[cv2.IMWRITE_JPEG_QUALITY,85]))
+            write('inventory-search-evidence.json',details)
+            self.event('inventory_search_evidence',**details)
+        except OSError:pass
+        raise ValueError('Inventory search is unreadable or filtered; keep the unknown label until empty search is confirmed')
+
     def open(self):
         d=self.driver;d.inp.release()
         if self.inventory_count(d.capture()) is None:
@@ -173,10 +194,7 @@ class InventoryScanner:
         # click can let Roblox interpret Ctrl+A as movement underneath the menu.
         d.move(2060,1080);d.sleep(.3)
         frame=d.capture()
-        search=''.join(row[1] for row in d.text(frame[45:128,920:1250])).lower()
-        if 'itemnamehere' not in re.sub(r'[^a-z]','',search):
-            cv2.imwrite(str(RUN/'inventory-search-unreadable.jpg'),frame,[cv2.IMWRITE_JPEG_QUALITY,85])
-            raise ValueError('Clear the inventory search field for automatic item identification')
+        self.confirm_empty_search(frame)
         return frame
 
     def read_name(self,x,y):
