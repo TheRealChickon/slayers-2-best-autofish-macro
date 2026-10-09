@@ -14,7 +14,7 @@ from tracking_watchdog import TrackingWatchdog
 from screen_space import ScreenSpace
 from inventory_watch import InventoryDriver, InventoryWatcher
 import landmarks
-from pickup_policy import classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate,waiting_decision
+from pickup_policy import classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate,waiting_decision,retain_collect_hold
 from faults import FishingFault, FaultRecorder, reason_code
 from full_pause import InputGate, InputPaused, PAUSE_FILE, resumed_stage
 from unattended_focus import TaggedInput
@@ -465,7 +465,7 @@ def main():
                             now=time.monotonic()
                             if evidence.kind=='reward' and stable:
                                 record_reward(evidence.text);screenshot('collected');start_cooldown(.12);continue
-                            if evidence.kind=='empty' and stable and inp.t:
+                            if evidence.kind=='empty' and stable and inp.t and not retain_collect_hold(evidence,now-since):
                                 inp.grab(False);event('pickup_released',cycle=cycles,reason='Prompt disappeared')
                             elif evidence.kind=='collect' and stable and not inp.t:
                                 if pickup_tries>=3:raise FishingFault('pickup_timeout','Collect remained after three state-driven attempts')

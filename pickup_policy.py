@@ -96,6 +96,11 @@ def waiting_decision(evidence,stable,elapsed,fresh_round=False,percent=None):
     return 'wait'
 
 
+def retain_collect_hold(evidence,elapsed,confirmed_reward=False):
+    """An OCR miss can hide a prompt during its already-authorized hold."""
+    return not confirmed_reward and evidence.kind not in ('other','ambiguous') and elapsed<4
+
+
 class PickupGate:
     def __init__(self):
         self.previous = None

@@ -141,6 +141,19 @@ class Reliability(unittest.TestCase):
         self.assertEqual(waiting_decision(absent,True,3.7,True,0),'empty')
         self.assertEqual(waiting_decision(prompt,False,1,True,100),'wait')
 
+    def test_prompt_occlusion_does_not_abort_a_verified_hold_before_reward(self):
+        from pickup_policy import Pickup,retain_collect_hold
+        evidence=[(0,Pickup('collect')),(1.25,Pickup('empty')),(1.45,Pickup('empty')),
+                  (1.9,Pickup('collect')),(2.7,Pickup('reward'))]
+        self.assertTrue(all(retain_collect_hold(frame,elapsed) for elapsed,frame in evidence))
+        self.assertFalse(retain_collect_hold(evidence[-1][1],2.7,confirmed_reward=True))
+
+    def test_occluded_hold_still_releases_for_other_interactions_or_deadline(self):
+        from pickup_policy import Pickup,retain_collect_hold
+        for kind in ('other','ambiguous'):
+            self.assertFalse(retain_collect_hold(Pickup(kind),.7))
+        self.assertFalse(retain_collect_hold(Pickup('empty'),4))
+
     def test_failed_native_alert_survives_watcher_restart_until_acknowledged(self):
         watcher=Watcher(self.root,{})
         watcher.alert('test-native-failure','Minigame stalled')
