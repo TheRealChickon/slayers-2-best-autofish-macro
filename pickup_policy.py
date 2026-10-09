@@ -2,6 +2,7 @@
 import math
 import re
 from dataclasses import dataclass
+from reward_evidence import reward_quantity
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,11 @@ def classify(rows):
     # name and the caller's repeated-observation gate are still required.
     rows = [r for r in rows if r.get('score', 0) >= .80 or
             (r.get('score',0)>=.70 and re.fullmatch(r'x\s*\d{1,3}',r['text'].strip(),re.I))]
+    # Inventory headers identify a menu, even when its item quantities and
+    # tooltips occupy the same screen region as a fishing reward.
+    if any(re.fullmatch(r'(?:all(?: classes)?|equipped|fishing)\s*\(\s*\d+\s*\)',
+                        r['text'].strip(),re.I) for r in rows):
+        return Pickup('empty')
     def cluster(anchor):
         x,y=anchor['center']
         close=[r for r in rows if abs(r['center'][0]-x)<180 and abs(r['center'][1]-y)<65]
@@ -35,6 +41,7 @@ def classify(rows):
     other = [r for r in rows if re.search(r'\bwall\b|climb|\bpurchase\b|would you like', r['text'], re.I)]
     # Quantity labels need an item name, not a lone X1 elsewhere in the scene.
     rewards = [r for r in rows if re.search(r'\b(?:x\s*\d+|new)\b', r['text'], re.I)
+               and reward_quantity(cluster(r)) is not None
                and len(re.sub(r'\b(?:x\s*\d+|new)\b|[^a-z]', '', cluster(r).lower())) >= 3
                and r not in collect and r not in other]
     if collect and other:

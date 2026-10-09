@@ -22,6 +22,7 @@ from pathlib import Path
 
 from app_config import data_directory
 from item_names import item_name
+from reward_evidence import reward_quantity
 
 
 WINDOW_SECONDS = 3600
@@ -154,11 +155,11 @@ def summarize(run, start, end, now=None):
             banner=(path,row.get('cycle'),re.sub(r'[^a-z0-9]','',raw.casefold()))
             if row.get('cycle') is not None and banner in seen_banners:continue
             seen_banners.add(banner)
-            if REWARD_LABEL.search(raw) and not re.search(r"collect|climb|purchase", raw, re.I):
+            quantity=reward_quantity(raw)
+            if quantity is not None:
                 key = row.get("reward_id") or f"{path}:{row.get('cycle')}:{row['at']}"
-                match = QUANTITY.search(raw)
                 rewards[key] = {"at": row["at"], "name": reward_name(raw, prompts.get(cycle, "")),
-                                "quantity": int(match.group(1)) if match else 1, "raw": raw}
+                                "quantity": quantity, "raw": raw}
         elif kind == "inventory_resolved" and row.get("reward_id"):
             corrections[row["reward_id"]] = row.get("item", "")
         elif kind == "inventory_recovered" and row.get("reward_id"):
@@ -207,7 +208,9 @@ def summarize(run, start, end, now=None):
     if log_run:
         all_events=list(event_rows(run,log_run['started'],end))
         totals={'casts':sum(r.get('event')=='cast' for _,r in all_events),
-                'rewards':len({(p,r['cycle']) if r.get('cycle') is not None else r.get('reward_id') or (p,r.get('at')) for p,r in all_events if r.get('event') in ('reward_observed','inventory_recovered')}),
+                'rewards':len({(p,r['cycle']) if r.get('cycle') is not None else r.get('reward_id') or (p,r.get('at'))
+                               for p,r in all_events if r.get('event')=='inventory_recovered'
+                               or r.get('event')=='reward_observed' and reward_quantity(r.get('text','')) is not None}),
                 'failed':sum(r.get('event')=='minigame_ended' and r.get('percent') not in (None,100) for _,r in all_events)}
     stopped = (run / "STOP").exists()
     paused = (run / "PAUSE").exists() or (run / "F8_PAUSE").exists() or bool(supervisor.get("manual_paused"))
