@@ -66,6 +66,10 @@ def event(action, message):
 
 def pause():
     with guard():
+        if alive('route-recorder-pid.json'):
+            (RUN/'route-recorder-stop').write_text('Paused by user')
+            if not alive() and not starting():
+                return 'Ending the bait route recording; the partial demonstration is retained.'
         if not alive() and not starting():
             return 'Already stopped. Continue resumes the saved run.'
         (RUN / 'PAUSE').write_text('Paused by user')
@@ -109,6 +113,8 @@ def resume(mode=None,until=None,automatic=False):
     seconds=seconds_until_local_clock(until) if until else 0
     with guard():
         refuse_peer_controller()
+        if alive('route-recorder-pid.json'):
+            return 'Bait route recorder is open. Finish or close it before Continue.'
         if alive('calibration-pid.json'):
             return 'Reference setup is running. Stop cancels it.'
         live, pending = alive(), starting()
@@ -173,7 +179,7 @@ def refuse_peer_controller():
     if not peer:
         return
     from pathlib import Path
-    for name in ('supervisor-pid.json', 'pid.json', 'control-start.json', 'calibration-pid.json'):
+    for name in ('supervisor-pid.json', 'pid.json', 'control-start.json', 'calibration-pid.json', 'route-recorder-pid.json'):
         try:
             record = json.loads((Path(peer)/name).read_text())
             if abs(psutil.Process(record['pid']).create_time() - record['created']) < 1:

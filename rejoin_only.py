@@ -70,6 +70,8 @@ def main(argv=None):
     import control_actions as controls
     RUN.mkdir(parents=True, exist_ok=True)
     with controls.guard():
+        if controls.alive('route-recorder-pid.json'):
+            raise RuntimeError('Bait route recorder is open; close it before starting Fishing')
         if controls.alive() or controls.alive('pid.json'):
             raise RuntimeError('Another controller is already running')
         if (RUN/'STOP').exists() or (RUN/'PAUSE').exists():

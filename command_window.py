@@ -316,6 +316,10 @@ class Window:
             self.run_action(lambda:landmark_controls.setup(position))
         self.button(reference_row,'Save fishing view',save_reference,MUTED,BG,padx=0).pack(side='left')
         self.button(reference_row,'Disable reference',lambda:self.run_action(landmark_controls.disable),MUTED,BG,padx=15).pack(side='left')
+        from bait_route_recorder import launch as record_bait_route
+        self.button(options,'Record bait route',lambda:self.run_action(record_bait_route),MUTED,BG,padx=0).pack(anchor='w',pady=(15,0))
+        tk.Label(options,text='Pause Fishing first. F7 records, F6 marks a view, F10 saves.',
+                 bg=BG,fg=MUTED,font=(FONT,9),justify='left').pack(anchor='w',pady=(2,8))
         self.button(form,'Setup guide',lambda:os.startfile(str(ROOT/'README.md')),MUTED,BG,padx=0).pack(anchor='w')
 
     def save_settings(self):

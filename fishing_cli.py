@@ -130,6 +130,8 @@ def parser(prog='autofish'):
     reference.add_argument('operation',choices=('status','save','disable'),nargs='?',default='status')
     reference.add_argument('--position',action='store_true',help='Calibrate small position corrections as well as camera movement')
     reference.add_argument('--boxes',help='JSON list of x,y,width,height boxes in a 1280x720 screenshot; two near surfaces first, then optional distant scenery')
+    route=sub.add_parser('route',help='Record a manual shrine/bait/reset demonstration; no replay or buying automation')
+    route.add_argument('operation',choices=('record','status','folder'),nargs='?',default='status')
     sub.add_parser('diagnostics',help='Show the last eight failure reports and local screenshot paths')
     sub.add_parser('stop', help='Stop game input and retain counters')
     sub.add_parser('export', help='Save the complete item log and totals as CSV')
@@ -195,6 +197,19 @@ def stream_logs(args, journal, colors):
 
 def execute(args, colors=False):
     command = args.command or 'status'
+    if command=='route':
+        from app_config import data_directory
+        root=data_directory()
+        if args.operation=='record':
+            from bait_route_recorder import launch
+            print(launch())
+        elif args.operation=='folder':
+            path=root/'bait-routes';path.mkdir(parents=True,exist_ok=True);os.startfile(str(path))
+        else:
+            from metrics import read
+            print(json.dumps({'recorder_open':actions.alive('route-recorder-pid.json'),
+                'folder':str(root/'bait-routes'),'latest':read('bait-route-latest.json') or None},indent=2))
+        return 0
     if command=='predictions':
         from app_config import data_directory
         from run_log import select
