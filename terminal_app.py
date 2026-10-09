@@ -89,6 +89,7 @@ class Terminal:
         self.category = 0
         self.follow = True
         self.log_run_id = 'current'
+        self.log_run = {}
         self.editing = None
         self.buffer = ''
         self.alive = True
@@ -121,7 +122,16 @@ class Terminal:
         self.effects.observe(self.journal.items, self.data['started'], time.time(), time.monotonic())
         from run_log import select
         log_run=select(data_directory(),self.log_run_id)
+        old_rows=self.feed.filtered(self.query,self.categories[self.category])
+        anchor=old_rows[min(self.scroll,len(old_rows)-1)].get('id') if old_rows and not self.follow else None
+        changed_run=self.log_run.get('id') and self.log_run['id']!=log_run.get('id')
+        self.log_run=log_run
         self.feed.update(log_run.get('started',self.data['started']),self.data['state'] if self.log_run_id=='current' else None,log_run.get('ended'))
+        if changed_run:
+            self.scroll=0;self.follow=True
+        elif anchor:
+            rows=self.feed.filtered(self.query,self.categories[self.category])
+            self.scroll=next((i for i,r in enumerate(rows) if r.get('id')==anchor),0)
         if self.page == 1:
             self.selection = min(self.selection, max(0, len(self.item_rows())-1))
 
@@ -291,7 +301,8 @@ class Terminal:
         elif self.page == 2 and key.lower() == 'g': self.category = (self.category+1) % 4; self.scroll = 0
         elif self.page == 2 and key.lower() == 'r':
             from run_log import list_runs
-            ids=['current']+[r['id'] for r in list_runs(data_directory())]
+            current_id=self.data.get('log_run',{}).get('id')
+            ids=['current']+[r['id'] for r in list_runs(data_directory()) if r['id']!=current_id]
             self.log_run_id=ids[(ids.index(self.log_run_id)+1)%len(ids)] if self.log_run_id in ids else 'current'
             self.scroll=0;self.follow=True
         elif self.page==4 and key.lower()=='h':self.edit('Prediction hours',self.prediction_hours)
@@ -302,7 +313,9 @@ class Terminal:
                 self.scroll=0 if key=='HOME' else limit if key=='END' else max(0,min(limit,self.scroll+step))
             elif self.page == 2:
                 rows = self.feed.filtered(self.query, self.categories[self.category])
-                limit = max(0, len(rows)-max(1, self.height-12))
+                visible=max(1,self.height-14)
+                limit = max(0, len(rows)-visible)
+                if key in ('PGUP','PGDN'):step=-visible if key=='PGUP' else visible
                 if self.follow: self.scroll = limit
                 self.follow = key == 'END'
                 self.scroll = 0 if key == 'HOME' else limit if key == 'END' else max(0, min(limit, self.scroll+step))
@@ -405,7 +418,11 @@ class Terminal:
             visible = max(1, available-2)
             self.scroll = max(0, len(rows)-visible) if self.follow else min(self.scroll, max(0, len(rows)-visible))
             run_id=self.data.get('log_run',{}).get('id','current') if self.log_run_id=='current' else self.log_run_id
-            result = [tint(f'Run {run_id}   R previous runs   '+self.categories[self.category] + ('   ● Following' if self.follow else '   History') + (f'   / {self.query}' if self.query else ''), 'gold'), '']
+            count=len(rows);last=min(count,self.scroll+visible);newer=count-last
+            position=f'Rows {self.scroll+1 if count else 0}–{last} of {count}'
+            position+=f'  ·  {newer} newer  ·  End latest' if newer else '  ·  Latest'
+            if getattr(self,'log_run',{}).get('ended') is not None:position='Finished  ·  '+position
+            result = [tint(f'Run {run_id}   R previous runs   '+self.categories[self.category] + ('   ● Following' if self.follow else '   History') + (f'   / {self.query}' if self.query else ''), 'gold'),tint(position,'dim')]
             result += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+
                        tint(r['text'],event_tone(r))
                        for r in rows[self.scroll:self.scroll+visible]]

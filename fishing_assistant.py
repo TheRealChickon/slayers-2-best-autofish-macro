@@ -15,6 +15,7 @@ from screen_space import ScreenSpace
 from inventory_watch import InventoryDriver, InventoryWatcher
 import landmarks
 from pickup_policy import classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate,waiting_decision,retain_collect_hold,CollectHoldMotion
+from reward_evidence import reward_quantity
 from faults import FishingFault, FaultRecorder, reason_code
 from full_pause import InputGate, InputPaused, PAUSE_FILE, resumed_stage
 from unattended_focus import TaggedInput
@@ -147,7 +148,7 @@ def is_other_interaction(text):
 def is_reward_banner(text):
     # Item text alone can still be the pickup prompt. A quantity/new label
     # belongs to the actual collection notification.
-    return not is_other_interaction(text) and not is_pickup_prompt(text) and bool(re.search(r'\bx\s*\d+\b|\bnew\b',text,re.I))
+    return not is_other_interaction(text) and not is_pickup_prompt(text) and reward_quantity(text) is not None
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--seconds',type=float,default=0);p.add_argument('--focus',action='store_true');p.add_argument('--record',action='store_true');p.add_argument('--gain',type=float,default=None,help='Override adaptive braking with the legacy fixed predictor');a=p.parse_args()
