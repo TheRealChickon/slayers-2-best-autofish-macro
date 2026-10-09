@@ -4,6 +4,7 @@ import json
 import re
 import time
 from metrics import RUN
+from reward_evidence import reward_quantity
 
 
 def state_tone(state, active=True):
@@ -36,7 +37,9 @@ def describe(row):
     if kind == 'minigame_ended':
         pct = row.get('percent')
         return f'Hook {row.get("cycle", "")} · {str(pct)+"%" if pct is not None else "finished"}'
-    if kind == 'reward_observed':return 'Collected ' + row.get('text', 'item')
+    if kind == 'reward_observed':
+        raw=row.get('text','')
+        return ('Collected ' if reward_quantity(raw) is not None else 'Ignored unconfirmed reward read: ') + raw
     if kind == 'inventory_resolved':return 'Identified ' + row.get('item','item') + ' from inventory'
     if kind == 'inventory_recovered':return 'Confirmed ' + row.get('item','item') + ' from inventory · banner missed'
     if kind == 'inventory_checked':return f'Inventory checked · {row.get("items",0)} item types'
@@ -87,14 +90,15 @@ class LiveFeed:
                     # Screen/OCR transitions are diagnostics, not new recoveries.
                     # Keep them in raw logs; show actual actions and outcomes here.
                     if kind in ('tracking_reacquired','screen','alignment_check'):continue
-                    group = 'catches' if kind in ('reward_observed','inventory_resolved','inventory_recovered') else 'recovery' if path.name=='recovery.jsonl' or path.name.startswith('events-rejoin-') or kind=='damage_reset' else 'damage' if path.name.startswith('events-damage-') else 'fishing'
-                    level = 'warn' if any(term in kind for term in ('error','stopped','no_minigame','wrong_interaction','retry','exhausted','unreadable','ambiguous','attention')) else 'good' if kind in ('reward_observed','equipped_rod','rod_equipped','inventory_resolved','inventory_recovered','damage_ready','rejoin_success') else 'normal'
+                    rejected=kind=='reward_observed' and reward_quantity(row.get('text','')) is None
+                    group = 'catches' if not rejected and kind in ('reward_observed','inventory_resolved','inventory_recovered') else 'recovery' if path.name=='recovery.jsonl' or path.name.startswith('events-rejoin-') or kind=='damage_reset' else 'damage' if path.name.startswith('events-damage-') else 'fishing'
+                    level = 'warn' if rejected or any(term in kind for term in ('error','stopped','no_minigame','wrong_interaction','retry','exhausted','unreadable','ambiguous','attention')) else 'good' if kind in ('reward_observed','equipped_rod','rod_equipped','inventory_resolved','inventory_recovered','damage_ready','rejoin_success') else 'normal'
                     event_id = hashlib.sha256(json.dumps([started, path.name, position, row], sort_keys=True).encode()).hexdigest()[:24]
                     self.rows.append({'id':event_id,'at':row.get('at',0),'kind':kind,'group':group,'level':level,
                         'text':re.sub(r'[\x00-\x1f\x7f]', ' ', describe(row))})
                     changed = True
                 self.offsets[path] = stream.tell()
-        if state is not None and state != self.state:
+        if ended is None and state is not None and state != self.state:
             self.state = state
             self.rows.append({'at':time.time(),'kind':'state','group':'state','level':'state','text':state})
             changed = True

@@ -24,12 +24,74 @@ import numpy as np
 
 
 class IsolatedState(unittest.TestCase):
+    def test_log_navigation_reaches_last_row_without_enabling_follow(self):
+        app=terminal_app.Terminal();app.page=2;app.height=22;app.follow=False
+        app.feed.rows=[{'text':f'entry-{i}','at':i,'level':'normal','group':'fishing'} for i in range(100)]
+        for _ in range(120):app.key('DOWN')
+        lines=[terminal_app.ANSI.sub('',line) for line in app.body(10)]
+        self.assertIn('entry-99',lines[-1]);self.assertEqual(app.scroll,92)
+        self.assertFalse(app.follow);self.assertIn('Rows 93–100 of 100',lines[1])
+        app.key('PGUP');self.assertEqual(app.scroll,84)
+        lines=[terminal_app.ANSI.sub('',line) for line in app.body(10)]
+        self.assertIn('8 newer',lines[1])
+        app.key('PGDN');self.assertEqual(app.scroll,92)
+
+    def test_finished_run_keeps_browsing_anchor_when_full_archive_is_loaded(self):
+        metrics.write('totals.json',{'started':10})
+        metrics.write('current-run.json',{'id':'run-1','started':10,'ended':None})
+        self.append('events-test.jsonl',[{'at':11+i,'event':'cast','cast':i} for i in range(4005)])
+        app=terminal_app.Terminal();app.page=2;app.refresh();app.follow=False;app.scroll=100
+        anchor=app.feed.rows[app.scroll]['id']
+        metrics.write('current-run.json',{'id':'run-1','started':10,'ended':5000})
+        app.refresh()
+        self.assertEqual(len(app.feed.rows),4005)
+        self.assertEqual(app.feed.rows[app.scroll]['id'],anchor)
+        self.assertFalse(app.follow)
+        self.assertTrue(all(10<=r['at']<=5000 for r in app.feed.rows))
+        self.assertIn('Finished',terminal_app.ANSI.sub('',app.body(18)[1]))
+
+    def test_new_current_run_returns_to_follow_and_excludes_previous_logs(self):
+        metrics.write('totals.json',{'started':10})
+        metrics.write('current-run.json',{'id':'old','started':10,'ended':None})
+        self.append('events-test.jsonl',[{'at':11+i,'event':'cast','cast':i} for i in range(30)])
+        app=terminal_app.Terminal();app.refresh();app.follow=False;app.scroll=12
+        metrics.write('totals.json',{'started':100})
+        metrics.write('current-run.json',{'id':'new','started':100,'ended':None})
+        self.append('events-test.jsonl',[{'at':101,'event':'cast','cast':1}])
+        app.refresh()
+        self.assertTrue(app.follow);self.assertEqual(app.scroll,0)
+        self.assertTrue(all(r['at']>=100 for r in app.feed.rows))
+
+    def test_previous_run_selector_skips_duplicate_current_run(self):
+        from discord_hourly import atomic_json
+        for run_id,at in [('old',10),('new',20)]:
+            atomic_json(self.root/'runs'/run_id/'run.json',{'id':run_id,'started':at,'ended':at+5})
+        metrics.write('current-run.json',{'id':'new','started':20,'ended':25})
+        app=terminal_app.Terminal();app.page=2;app.data={'log_run':{'id':'new'}}
+        app.key('r');self.assertEqual(app.log_run_id,'old')
+        app.key('r');self.assertEqual(app.log_run_id,'current')
+
+    def test_inventory_quantity_is_a_warning_without_inflating_journal(self):
+        self.append('events-test.jsonl',[{'at':11,'event':'reward_observed','text':'X2964 Bait'},
+                    {'at':12,'event':'reward_observed','text':'Coral X2'}])
+        before=(self.root/'events-test.jsonl').read_bytes()
+        journal=item_journal.Journal();journal.update(10)
+        self.assertEqual(journal.counts,{'Coral':2})
+        feed=live_feed.LiveFeed();feed.update(10)
+        self.assertEqual(len(feed.filtered('','Catches')),1)
+        warnings=feed.filtered('','Warnings')
+        self.assertEqual(len(warnings),1)
+        self.assertIn('Ignored unconfirmed reward read',warnings[0]['text'])
+        self.assertEqual((self.root/'events-test.jsonl').read_bytes(),before)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         for module in (metrics, item_journal, live_feed, control_actions, status_view):
             patcher = patch.object(module, 'RUN', self.root)
             patcher.start(); self.addCleanup(patcher.stop)
+        patcher=patch.object(terminal_app,'data_directory',return_value=self.root)
+        patcher.start();self.addCleanup(patcher.stop)
         patcher = patch.object(app_config, 'CONFIG', self.root/'config.local.json')
         patcher.start(); self.addCleanup(patcher.stop)
         self.addCleanup(self.temporary.cleanup)
