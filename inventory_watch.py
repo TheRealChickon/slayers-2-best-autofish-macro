@@ -133,7 +133,24 @@ class InventoryScanner:
         rows=self.driver.text(frame[140:235,660:905])
         text=' '.join(r[1] for r in rows)
         match=re.search(r'All\s*[\(\[]?\s*(\d+)',text,re.I)
-        return int(match[1]) if match else None
+        total=int(match[1]) if match else None
+        self.count_evidence={'crop':[660,140,905,235],
+            'rows':[{'text':r[1],'score':float(r[2])} for r in rows], 'parsed_total':total}
+        return total
+
+    def record_count_rejection(self,frame,total):
+        # Reuse the rejected frame; diagnostics must not open/capture the menu.
+        details={'at':time.time(),'reason':'unreadable_header' if total is None else 'outside_first_page_limit',
+            'parsed_total':total,'supported_count':[1,100],
+            'header':getattr(self,'count_evidence',{}),'frame':'inventory-count-unreadable.jpg'}
+        try:
+            details['frame_saved']=bool(cv2.imwrite(str(RUN/details['frame']),frame,[cv2.IMWRITE_JPEG_QUALITY,85]))
+            write('inventory-count-evidence.json',details)
+            self.event('inventory_count_evidence',**details)
+        except OSError:
+            # A diagnostic write cannot turn an optional comparison into a
+            # fatal worker failure. The original bounded warning still applies.
+            pass
 
     def tab_target(self,frame,label):
         x,y,w,h=620,100,300,600
@@ -252,6 +269,7 @@ class InventoryScanner:
             self.progress(done=0,total=0)
             frame=self.open();total=self.inventory_count(frame)
             if total is None or not 1<=total<=100:
+                self.record_count_rejection(frame,total)
                 raise ValueError('Inventory is not fully visible; keep the unknown label until a complete comparison is available')
             # A complete first-page snapshot is required. Never infer from an offscreen item.
             result=collections.Counter();read_items=[]
