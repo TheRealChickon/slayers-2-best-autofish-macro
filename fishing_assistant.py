@@ -387,12 +387,14 @@ def main():
                         motion.suspend();prev=None
                         if now-lastseen>.12: inp.hold(False)
                         if now-lastseen>.16 and not ui_active():
-                            inp.release();im=screenshot('end');raw=read_text(cv2.resize(im[1280:1360,1180:1380],None,fx=3,fy=3))
-                            numbers=re.findall(r'(\d{1,3})\s*%',raw);end_percent=int(numbers[0]) if numbers else None
+                            from minigame_result import read_percent
+                            inp.release();im=screenshot('end')
+                            end_percent,percent_evidence=read_percent(im,ocr,lambda:inp.guard_press(True))
                             if end_percent==100:completed+=1;consecutive_failed=0
                             elif end_percent is not None:failed+=1;consecutive_failed+=1
                             else:unknown+=1
-                            event('minigame_ended',cycle=cycles,seconds=round(now-since,2),percent=end_percent)
+                            event('minigame_ended',cycle=cycles,seconds=round(now-since,2),percent=end_percent,
+                                  percent_evidence=percent_evidence)
                             stage='pickup_wait';since=time.monotonic();prev=None;last_pickup_scan=0
                             if consecutive_failed>=5:raise RuntimeError('Five consecutive failed rounds; stopped for review')
                         elif now-lastseen>12:
