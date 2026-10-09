@@ -411,6 +411,9 @@ Empty pickup decisions now retain bounded screenshots and OCR rows, and each T
 retry is logged. A confirmed 100% minigame permits up to ten seconds for a late
 loot prompt before an empty decision; a visible prompt still starts pickup as
 soon as its evidence is sufficient. This wait never authorizes a blind T hold.
+An OCR miss during an already-verified pickup no longer aborts its held T early.
+Reward confirmation, focus/manual guards and other interaction evidence still
+release it immediately, with the existing four-second maximum for each attempt.
 
 The read-only **Predictions** page (5) shows unique catches by item, worker-active
 time separately from elapsed time, items/hour, sample warnings and a configurable
