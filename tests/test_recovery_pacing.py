@@ -2,6 +2,7 @@ import sys
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
+import numpy as np
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import recovery
@@ -14,6 +15,22 @@ def private_rows(y=1333):
 
 
 class RecoveryPacing(unittest.TestCase):
+    def test_confirmation_follows_visible_buttons_at_both_dialog_heights(self):
+        for y in (742,797):
+            frame=np.zeros((1440,2560,3),np.uint8)
+            frame[y-17:y+18,1140:1277]=(10,150,10)
+            frame[y-17:y+18,1288:1425]=(10,10,150)
+            self.assertEqual(recovery.confirm_menu_target(frame),(1208,y))
+
+    def test_missing_cancel_or_ambiguous_confirmation_withholds_target(self):
+        frame=np.zeros((1440,2560,3),np.uint8)
+        frame[725:760,1140:1277]=(10,150,10)
+        self.assertIsNone(recovery.confirm_menu_target(frame))
+        frame[725:760,1288:1425]=(10,10,150)
+        frame[850:885,1140:1277]=(10,150,10)
+        frame[850:885,1288:1425]=(10,10,150)
+        self.assertIsNone(recovery.confirm_menu_target(frame))
+
     def test_animation_and_single_observations_cannot_trigger_input(self):
         gate=MenuPacer()
         gate.observe('private_join',(1280,1366),0)
@@ -155,7 +172,8 @@ class RecoveryPacing(unittest.TestCase):
         driver.equip_rod=Mock();driver.event=lambda event,**kw:events.append((event,clock[0]))
         driver.inp.hold.side_effect=hold
         with patch.object(recovery.time,'monotonic',side_effect=lambda:clock[0]), \
-             patch.object(recovery,'load_config',return_value={'spawn_backstep_seconds':0.0}):
+             patch.object(recovery,'load_config',return_value={'spawn_backstep_seconds':0.0}), \
+             patch.object(recovery,'confirm_menu_target',side_effect=lambda frame:(1208,742) if frame['kind']=='confirm_menu' else None):
             driver.recover(True)
         driver.equip_rod.assert_called_once()
         self.assertEqual(sum(event=='hold_private_join' for event,_ in events),1)

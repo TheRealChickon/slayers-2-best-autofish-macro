@@ -47,6 +47,10 @@ The command points to this application folder and preserves its settings and sav
 
 ## Where it works
 
+Full farmer locates the return-to-menu confirmation from the adjacent green and
+red buttons. It waits for a unique visible pair before clicking, including when
+the inventory dialog places those buttons higher on screen.
+
 | Requirement | Support |
 | --- | --- |
 | Accounts | Any account that owns a rod, has it in the visible hotbar, and can use this game's private-server Join menu; configure the username for that account's presence checks |

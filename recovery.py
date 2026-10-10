@@ -41,14 +41,28 @@ def launch_game(url,known_exe=None):
         subprocess.Popen([known_exe,url],creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
 
 
+def confirm_menu_target(im):
+    """Find the adjacent green check and red cancel in the central dialog."""
+    if not isinstance(im,np.ndarray) or im.shape[:2]!=(1440,2560):return None
+    left,top=1000,550
+    crop=im[top:1000,left:1500].astype(np.float32)
+    green=(crop[:,:,1]>75)&(crop[:,:,1]>crop[:,:,2]*1.5)&(crop[:,:,1]>crop[:,:,0]*1.1)
+    red=(crop[:,:,2]>75)&(crop[:,:,2]>crop[:,:,1]*1.5)&(crop[:,:,2]>crop[:,:,0]*1.1)
+    def buttons(mask):
+        mask=cv2.morphologyEx(mask.astype(np.uint8)*255,cv2.MORPH_CLOSE,np.ones((5,5),np.uint8))
+        _,_,stats,centers=cv2.connectedComponentsWithStats(mask)
+        return [(center,w,h) for i,((x,y,w,h,area),center) in enumerate(zip(stats,centers))
+                if i and area>800 and 80<=w<=200 and 20<=h<=80]
+    pairs=[g[0] for g in buttons(green) for r in buttons(red)
+           if 90<r[0][0]-g[0][0]<220 and abs(r[0][1]-g[0][1])<12
+           and abs(g[1]-r[1])<40 and abs(g[2]-r[2])<20]
+    if len(pairs)!=1:return None
+    center=pairs[0]
+    return int(round(center[0]+left)),int(round(center[1]+top))
+
+
 def confirm_menu_button_visible(im):
-    """Recognize the green confirm button when dimmed inventory hides OCR text."""
-    if not isinstance(im,np.ndarray) or im.shape[:2]!=(1440,2560):return False
-    button=im[779:815,1140:1277]
-    pixels=((button[:,:,1]>75)
-            &(button[:,:,1]>button[:,:,2].astype(np.float32)*1.5)
-            &(button[:,:,1]>button[:,:,0].astype(np.float32)*1.1))
-    return int(np.count_nonzero(pixels))>400
+    return confirm_menu_target(im) is not None
 
 class UserStop(Exception):pass
 class RecoveryError(Exception):pass
@@ -290,6 +304,7 @@ class Recovery:
             self.guard();self.progress(detail=last_class or 'inspecting');im=self.capture()
             rows=self.text(im);text=' '.join(r['text'].lower() for r in rows)
             play_target=main_menu_target(rows)
+            confirm_target=confirm_menu_target(im)
             self.guard();now=time.monotonic();target=None
             skip=[r for r in rows if re.sub(r'[^a-z]','',r['text'].lower())=='skiploading']
             cancel=[r for r in rows if r['text'].strip().lower()=='cancel']
@@ -303,8 +318,8 @@ class Recovery:
                 target=reconnect[0]['center'] if len(reconnect)==1 else None
             elif skip:kind='skip_loading';target=skip[0]['center']
             elif 'purchase' in text and len(cancel)==1:kind='vendor_dialog';target=cancel[0]['center']
-            elif confirm_menu_button_visible(im) or 'go back to the main menu' in text:
-                kind='confirm_menu';target=(1208,797)
+            elif confirm_target is not None or 'go back to the main menu' in text:
+                kind='confirm_menu';target=confirm_target
             elif any('backtomainmenu' in re.sub(r'[^a-z]','',r['text'].lower()) for r in rows):
                 kind='game_menu';target=next(r['center'] for r in rows
                     if 'backtomainmenu' in re.sub(r'[^a-z]','',r['text'].lower()))
