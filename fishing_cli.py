@@ -127,12 +127,17 @@ def parser(prog='autofish'):
     sub.add_parser('assist',help='Start minigame only; you cast and collect manually')
     sub.add_parser('spot',help='Click, reel and collect; F8 starts/pauses/resumes, losing focus pauses automatically')
     sub.add_parser('rejoin',help='Watch configured Roblox account and reconnect; no fishing or attacks')
+    full=sub.add_parser('full',help='Start Full farmer with rejoin, rod equip and automatic recovery')
+    full.add_argument('--restart',action='store_true',help='Stop the current controller and rejoin; retain counters')
+    full.add_argument('--overnight',action='store_true',help='Enable overnight autofocus and idle activation')
     reference=sub.add_parser('reference',help='Save a local fishing view while paused')
     reference.add_argument('operation',choices=('status','save','disable'),nargs='?',default='status')
     reference.add_argument('--position',action='store_true',help='Calibrate small position corrections as well as camera movement')
     reference.add_argument('--boxes',help='JSON list of x,y,width,height boxes in a 1280x720 screenshot; two near surfaces first, then optional distant scenery')
     route=sub.add_parser('route',help='Record a manual shrine/bait/reset demonstration; no replay or buying automation')
     route.add_argument('operation',choices=('record','status','folder'),nargs='?',default='status')
+    from bait_buy import add_parser as add_bait_parser
+    add_bait_parser(sub)
     sub.add_parser('diagnostics',help='Show the last eight failure reports and local screenshot paths')
     sub.add_parser('stop', help='Stop game input and retain counters')
     sub.add_parser('export', help='Save the complete item log and totals as CSV')
@@ -198,6 +203,18 @@ def stream_logs(args, journal, colors):
 
 def execute(args, colors=False):
     command = args.command or 'status'
+    if command=='full':
+        if args.restart: message=actions.restart_full(overnight=args.overnight)
+        else:
+            if args.overnight:
+                from app_config import save_config
+                save_config({'overnight_enabled':True,'overnight_autofocus':True,'overnight_auto_enable_idle':True})
+            message=actions.resume('full')
+        print(message)
+        return 0
+    if command=='bait':
+        from bait_buy import execute as buy_bait
+        return buy_bait(args)
     if command=='route':
         from app_config import data_directory
         root=data_directory()
