@@ -19,7 +19,7 @@ DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             'auto_fishing_titles': False, 'damage_rotation': DEFAULT_ROTATION,
             'damage_title': 'Annihilator', 'damage_title_category': 'Combat',
             'damage_target': 10000000, 'damage_check_seconds': 180,
-            'overnight_enabled':False,'overnight_autofocus':True,
+            'overnight_enabled':True,'overnight_autofocus':True,
             'overnight_auto_enable_idle':False,'overnight_idle_minutes':10,
             'overnight_focus_grace_seconds':30}
 

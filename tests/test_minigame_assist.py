@@ -149,6 +149,8 @@ class ManualStopKeys(unittest.TestCase):
 
 class AssistControls(unittest.TestCase):
     def setUp(self):
+        # Overnight now defaults on; isolate its separately managed background process.
+        p=patch('overnight_guard.ensure_guard');self.guard=p.start();self.addCleanup(p.stop)
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
         self.root=Path(temporary.name)
         for module,key,value in ((control_actions,'RUN',self.root),(metrics,'RUN',self.root),
@@ -170,6 +172,7 @@ class AssistControls(unittest.TestCase):
             self.assertTrue(args[1].endswith('minigame_assist.py'))
             self.assertNotIn('--focus',args);self.assertNotIn('--rejoin',args)
             focus.assert_not_called()
+            self.guard.assert_called_once()
         self.assertEqual(metrics.read('totals.json'),{'started':1,'rounds':7,'rewards':4})
         self.assertFalse((self.root/'STOP').exists())
 
@@ -180,6 +183,7 @@ class AssistControls(unittest.TestCase):
             self.assertEqual(args[-2:],['--mode','spot'])
             self.assertNotIn('--focus',args);self.assertNotIn('--rejoin',args)
             focus.assert_not_called()
+            self.guard.assert_called_once()
         self.assertEqual(app_config.load_config()['mode'],'spot')
 
     def test_running_assist_f8_and_focus_round_trip_without_real_input(self):
