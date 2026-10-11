@@ -41,10 +41,8 @@ class PerformanceRecorder:
 def recent(journal, now=None, seconds=900):
     now = time.time() if now is None else now
     saved = read('performance.json')
-    if saved.get('started') is None or journal.started is None or saved['started']>journal.started: return None
-    ended=getattr(journal,'ended',None)
-    samples = [s for s in saved.get('samples',[]) if max(now-seconds,journal.started) <= s['at'] <= now
-               and (ended is None or s['at']<=ended)]
+    if saved.get('started') != journal.started: return None
+    samples = [s for s in saved.get('samples',[]) if now-seconds <= s['at'] <= now]
     if len(samples)<2: return None
     start, end = samples[0]['at'],samples[-1]['at']
     elapsed = end-start

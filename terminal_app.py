@@ -86,6 +86,7 @@ class Terminal:
 
     def __init__(self):
         self.journal, self.feed = Journal(), LiveFeed()
+        self.catch_journal = Journal()
         self.data, self.config = {}, load_config()
         self.page = self.selection = self.scroll = 0
         self.query = ''
@@ -117,7 +118,9 @@ class Terminal:
             ok, text = self.jobs.get()
             self.busy = False
             self.toast(text, ok)
-        self.data = snapshot(self.journal,scope='total' if self.show_total else 'session')
+        self.data = snapshot(self.journal)
+        current_run=self.data.get('log_run') or {}
+        self.catch_journal.update(current_run.get('started',self.data['started']),current_run.get('ended'))
         self.config = load_config()
         if self.page==4 and time.monotonic()-self.prediction_at>=5:
             from catch_predictions import load
@@ -125,8 +128,7 @@ class Terminal:
             self.prediction_at=time.monotonic()
         self.effects.observe(self.journal.items, self.data['started'], time.time(), time.monotonic())
         from run_log import select
-        log_run=({'id':'total','started':self.data['started'],'ended':None}
-                 if self.show_total else select(data_directory(),self.log_run_id))
+        log_run=select(data_directory(),self.log_run_id)
         old_rows=self.feed.filtered(self.query,self.categories[self.category])
         anchor=old_rows[min(self.scroll,len(old_rows)-1)].get('id') if old_rows and not self.follow else None
         changed_run=self.log_run.get('id') and self.log_run['id']!=log_run.get('id')
@@ -154,7 +156,8 @@ class Terminal:
         threading.Thread(target=run, daemon=True).start()
 
     def item_rows(self):
-        return [(name, qty) for name, qty in self.journal.counts.most_common()
+        journal=self.journal if self.show_total else self.catch_journal
+        return [(name, qty) for name, qty in journal.counts.most_common()
                 if self.query.lower() in name.lower()]
 
     def switch(self, page):
@@ -304,9 +307,9 @@ class Terminal:
         elif key == '/' and self.page in (1, 2): self.edit('Search', self.query)
         elif key.lower() == 'c': self.job(actions.resume)
         elif key.lower() == 'p': self.job(actions.pause)
-        elif self.page in (0,1,2) and key.lower() == 't':
+        elif self.page == 1 and key.lower() == 't':
             self.show_total=not self.show_total
-            self.log_run_id='current';self.scroll=self.selection=0;self.follow=True
+            self.scroll=self.selection=0
             self.refresh()
         elif key.lower() == 's':
             # Stop must remain available even while another command is pending.
@@ -315,7 +318,6 @@ class Terminal:
         elif self.page == 2 and key.lower() == 'f': self.follow = not self.follow
         elif self.page == 2 and key.lower() == 'g': self.category = (self.category+1) % 4; self.scroll = 0
         elif self.page == 2 and key.lower() == 'r':
-            self.show_total=False
             from run_log import list_runs
             current_id=self.data.get('log_run',{}).get('id')
             ids=['current']+[r['id'] for r in list_runs(data_directory()) if r['id']!=current_id]
@@ -390,8 +392,7 @@ class Terminal:
                          for i,label in enumerate(('Pause','Stop','Export log'),start=len(self.run_modes))]
                 return rows[max(0,action_start+self.selection-available+1):][:available]
             amount = estimate(d, self.hours)
-            rows = [tint('TOTAL' if self.show_total else 'SESSION', 'gold')+'  '+tint('T switch', 'dim'),
-                    tint('CATCH', 'dim') + '  ' + tint(f"{d['items']:,}", 'gold') +
+            rows = [tint('CATCH', 'dim') + '  ' + tint(f"{d['items']:,}", 'gold') +
                     tint('     HOOK', 'dim') + f"  {d['hooks']:,}" +
                     tint('     TIME', 'dim') + f"  {duration(d['active_seconds'])}",
                     tint('LAST ', 'dim') + '  ' + (d['last_item'] or '—')]
@@ -434,13 +435,12 @@ class Terminal:
             rows = self.feed.filtered(self.query, self.categories[self.category])
             visible = max(1, available-2)
             self.scroll = max(0, len(rows)-visible) if self.follow else min(self.scroll, max(0, len(rows)-visible))
-            run_id=self.log_run.get('id','current')
+            run_id=self.data.get('log_run',{}).get('id','current') if self.log_run_id=='current' else self.log_run_id
             count=len(rows);last=min(count,self.scroll+visible);newer=count-last
             position=f'Rows {self.scroll+1 if count else 0}–{last} of {count}'
             position+=f'  ·  {newer} newer  ·  End latest' if newer else '  ·  Latest'
             if getattr(self,'log_run',{}).get('ended') is not None:position='Finished  ·  '+position
-            scope='TOTAL' if self.show_total else f'Session {run_id}'
-            result = [tint(scope+'   T switch   R runs   '+self.categories[self.category] + ('   ● Following' if self.follow else '   History') + (f'   / {self.query}' if self.query else ''), 'gold'),tint(position,'dim')]
+            result = [tint(f'Run {run_id}   R previous runs   '+self.categories[self.category] + ('   ● Following' if self.follow else '   History') + (f'   / {self.query}' if self.query else ''), 'gold'),tint(position,'dim')]
             result += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+
                        tint(r['text'],event_tone(r))
                        for r in rows[self.scroll:self.scroll+visible]]
@@ -512,7 +512,7 @@ class Terminal:
                          else '↑ ↓ scroll   / search   Enter inspect' if self.page==1
                          else '↑ ↓ scroll   / search   F follow   G filter' if self.page==2
                          else 'H / Enter forecast hours   1–5 pages')
-        if self.page in (0,1,2):help_text+='   T '+('session' if self.show_total else 'total')
+        if self.page == 1:help_text+='   T '+('session' if self.show_total else 'total')
         lines += ['  '+tint(help_text, 'dim'), '  '+tint('C continue   P pause   S stop   Q close view', 'dim'), '']
         return [clip(line, width-1) for line in lines[:height-1]]
 
