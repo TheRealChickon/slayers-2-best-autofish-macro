@@ -8,7 +8,7 @@ from reward_evidence import reward_quantity
 
 
 def state_tone(state, active=True):
-    if not active or state in ('Waiting for Roblox','Paused','Stopped','Pausing','Stopping','Retry Wait'):
+    if not active or state in ('Waiting for Roblox','Paused','Stopped','Pausing','Stopping','Retry Wait','Waiting for rod · retrying'):
         return 'gold'
     return 'cyan' if state in ('Recovering','Restarting','Starting') else 'green'
 
@@ -47,6 +47,9 @@ def describe(row):
         return f'{row.get("message", "Inventory unreadable")} · next eligible check in {row["retry_minutes"]} min'
     if kind == 'recovery_started':return 'Rejoin started' if row.get('force_menu') else 'Checking game and rod'
     if kind == 'equipped_rod':return 'Game ready · rod equipped'
+    if kind == 'rod_selection_attempt':return 'Selecting rod · awaiting verification'
+    if kind == 'rod_selection_verified':return 'Rod equipped · verified'
+    if kind == 'rod_selection_unverified':return 'Rod slot pressed · automatic verification disabled'
     if kind == 'pickup_hold':return f'Collecting · attempt {row.get("attempt", 1)}'
     if kind == 'alignment_result':return f"Fishing view aligned · {row.get('steps',0)} corrections"
     if kind == 'alignment_step':return 'Adjusting fishing view' + (' and position' if any(row.get('movement_seconds',[])) else '')

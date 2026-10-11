@@ -49,11 +49,13 @@ def snapshot(journal=None):
         elif stage == 'waiting_game': state = 'Waiting for Roblox'
         elif stage == 'blocked_scene': state = 'Close Roblox menu'
         elif stage == 'attention': state = 'Inspect statue'
+        elif stage == 'rod_wait': state = 'Waiting for rod · retrying'
         elif stage == 'fishing': state = fishing_states.get(worker.get('stage'), 'Fishing')
         else: state = stage.replace('_', ' ').title()
     else:
         state = 'Paused' if paused else 'Stopped'
     reason = worker.get('wait_reason', '') if live else worker.get('reason', '') or supervisor.get('reason', '')
+    if live and stage=='rod_wait':reason=supervisor.get('last_error','')
     if stop or paused:
         try:reason = (RUN / ('PAUSE' if paused else 'STOP')).read_text(encoding='utf-8').strip() or reason
         except OSError:pass
