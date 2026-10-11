@@ -396,17 +396,18 @@ moving rounds retain a separate 120-second upper bound. Pickup checks use a smal
 crop first and a wide fallback. A clear adjacent T and Collect can start pickup
 immediately; uncertain prompts still require repeated evidence.
 
-Run counters, Catches and Logs show only the current session by default. Press
-**T** on any of those pages to switch to lifetime totals/history; press **T** again
-to return to the current session. Reopening the terminal starts in session view.
-Press **R** on Logs to cycle through saved runs. `autofish runs` lists IDs; `autofish logs --activity -f`
+The Catches page shows only the current session by default. Press **T** there to
+show lifetime catches; press **T** again to return. Reopening the terminal starts
+with session catches. The toggle changes only Catches; Run counters and Logs keep
+their existing views. `autofish items` shows this session; `autofish items --total`
+shows lifetime catches. No old records are deleted.
+
+The Logs view shows only the current run. Press **R** on that page to
+cycle through saved runs. `autofish runs` lists IDs; `autofish logs --activity -f`
 follows this run and `autofish logs --activity --run ID --all` reads a whole saved
 run. Ending a run saves `runs/ID/run.json`, `events.jsonl` and `events.log` in the
 configured data directory. Pause/continue and worker recovery preserve the run;
 a new start after Stop creates a new log run. Lifetime counters stay separate.
-`autofish status`, `items`, `watch` and `logs` also default to the current session;
-add **--total** for lifetime values/history. **--all** reads every entry in the
-selected session; it does not switch to lifetime history. No old records are deleted.
 
 Hourly Discord reports use the current run and attach its interval's JSONL log.
 Stopping sends a final report with that run's log (gzip for large logs). The

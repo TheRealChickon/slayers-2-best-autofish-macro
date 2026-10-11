@@ -58,7 +58,6 @@ def status_lines(data, colors=False):
            + f" · {recent['window_seconds']/60:.0f}m window" + ('' if recent['fresh'] else ' (saved)')) if recent else '  Recent pace     Collecting a sample'
     lines = [
         c('FISHING', 'gold') + '  /  ' + c(data['state'].upper(), tone) + '  /  ' + MODES.get(data.get('mode'),'Full farmer'),
-        c('  '+('LIFETIME TOTALS' if data.get('scope')=='total' else 'CURRENT SESSION'), 'gray'),
         c('  '+data['reason'], 'gold') if data.get('reason') else '',
         '',
         f"  Collected       {c(format(data['items'], ','), 'green')} items / {data['collections']:,} collections",
@@ -94,9 +93,9 @@ def parser(prog='autofish'):
     for name, help_text in [('status', 'Show the saved run and bot status'), ('items', 'Show item totals')]:
         command = sub.add_parser(name, help=help_text)
         command.add_argument('--json', action='store_true', help='Machine-readable JSON')
-        command.add_argument('--total', action='store_true', help='Show lifetime totals instead of this session')
         if name == 'items':
             command.add_argument('--filter', default='', help='Match part of an item name')
+            command.add_argument('--total', action='store_true', help='Show lifetime catches instead of this session')
     logs = sub.add_parser('logs', help='Read collection or recovery logs')
     logs.add_argument('--tail', type=int, default=20, metavar='N')
     logs.add_argument('--all', action='store_true')
@@ -105,7 +104,6 @@ def parser(prog='autofish'):
     logs.add_argument('--filter', default='')
     logs.add_argument('--json', action='store_true', help='One JSON object per line')
     logs.add_argument('--run', default='current', help='Current run or ID from autofish runs')
-    logs.add_argument('--total', action='store_true', help='Read logs across all sessions')
     runs=sub.add_parser('runs',help='List archived runs independently of lifetime counters')
     runs.add_argument('--json',action='store_true')
     predictions=sub.add_parser('predictions',help='Read-only current or archived run catch projections')
@@ -120,7 +118,6 @@ def parser(prog='autofish'):
     night.add_argument('--focus-grace',type=int)
     watch = sub.add_parser('watch', help='Live colored status; Ctrl+C exits the view')
     watch.add_argument('--interval', type=float, default=2, metavar='SECONDS')
-    watch.add_argument('--total', action='store_true', help='Show lifetime totals instead of this session')
     plan = sub.add_parser('plan', help='Estimate bait for a future session using the observed hook rate')
     plan.add_argument('--hours', type=float, required=True)
     sub.add_parser('pause', help='Release game input and retain counters')
@@ -169,28 +166,22 @@ def log_line(row, activity=False, colors=False):
 def stream_logs(args, journal, colors):
     from run_log import select, rows as run_rows
     from app_config import data_directory
-    from metrics import read
     if args.tail < 0:
         raise ValueError('--tail must be zero or greater')
-    total=getattr(args,'total',False)
-    if total and args.run!='current':raise ValueError('Use --total or --run ID, separately')
     seen, previous_run = set(), None
     first = True
     while True:
-        selected=({'id':'total','started':0,'ended':None} if total else
-                  select(data_directory(),getattr(args,'run','current')))
-        run_start=selected.get('started',read('totals.json').get('started'));run_end=selected.get('ended')
-        identity=(selected.get('id'),run_start,run_end)
-        if identity != previous_run:
+        data = snapshot(journal)
+        selected=select(data_directory(),getattr(args,'run','current'))
+        run_start=selected.get('started',data['started']);run_end=selected.get('ended')
+        if data['started'] != previous_run:
             seen.clear()
-            previous_run = identity
+            previous_run = data['started']
             first = True
         if args.activity:
             from live_feed import describe
             rows=[{**r,'kind':r.get('event',''),'message':describe(r)} for r in run_rows(data_directory(),selected)]
-        else:
-            journal.update(run_start,run_end)
-            rows=journal.items
+        else:rows=[r for r in journal.items if (run_start or 0)<=r['at'] and (run_end is None or r['at']<=run_end)]
         rows = [r for r in rows if args.filter.lower() in json.dumps(r).lower()]
         # Include the occurrence index so two equal-timestamp drops remain distinct.
         keyed = [(json.dumps(row, sort_keys=True) + ':' + str(i), row) for i, row in enumerate(rows)]
@@ -329,16 +320,18 @@ def execute(args, colors=False):
     if command == 'shell':
         return shell(colors)
     journal = Journal()
-    scope='total' if getattr(args,'total',False) or command not in ('status','items','watch','logs') else 'session'
-    data = snapshot(journal,scope=scope)
+    data = snapshot(journal)
     if command == 'status':
         print(json.dumps(data, indent=2) if getattr(args, 'json', False) else '\n'.join(status_lines(data, colors)))
     elif command == 'items':
+        if not args.total:
+            run=data.get('log_run') or {}
+            journal.update(run.get('started',data['started']),run.get('ended'))
         rows = [{'item': item, 'quantity': qty} for item, qty in journal.counts.most_common() if args.filter.lower() in item.lower()]
         if args.json:
             print(json.dumps(rows, indent=2))
         else:
-            print(color('LIFETIME TOTALS' if scope=='total' else 'COLLECTED THIS SESSION', 'gold', colors))
+            print(color('LIFETIME CATCHES' if args.total else 'COLLECTED THIS SESSION', 'gold', colors))
             for row in rows:
                 print(f"  {row['item']:<32} x{row['quantity']:,}")
             print(f"  {'Total':<32} {sum(row['quantity'] for row in rows):,}")
@@ -358,7 +351,7 @@ def execute(args, colors=False):
         while True:
             if colors:
                 print('\033[2J\033[H', end='')
-            print('\n'.join(status_lines(snapshot(journal,scope=scope), colors)))
+            print('\n'.join(status_lines(snapshot(journal), colors)))
             print(color('\nCtrl+C exits this view. Fishing is unchanged.', 'gray', colors), flush=True)
             time.sleep(args.interval)
     return 0

@@ -16,6 +16,10 @@ Run logs use `current-run.json` and `runs/<id>/run.json`; lifetime counters in
 maintenance reload and worker recovery. Filter archived logs with both start and
 end timestamps. Keep all completed-run records even when live views are bounded.
 
+Catches defaults to the current session, with T on that page switching to lifetime
+catches. Keep that toggle separate from Run counters and Logs. Preserve saved logs
+and totals; restarting the display must not restart the farmer or clear manual holds.
+
 The optional overnight monitor only reads game state and emits errors through
 the desktop MCP into the already-authorized chat. It must never clear manual
 STOP/PAUSE/F8 requests or restart the farmer itself. Keep its chat ID/runtime

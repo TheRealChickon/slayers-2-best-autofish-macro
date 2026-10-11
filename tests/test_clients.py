@@ -47,34 +47,29 @@ class IsolatedState(unittest.TestCase):
             {'at':143,'event':'reward_observed','text':'GoldenFish X1','cycle':1},
             {'at':145,'event':'stopped'}])
 
-    def test_session_counters_survive_worker_recovery_and_exclude_other_sessions(self):
-        self.session_fixture()
-        with patch.object(control_actions,'alive',return_value=False),patch.object(control_actions,'starting',return_value=False):
-            data=status_view.snapshot(scope='session')
-        self.assertEqual((data['casts'],data['hooks'],data['collections'],data['items']),(2,2,2,3))
-        self.assertEqual(data['active_seconds'],20)
-        self.assertEqual(data['started'],100)
-        self.assertEqual(metrics.read('totals.json')['rounds'],99)
-
-    def test_t_toggles_session_and_total_without_writes_or_game_controls(self):
+    def test_t_toggles_only_catches_without_changing_run_logs_or_game_controls(self):
         self.session_fixture()
         before={p:p.read_bytes() for p in self.root.iterdir() if p.is_file()}
         app=terminal_app.Terminal();app.refresh()
         self.assertFalse(app.show_total)
         self.assertEqual(sum(qty for _,qty in app.item_rows()),3)
         self.assertTrue(all(100<=r['at']<=200 for r in app.feed.rows))
+        original_stats={k:app.data[k] for k in ('hooks','casts','collections','active_seconds')}
+        original_logs=list(app.feed.rows)
         with patch.object(control_actions,'resume') as resume,patch.object(control_actions,'pause') as pause,patch.object(control_actions,'stop') as stop:
-            for page in (0,1,2):
-                app.switch(page);app.key('T')
-                self.assertTrue(app.show_total)
-                self.assertEqual(app.data['hooks'],99)
-                self.assertEqual(sum(qty for _,qty in app.item_rows()),15)
-                self.assertTrue(any(r['at']==50 for r in app.feed.rows))
-                self.assertIn('TOTAL','\n'.join(app.body(20)))
-                app.key('t')
+            for page in (0,2):
+                app.switch(page);app.key('t')
                 self.assertFalse(app.show_total)
-                self.assertEqual(app.data['hooks'],2)
-                self.assertTrue(all(100<=r['at']<=200 for r in app.feed.rows))
+            app.switch(1);app.key('T')
+            self.assertTrue(app.show_total)
+            self.assertEqual(sum(qty for _,qty in app.item_rows()),15)
+            self.assertIn('TOTAL','\n'.join(app.body(20)))
+            self.assertEqual(original_stats,{k:app.data[k] for k in original_stats})
+            self.assertEqual(original_logs,app.feed.rows)
+            app.key('t')
+            self.assertFalse(app.show_total)
+            self.assertEqual(sum(qty for _,qty in app.item_rows()),3)
+            self.assertEqual(original_logs,app.feed.rows)
             resume.assert_not_called();pause.assert_not_called();stop.assert_not_called()
         self.assertEqual(before,{p:p.read_bytes() for p in self.root.iterdir() if p.is_file()})
         self.assertFalse(terminal_app.Terminal().show_total)
@@ -87,13 +82,6 @@ class IsolatedState(unittest.TestCase):
         self.assertEqual(len(journal.items),4)
         journal.update(100,200)
         self.assertEqual(len(journal.items),2)
-
-    def test_session_activity_bounds_an_unfinished_dead_worker_by_last_event(self):
-        self.append('events-20261011-010000.jsonl',[{'at':100,'event':'started'},
-                    {'at':110,'event':'cast','cast':1}])
-        journal=item_journal.Journal();journal.update(100)
-        self.assertEqual(journal.active_seconds(now=200),10)
-        self.assertEqual(journal.active_seconds(now=200,live_source='events-20261011-010000.jsonl'),100)
 
     def test_overnight_defaults_on_and_preserves_a_saved_off(self):
         self.assertTrue(app_config.load_config()['overnight_enabled'])
@@ -245,7 +233,7 @@ class IsolatedState(unittest.TestCase):
 
     def test_terminal_navigation_search_and_edit_cancel(self):
         app=terminal_app.Terminal()
-        app.journal.counts=collections.Counter({'Coral':4,'Ore':2})
+        app.catch_journal.counts=collections.Counter({'Coral':4,'Ore':2})
         app.key('2'); app.key('DOWN'); app.key('ENTER')
         self.assertEqual((app.page,app.query,app.category),(2,'Ore',1))
         app.key('/'); app.key('BACKSPACE'); app.key('x'); app.key('CANCEL')
