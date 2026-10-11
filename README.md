@@ -433,8 +433,10 @@ automatic restart and future idle activation. Stop disarms them too; explicit
 Pause/F8 stays paused until Continue. Keyboard Stop applies to physical keys
 inside Roblox, so other automated applications cannot silently stop the bot.
 
-Optional `--auto-idle on --idle-minutes 10` can enable Overnight after physical
-inactivity with Player open and autofocus on. This has no clock/night condition.
+Auto-enable after idle also defaults to **On**, with a **10-minute** delay. It can
+enable Overnight after physical inactivity with Player open and autofocus on.
+`--auto-idle off` disables it; a saved Off stays off. `--idle-minutes 10` sets the
+delay. This has no clock/night condition.
 An intent guard performs bounded restarts for unexpected exits, with at most
 three restarts in 90 minutes; manual stops, challenges and exhausted local repair
 require the user. Turning the tag off prevents every automatic restart.
