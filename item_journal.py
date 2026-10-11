@@ -10,10 +10,15 @@ class Journal:
         self.started=None;self.offsets={};self.prompts={};self.cycles={};self.items=[];self.activity=[];self.counts=collections.Counter();self.launches=0;self.joins=0;self.version=0;self.by_id={};self.corrections={}
         self.join_pending=False
         self.seen_banners=set()
+        self.ended=None
+        self.event_counts=collections.Counter()
+        self.seen_cycles=set()
+        self.time_events=[]
+        self.last_events={}
 
-    def update(self,started):
-        if started!=self.started:
-            self.__init__();self.started=started
+    def update(self,started,ended=None):
+        if (started,ended)!=(self.started,self.ended):
+            self.__init__();self.started=started;self.ended=ended
         paths=sorted(RUN.glob('events-*.jsonl'))+[RUN/'recovery.jsonl',RUN/'controls.jsonl']
         changed=False
         for path in paths:
@@ -28,7 +33,20 @@ class Journal:
                     try:row=json.loads(line)
                     except ValueError:continue
                     if row.get('at',0)<(started or 0):continue
+                    if ended is not None and row.get('at',0)>ended:continue
                     kind=row.get('event','')
+                    self.last_events[path.name]={**row,'source':path.name}
+                    if kind in ('cast','minigame','minigame_ended'):
+                        count_id=(key,kind,row.get('cast') if kind=='cast' else row.get('cycle'))
+                        # Legacy entries without an ID still represent separate observations.
+                        if count_id[-1] is None:count_id+=(position,)
+                        if count_id not in self.seen_cycles:
+                            self.seen_cycles.add(count_id)
+                            if kind!='minigame_ended':self.event_counts[kind]+=1
+                            elif isinstance(row.get('percent'),(int,float)) and row['percent']<100:
+                                self.event_counts['failed']+=1
+                    if kind in ('started','input_resumed','input_paused','stopped','session_limit','worker_exit','supervisor_stopped'):
+                        self.time_events.append({**row,'source':path.name})
                     if kind=='minigame':self.cycles[key]=row.get('cycle')
                     cycle=(key,row.get('cycle',self.cycles.get(key)))
                     if kind=='pickup_hold':self.prompts[cycle]=row.get('text','')
@@ -72,6 +90,12 @@ class Journal:
                 item['item']=correction['item'];item['source']='inventory';self.counts[item['item']]+=item['quantity']
             self.items.sort(key=lambda row:row['at']);self.activity.sort(key=lambda row:row['at']);self.version+=1
         return changed
+
+    def active_seconds(self,now=None,live_source=None):
+        from catch_predictions import activity_seconds
+        end=self.ended if self.ended is not None else time.time() if now is None else now
+        return activity_seconds(sorted(self.time_events+list(self.last_events.values()),key=lambda row:row['at']),
+                                self.started or 0,end,live_source)[0]
 
     def export(self,directory=ROOT):
         directory=Path(directory)

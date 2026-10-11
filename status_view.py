@@ -14,13 +14,17 @@ def duration(seconds):
     return f'{seconds // 3600}h {seconds % 3600 // 60:02d}m'
 
 
-def snapshot(journal=None):
+def snapshot(journal=None,scope='total'):
+    if scope not in ('session','total'):raise ValueError('Unknown counter scope')
     journal = journal if journal is not None else Journal()
     totals, supervisor, worker, bait, presence, bait_observation = [read(name + '.json') for name in
         ('totals', 'supervisor', 'status', 'bait', 'presence', 'bait-observation')]
     damage = read('damage-status.json')
     rejoin = read('rejoin-status.json')
-    journal.update(totals.get('started'))
+    from run_log import current
+    log_run=current(RUN)
+    journal.update(log_run.get('started',totals.get('started')) if scope=='session' else totals.get('started'),
+                   log_run.get('ended') if scope=='session' else None)
     live = actions.alive()
     starting = actions.starting() and not live
     paused, stop = (RUN / 'PAUSE').exists(), (RUN / 'STOP').exists()
@@ -69,18 +73,22 @@ def snapshot(journal=None):
         remaining=max(0,bait_observation['count']-max(0,rounds-bait_observation['hooks']))
         bait_source='inventory read'
     fresh = presence.get('ok') and time.time() - presence.get('checked_at', 0) < 120
-    from run_log import current
-    log_run=current(RUN)
+    if scope=='session':
+        live_source='events-'+worker['session']+'.jsonl' if live and actions.alive('pid.json') and worker.get('session') else None
+        seconds=journal.active_seconds(live_source=live_source)
+        rounds=journal.event_counts['minigame']
+        rate=rounds*3600/seconds if seconds>0 else 0
     unknown = sum(qty for name, qty in journal.counts.items()
                   if name == 'Unidentified item' or name.endswith('(partial)'))
     return {
         'state': state, 'mode': supervisor.get('mode','full') if live else load_config()['mode'], 'running': live, 'starting': starting, 'stop_requested': stop,
-        'paused': paused, 'started': totals.get('started'), 'updated': totals.get('updated'),
+        'paused': paused, 'started': journal.started, 'updated': totals.get('updated'), 'scope':scope,
         'log_run':log_run,
         'reason': reason,
-        'collections': totals.get('rewards', 0), 'items': sum(journal.counts.values()),
+        'collections': len(journal.items) if scope=='session' else totals.get('rewards', 0), 'items': sum(journal.counts.values()),
         'logged_collections': len(journal.items), 'unread_items': unknown,
-        'hooks': rounds, 'casts': totals.get('casts', 0), 'failed_rounds': totals.get('failed', 0),
+        'hooks': rounds, 'casts': journal.event_counts['cast'] if scope=='session' else totals.get('casts', 0),
+        'failed_rounds': journal.event_counts['failed'] if scope=='session' else totals.get('failed', 0),
         'server_rejoins': max(0, journal.joins - 1), 'game_launches': journal.launches,
         'active_seconds': seconds, 'last_item': journal.items[-1]['item'] if journal.items else None,
         'bait_remaining_estimate': remaining, 'bait_source': bait_source, 'hooks_per_hour': rate,

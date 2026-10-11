@@ -83,6 +83,21 @@ class CatchLifecycle(unittest.TestCase):
 
 
 class IsolatedClients(unittest.TestCase):
+    def test_cli_session_defaults_and_explicit_total_history(self):
+        metrics.write('current-run.json',{'id':'current','started':100,'ended':200})
+        self.append([{'at':50,'event':'reward_observed','text':'Ore X3','cycle':1},
+                     {'at':110,'event':'reward_observed','text':'Coral X2','cycle':2},
+                     {'at':250,'event':'reward_observed','text':'GoldenFish X1','cycle':3}])
+        with patch('app_config.data_directory',return_value=self.root):
+            for command in ('items','logs'):
+                with redirect_stdout(io.StringIO()) as output:
+                    fishing_cli.execute(fishing_cli.parser().parse_args([command,'--json']))
+                self.assertIn('Coral',output.getvalue())
+                self.assertNotIn('Ore',output.getvalue());self.assertNotIn('Golden',output.getvalue())
+                with redirect_stdout(io.StringIO()) as output:
+                    fishing_cli.execute(fishing_cli.parser().parse_args([command,'--json','--total']))
+                self.assertIn('Ore',output.getvalue());self.assertIn('Golden',output.getvalue())
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)

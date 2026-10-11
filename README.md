@@ -396,12 +396,17 @@ moving rounds retain a separate 120-second upper bound. Pickup checks use a smal
 crop first and a wide fallback. A clear adjacent T and Collect can start pickup
 immediately; uncertain prompts still require repeated evidence.
 
-The Logs view shows only the current run. Press **R** on that page to
-cycle through saved runs. `autofish runs` lists IDs; `autofish logs --activity -f`
+Run counters, Catches and Logs show only the current session by default. Press
+**T** on any of those pages to switch to lifetime totals/history; press **T** again
+to return to the current session. Reopening the terminal starts in session view.
+Press **R** on Logs to cycle through saved runs. `autofish runs` lists IDs; `autofish logs --activity -f`
 follows this run and `autofish logs --activity --run ID --all` reads a whole saved
 run. Ending a run saves `runs/ID/run.json`, `events.jsonl` and `events.log` in the
 configured data directory. Pause/continue and worker recovery preserve the run;
 a new start after Stop creates a new log run. Lifetime counters stay separate.
+`autofish status`, `items`, `watch` and `logs` also default to the current session;
+add **--total** for lifetime values/history. **--all** reads every entry in the
+selected session; it does not switch to lifetime history. No old records are deleted.
 
 Hourly Discord reports use the current run and attach its interval's JSONL log.
 Stopping sends a final report with that run's log (gzip for large logs). The
@@ -415,8 +420,10 @@ chat ID and expiry; it does not contain a webhook URL. It never controls Roblox,
 clears STOP/PAUSE or starts a controller. Monitor status and delivery results are
 saved separately. Codex's 30-minute heartbeat is configured in the app.
 
-Use Settings → Overnight or `autofish overnight on` for persistent unattended
-intent. Physical input yields temporarily; it does not disable the setting.
+Overnight is **on by default** when the setting has not been saved. Settings →
+Overnight and `autofish overnight on/off` still control the persistent setting;
+an explicitly saved Off stays off. Physical input yields temporarily; it does
+not disable the setting. Opening the terminal does not start fishing.
 Only the verified Roblox Player receives input. Focus takeover requires the
 configured grace (5–300 seconds), physical inactivity, and no recent competing
 injected input. The observer keeps event timestamps only; bot input is tagged

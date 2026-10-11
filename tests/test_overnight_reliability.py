@@ -338,7 +338,7 @@ class Reliability(unittest.TestCase):
         config=self.root/'config.local.json'
         config.write_text(json.dumps({'data_dir':str(self.root),'mode':'full'}))
         with patch.object(app_config,'CONFIG',config),redirect_stdout(io.StringIO()):
-            self.assertFalse(app_config.load_config()['overnight_enabled'])
+            self.assertTrue(app_config.load_config()['overnight_enabled'])
             app_config.save_config({'overnight_enabled':True,'overnight_auto_enable_idle':True})
             fishing_cli.execute(fishing_cli.parser().parse_args(['overnight','off']))
             saved=app_config.load_config()
