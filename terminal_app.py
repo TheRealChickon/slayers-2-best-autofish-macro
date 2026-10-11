@@ -1,6 +1,7 @@
 """Keyboard terminal client. Closing the client never stops the supervisor."""
 import math
 import msvcrt
+import os
 import queue
 import re
 import shutil
@@ -57,6 +58,7 @@ class Terminal:
                      ('Overnight',('Overnight enabled','Auto focus','Focus grace seconds','Auto-enable after idle','Idle minutes')),
                      ('Location and camera',('Cast point','Capture pointer','Camera','Heading','Position correction','Save reference','Disable reference')),
                      ('Bait route',('Record bait route','Open bait recordings')),
+                     ('Buy bait',('Purchase amount','Amount type','After purchase','Buy bait now','Resume bait purchase','Bait purchase status')),
                      ('Discord reports',('Discord webhook','Test webhook','Remove webhook')),('Display',('Motion',)))
     settings_keys=tuple(key for _,keys in settings_groups for key in keys)
     setting_help = {
@@ -75,6 +77,12 @@ class Terminal:
         'Motion':'Reduce terminal effects and animations.',
         'Record bait route':'Pause Fishing first. F7 records the selected game; F6 saves checkpoints; F10 finishes. No replay.',
         'Open bait recordings':'Open local game video, timed physical inputs and checkpoint images.'}
+    setting_help.update({'Purchase amount':'Whole number or k suffix. Budget is gold; quantity is Fish Heads. No purchase until Buy bait now.',
+        'Amount type':'Choose gold budget or exact bait quantity.',
+        'After purchase':'Optionally reset/rejoin and start Full farmer after every debit is verified.',
+        'Buy bait now':'Stand at Baitmonger Nori with the shop open and the farmer paused. Enter launches the standalone CLI.',
+        'Resume bait purchase':'Reconcile an interrupted transaction, then finish the ORIGINAL remaining amount.',
+        'Bait purchase status':'Read the CLI purchase log and actual controller liveness.'})
     setting_help.update({'Overnight enabled':'Persistent intent: physical input yields; Stop or turning this off prevents auto restart.',
         'Auto focus':'Restore only Roblox Player after physical inactivity and the focus grace; other automation gets a grace period.',
         'Focus grace seconds':'Wait 5–300 seconds after focus loss before attempting safe takeover.',
@@ -178,6 +186,10 @@ class Terminal:
                     save_config(resolve_account(value)); return 'Account saved'
                 self.job(account)
             elif key == 'Rod slot': save_config({'rod_slot': int(value)})
+            elif key=='Purchase amount':
+                from bait_buy import amount
+                save_config({'bait_buy_amount':amount(value)})
+                self.toast('Purchase amount saved; choose Buy bait now to run')
             elif key == 'Heading':
                 save_config({'camera_heading':None if value.lower() in ('off','none','') else float(value)})
                 self.toast('Saved fishing heading')
@@ -215,7 +227,7 @@ class Terminal:
                 self.job(lambda:actions.resume(mode))
             else:
                 self.job((actions.pause, actions.stop,
-                          lambda: 'Saved ' + str(self.journal.export()))[self.selection-len(self.run_modes)])
+                          lambda: 'Saved ' + str(self.journal.export()), actions.restart_full)[self.selection-len(self.run_modes)])
         elif self.page == 1:
             rows = self.item_rows()
             if rows:
@@ -223,6 +235,23 @@ class Terminal:
                 self.switch(2); self.query = name; self.category = 1; self.follow = True
         elif self.page == 3:
             key = self.settings_keys[self.selection]
+            if key=='Purchase amount':self.edit(key,self.config.get('bait_buy_amount',169000));return
+            if key=='Amount type':
+                save_config({'bait_buy_kind':'quantity' if self.config.get('bait_buy_kind','budget')=='budget' else 'budget'});return
+            if key=='After purchase':
+                save_config({'bait_buy_then_full':not self.config.get('bait_buy_then_full',False)});return
+            if key in ('Buy bait now','Resume bait purchase'):
+                from bait_buy import launch
+                after=self.config.get('bait_buy_then_full',False)
+                if key=='Resume bait purchase':self.job(lambda:launch('resume',then_full=after))
+                else:
+                    kind=self.config.get('bait_buy_kind','budget');amount=self.config.get('bait_buy_amount',169000)
+                    self.job(lambda:launch(then_full=after,**{kind:amount}))
+                return
+            if key=='Bait purchase status':
+                saved=read('bait-buy-status.json')
+                self.toast(f"{saved.get('stage','Not started')}: {saved.get('bought',0):,} bought / {saved.get('spent',0):,} gold; "
+                           +('running' if actions.alive('bait-driver-pid.json') else saved.get('reason','stopped')));return
             if key=='Record bait route':
                 from bait_route_recorder import launch
                 self.job(launch);return
@@ -338,7 +367,7 @@ class Terminal:
                 self.follow = key == 'END'
                 self.scroll = 0 if key == 'HOME' else limit if key == 'END' else max(0, min(limit, self.scroll+step))
             else:
-                count = len(self.run_modes)+3 if self.page == 0 else len(self.settings_keys) if self.page == 3 else len(self.item_rows())
+                count = len(self.run_modes)+4 if self.page == 0 else len(self.settings_keys) if self.page == 3 else len(self.item_rows())
                 self.selection = 0 if key == 'HOME' else max(0, count-1) if key == 'END' else max(0, min(count-1, self.selection+step))
 
     def prediction_rows(self):
@@ -389,7 +418,7 @@ class Terminal:
                          tint(MODES[mode]+'  /  '+self.mode_details[mode][1], 'gold' if self.selection==i else 'dim')
                          for i,mode in enumerate(self.run_modes)]
                 rows += [tint('› ' if self.selection == i else '  ', 'selected')+label
-                         for i,label in enumerate(('Pause','Stop','Export log'),start=len(self.run_modes))]
+                         for i,label in enumerate(('Pause','Stop','Export log','Reset + start Full farmer'),start=len(self.run_modes))]
                 return rows[max(0,action_start+self.selection-available+1):][:available]
             amount = estimate(d, self.hours)
             rows = [tint('CATCH', 'dim') + '  ' + tint(f"{d['items']:,}", 'gold') +
@@ -414,7 +443,7 @@ class Terminal:
                 rows.append(tint(marker + f'{MODES[mode]:<17}', 'selected' if self.selection == i else accent)
                             + tint(detail + active, accent if self.selection == i else 'dim'))
             rows += [tint('› ' + label, 'selected') if self.selection == i else '  ' + label
-                     for i, label in enumerate(('Pause', 'Stop', 'Export log'), start=len(self.run_modes))]
+                     for i, label in enumerate(('Pause', 'Stop', 'Export log','Reset + start Full farmer'), start=len(self.run_modes))]
             # Keep the chosen mode/control visible in a short terminal.
             start=max(0,action_start+self.selection-available+1)
             rows=rows[start:]
@@ -458,6 +487,11 @@ class Terminal:
                     ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On')]
         values={key:value for key,(_,value) in zip(('Username','Mode','Rod slot','Auto rod','Camera','Heading','Fishing titles','Cast point','Capture pointer','Position correction','Save reference','Disable reference','Motion'),settings)}
         values.update({'Overnight enabled':'On' if self.config['overnight_enabled'] else 'Off',
+            'Purchase amount':f"{self.config.get('bait_buy_amount',169000):,}",
+            'Amount type':'Gold budget' if self.config.get('bait_buy_kind','budget')=='budget' else 'Fish Head quantity',
+            'After purchase':'Reset + start Full farmer' if self.config.get('bait_buy_then_full',False) else 'Stay at seller',
+            'Buy bait now':'Enter to launch CLI','Resume bait purchase':'Finish interrupted amount',
+            'Bait purchase status':read('bait-buy-status.json').get('stage','Not started'),
             'Record bait route':'Enter while paused','Open bait recordings':'Video, inputs and checkpoints',
             'Auto focus':'On' if self.config['overnight_autofocus'] else 'Off',
             'Auto-enable after idle':'On' if self.config['overnight_auto_enable_idle'] else 'Off',

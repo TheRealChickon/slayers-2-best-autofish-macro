@@ -66,6 +66,10 @@ def event(action, message):
 
 def pause():
     with guard():
+        if alive('bait-driver-pid.json'):
+            (RUN/'PAUSE').write_text('Bait purchase paused by user')
+            event('pause','Bait purchase pause requested; input will be released.')
+            return 'Pausing bait purchase. Use autofish bait resume to continue its remaining amount.'
         if alive('route-recorder-pid.json'):
             (RUN/'route-recorder-stop').write_text('Paused by user')
             if not alive() and not starting():
@@ -113,6 +117,8 @@ def resume(mode=None,until=None,automatic=False):
     seconds=seconds_until_local_clock(until) if until else 0
     with guard():
         refuse_peer_controller()
+        if alive('bait-driver-pid.json'):
+            return 'Bait purchase is active. Finish or pause it before Continue.'
         if alive('route-recorder-pid.json'):
             return 'Bait route recorder is open. Finish or close it before Continue.'
         if alive('calibration-pid.json'):
@@ -186,3 +192,32 @@ def refuse_peer_controller():
                 raise RuntimeError('The other Slayers 2 macro is running or stopping. Stop it before switching projects.')
         except (OSError, ValueError, KeyError, psutil.Error):
             pass
+
+
+def restart_full(overnight=False):
+    """Explicit restart: retain the run, release input, then use Full's rejoin."""
+    with guard():
+        refuse_peer_controller()
+        if any(alive(name) for name in ('bait-driver-pid.json','route-recorder-pid.json','calibration-pid.json')):
+            raise RuntimeError('Finish or pause the other controller before restarting Full farmer')
+        pause()
+        (RUN/'PAUSE').write_text('Full farmer restart requested')
+        stamp=(RUN/'PAUSE').stat().st_mtime_ns
+        f8=(RUN/'F8_PAUSE').stat().st_mtime_ns if (RUN/'F8_PAUSE').exists() else None
+        stopped=(RUN/'STOP').stat().st_mtime_ns if (RUN/'STOP').exists() else None
+    def unchanged():
+        return ((RUN/'PAUSE').exists() and (RUN/'PAUSE').stat().st_mtime_ns==stamp and
+                ((RUN/'F8_PAUSE').stat().st_mtime_ns if (RUN/'F8_PAUSE').exists() else None)==f8 and
+                ((RUN/'STOP').stat().st_mtime_ns if (RUN/'STOP').exists() else None)==stopped)
+    until=time.monotonic()+15
+    while alive() or starting() or alive('pid.json'):
+        if time.monotonic()>until:
+            raise RuntimeError('Controller is still stopping; input remains paused. Retry Full restart.')
+        if not unchanged():
+            raise RuntimeError('A new manual hold interrupted Full restart')
+        time.sleep(.1)
+    with guard():
+        if not unchanged():raise RuntimeError('A new manual hold interrupted Full restart')
+        if overnight:
+            save_config({'overnight_enabled':True,'overnight_autofocus':True,'overnight_auto_enable_idle':True})
+        return resume('full')
