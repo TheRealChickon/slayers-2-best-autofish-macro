@@ -441,7 +441,7 @@ def main():
                                 # Recheck focus immediately before each injected button action.
                                 if win32gui.GetForegroundWindow()!=hwnd:raise RuntimeError('Roblox lost focus; all inputs released')
                                 inp.hold(True);time.sleep(.15);inp.hold(False)
-                                event('rod_equipped',method='visible hotbar');cast_needs_settle=True;stage='equipping';since=time.monotonic();continue
+                                event('rod_selection_attempt',method='visible hotbar');cast_needs_settle=True;stage='equipping';since=time.monotonic();continue
                         # Time the actual press, not entry into the casting state:
                         # OCR and rod detection can delay this iteration substantially.
                         if not inp.mouse:

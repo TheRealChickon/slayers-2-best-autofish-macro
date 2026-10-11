@@ -10,13 +10,19 @@ from app_config import ROOT
 def templates():
     result=[]
     for rod in json.loads((ROOT/'assets/rods.json').read_text()):
+        # The unselected hotbar disk is translucent. Daylight scenery can
+        # overwhelm a full-icon match even when the rod itself is unchanged.
+        plain=next(v for v in rod['variants'] if not v['selected'])
+        foreground=cv2.imread(str(ROOT/'assets'/plain['image']))
+        mask=(foreground.max(axis=2)>65).astype(np.uint8)*255
         for variant in rod['variants']:
             icon=cv2.imread(str(ROOT/'assets'/variant['image']),cv2.IMREAD_GRAYSCALE)
             if icon is None:continue
             for sx in (1.,.95,1.05):
                 for sy in (1.,.95,1.05):
                     result.append({**variant,'name':rod['name'],'priority':rod['priority'],
-                                   'scale':sx,'sy':sy,'icon':cv2.resize(icon,None,fx=sx,fy=sy)})
+                                   'scale':sx,'sy':sy,'icon':cv2.resize(icon,None,fx=sx,fy=sy),
+                                   'mask':cv2.resize(mask,None,fx=sx,fy=sy,interpolation=cv2.INTER_NEAREST)})
     return result
 
 
@@ -50,7 +56,16 @@ def locate_rod(frame):
     matches=[]
     for variant in templates():
         icon=variant['icon'];scale=variant['scale'];sy=variant.get('sy',scale)
+        shape_verified=False
         _,score,_,point=cv2.minMaxLoc(cv2.matchTemplate(bar,icon,cv2.TM_CCOEFF_NORMED))
+        if score<.88:
+            # Match the rod foreground, excluding the
+            # changing disk background. Keep a higher confidence floor here.
+            shape=cv2.matchTemplate(bar,icon,cv2.TM_CCOEFF_NORMED,mask=variant['mask'])
+            shape=np.nan_to_num(shape,nan=-1,posinf=-1,neginf=-1)
+            _,shape_score,_,shape_point=cv2.minMaxLoc(shape)
+            if shape_score>=.90 and shape_score>score:
+                score,point=shape_score,shape_point;shape_verified=True
         if score<.72:continue
         x=point[0]+500+variant['anchor'][0]*scale
         y=point[1]+1320+variant['anchor'][1]*sy
@@ -58,6 +73,7 @@ def locate_rod(frame):
         ring,selected=selected_ring(frame,x,y,scale,sy)
         matches.append({'x':cx,'y':cy,'score':round(score,3),'ring':round(ring,3),
                         'equipped':bool(variant['selected'] and selected),
+                        'shape_unselected':bool(shape_verified and not variant['selected'] and not selected),
                         'name':variant['name'],'priority':variant['priority']})
     if not matches:return None
     # Never replace a manually selected rod just because an unselected icon
@@ -76,7 +92,7 @@ def selected_rod(rod):
 def unselected_rod(rod):
     """Only a clear icon without the selected ring authorizes a rod click."""
     return bool(rod and not rod.get('equipped') and rod.get('score',0)>=.88
-                and rod.get('ring',1)<.30)
+                and (rod.get('ring',1)<.30 or rod.get('shape_unselected',False)))
 
 
 class RodReady:

@@ -23,6 +23,7 @@ from fishing_vision import ui_visible
 from farm_policy import HereRecovery,startup_rejoin
 from capture_session import CaptureSession
 from display_repair import DisplayRepair
+from rod_recovery import RodRecovery
 
 LAUNCH_URL='roblox://placeId='+str(load_config()['place_id'])
 
@@ -231,10 +232,10 @@ class Recovery:
             self.event('rod_already_equipped',score=rod['score'])
         elif unselected_rod(rod):
             self.click(rod['x'],rod['y']);self.sleep(.6)
-            self.event('rod_equipped',method='visible hotbar',score=rod['score'])
+            self.event('rod_selection_attempt',method='visible hotbar',score=rod['score'])
         else:
             self.key(str(config['rod_slot']));self.sleep(.6);fallback=True
-            self.event('rod_equipped',method='configured slot',slot=config['rod_slot'])
+            self.event('rod_selection_attempt',method='configured slot',slot=config['rod_slot'])
         if config['auto_rod']:
             observed=locate_rod(self.capture())
             if fallback and unselected_rod(observed):
@@ -249,6 +250,8 @@ class Recovery:
             if not selected_rod(observed):
                 raise FishingFault('rod_unreadable','Rod selection could not be verified; no casting input sent')
             self.event('rod_selection_verified',score=observed['score'])
+        else:
+            self.event('rod_selection_unverified',method='configured slot',slot=config['rod_slot'])
         # Refresh Roblox's hover target after leaving the hotbar. The OS cursor
         # can arrive before the game's hit test; otherwise the first cast may
         # toggle the rod off and spend a full bite timeout waiting for nothing.
@@ -451,7 +454,7 @@ def main():
             except (win32gui.error,RuntimeError,ValueError):
                 driver.inp.release();driver.event('unattended_focus_wait',message='Focus or client changed; input remains paused')
     driver.event('run_started',run_id=log_run['id'],resumed=resume_log_run)
-    policy=RecoveryPolicy();here_policy=HereRecovery();here_disconnect=False;here_retries=0;rod_retries=0;display_repair=DisplayRepair()
+    policy=RecoveryPolicy();here_policy=HereRecovery();here_disconnect=False;here_retries=0;rod_policy=RodRecovery();display_repair=DisplayRepair()
     performance=PerformanceRecorder(read_metrics('totals.json').get('started'))
     titles_checked=False
     camera_unlock_attempts=0
@@ -505,7 +508,7 @@ def main():
                     driver.event('saved_heading_ready',heading=round(actual_heading,1))
                 if not a.here:landmarks.align(driver)
                 display_repair.progress()
-                rod_retries=0
+                rod_policy.progress()
                 if load_config()['auto_fishing_titles'] and not titles_checked:
                     try:TitleManager(driver).run()
                     except ValueError as title_error:
@@ -560,9 +563,17 @@ def main():
                     if force:raise
                     force=True;continue
                 if code=='rod_unreadable':
-                    rod_retries+=1
-                    if rod_retries>2:raise FishingFault('user_required','Rod remains unreadable after local repair; automatic restart suspended')
-                    driver.sct.reset();status('retry_wait');driver.sleep(3,focus=False);force=False;continue
+                    action,delay=rod_policy.choose(time.monotonic(),here=a.here)
+                    force=action=='rejoin'
+                    driver.event('rod_recovery_retry',action=action,retry_seconds=delay,
+                        message=('Rod still unreadable; rejoining the saved fishing spawn' if force else
+                                 'Rod still unreadable; input released while waiting for a fresh check'))
+                    driver.sct.reset();retry_until=min(deadline,time.monotonic()+delay)
+                    while time.monotonic()<retry_until:
+                        remaining=retry_until-time.monotonic()
+                        status('rod_wait',failure_code=code,retry_seconds=round(remaining,1))
+                        driver.sleep(min(1,max(0,remaining)),focus=False)
+                    continue
                 if code=='user_required':raise
                 if a.here:
                     here_retries+=1
