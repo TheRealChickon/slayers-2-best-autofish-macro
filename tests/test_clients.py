@@ -85,8 +85,10 @@ class IsolatedState(unittest.TestCase):
 
     def test_overnight_defaults_on_and_preserves_a_saved_off(self):
         self.assertTrue(app_config.load_config()['overnight_enabled'])
+        self.assertTrue(app_config.load_config()['overnight_auto_enable_idle'])
         app_config.save_config({'overnight_enabled':False,'overnight_auto_enable_idle':False})
         self.assertFalse(app_config.load_config()['overnight_enabled'])
+        self.assertFalse(app_config.load_config()['overnight_auto_enable_idle'])
 
     def test_log_navigation_reaches_last_row_without_enabling_follow(self):
         app=terminal_app.Terminal();app.page=2;app.height=22;app.follow=False

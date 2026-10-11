@@ -34,10 +34,11 @@ Do not enable it outside an authorized period or extend its expiry silently.
 Physical activity telemetry is timestamps only. Never bypass the normal input
 gate or restore focus while the user is active or a manual stop/pause is set.
 
-Overnight defaults to on when no setting is saved, with no clock or night
-condition. Preserve a saved Off. Off and explicit Stop disarm future idle activation; manual
-Pause/F8 retain intent but block the restart guard until Continue. Optional idle
-activation requires Player open and explicit autofocus/idle settings. All input
+Overnight and Auto-enable after idle default to on when no setting is saved,
+with a ten-minute idle delay and no clock or night condition. Preserve a saved
+Off. Off and explicit Stop disarm future idle activation; manual Pause/F8 retain
+intent but block the restart guard until Continue. Idle activation requires Player
+open and enabled autofocus/idle settings. All input
 injection is tagged; only hardware activity counts as human input. Yield for the
 configured grace after competing injected input instead of fighting other apps.
 
