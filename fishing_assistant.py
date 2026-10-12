@@ -7,7 +7,7 @@ from rapidocr_onnxruntime import RapidOCR
 from pynput.keyboard import Listener,Key
 from metrics import Ledger, read as read_metrics, write as write_metrics, RUN
 from app_config import load_config,save_config
-from rod_detector import locate_rod, unselected_rod
+from rod_detector import locate_rod, unselected_rod, selected_rod, recheck_selected_rod
 from fishing_vision import detect, ui_visible
 from tracking_control import ReelMotion
 from tracking_watchdog import TrackingWatchdog
@@ -29,7 +29,7 @@ USER.SetProcessDPIAware()
 # Two missed hooks can be ordinary bad luck; wait for a third before rejoining.
 BITE_WAIT_TIMEOUT_SECONDS = 10
 MISSED_CASTS_BEFORE_REJOIN = 3
-CONFIRMED_REWARD_COOLDOWN_SECONDS = .12
+CONFIRMED_REWARD_COOLDOWN_SECONDS = .04
 
 def move_pointer(x,y):
     # Both monitors are valid; coordinates are absolute virtual-desktop pixels.
@@ -186,6 +186,7 @@ def main():
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_toast_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
     cooldown_delay=1.0;prompt_detected_at=None;reward_gate=RewardGate();collect_motion=CollectHoldMotion()
     confirmed_recast=None;reward_confirmed_at=None
+    last_verified_rod=None
     needs_scene_check=True;scene_check_started=None;hooked_cycles=0;last_wait_pickup_check=0
     last_reference_check=0;reference_matcher=None;paused_at=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
@@ -208,7 +209,11 @@ def main():
         return True
     def start_cooldown(seconds):
         nonlocal stage,since,cooldown_delay
-        stage='cooldown';since=time.monotonic();cooldown_delay=seconds
+        stage='cooldown';cooldown_delay=seconds
+        # Receipt logging/screenshots already give Roblox time to release T.
+        # Count that work in the short dwell, then still read a fresh scene.
+        since=(reward_confirmed_at if confirmed_recast is not None
+               and seconds==CONFIRMED_REWARD_COOLDOWN_SECONDS else time.monotonic())
     def screenshot(tag):
         im=screen.capture(sct)
         diagnostics.observe(im,tag)
@@ -288,6 +293,7 @@ def main():
             while now-started<limit:
                 if inp.gate.reason() or inp.gate.interrupted.is_set():
                     confirmed_recast=None
+                    last_verified_rod=None
                     paused_at=time.monotonic();inp.release();motion.suspend();prev=None
                     event('input_paused',stage=stage,reason=inp.gate.reason() or 'paused_focus')
                     while True:
@@ -346,6 +352,7 @@ def main():
                             now=time.monotonic();since=now;cast_needs_settle=True
                         # Menu/camera work invalidates the previous empty-scene read.
                         confirmed_recast=None
+                        last_verified_rod=None
                         needs_scene_check=True;scene_check_started=None;pickup_gate=PickupGate()
                     if (RUN/'RECOVER').exists():
                         (RUN/'RECOVER').unlink();raise RuntimeError('Roblox presence requested reconnect after stalled activity')
@@ -448,7 +455,10 @@ def main():
                     elif stage=='casting':
                         if now-last_rod_check>12 and load_config()['auto_rod']:
                             frame=screen.capture(sct)
-                            rod=locate_rod(frame);last_rod_check=now
+                            rod=recheck_selected_rod(frame,last_verified_rod)
+                            if rod is None:rod=locate_rod(frame)
+                            last_verified_rod=rod if selected_rod(rod) else None
+                            last_rod_check=now
                             if unselected_rod(rod):
                                 inp.release();inp.aim(*screen.point(rod['x'],rod['y']))
                                 # Recheck focus immediately before each injected button action.
@@ -549,13 +559,12 @@ def main():
                                 if same_reward(first,second):
                                     evidence,stable=second,True
                             screenshot('after-pickup')
-                            if evidence.kind=='collect':stage='pickup_retry_wait'
+                            if evidence.kind=='collect':stage='pickup_retry_wait';since=time.monotonic()
                             else:
                                 if evidence.kind=='reward' and stable:record_reward(evidence.text)
                                 elif prompt_seen:inventory.observe_unconfirmed(last_prompt,f'{session}:{cycles}:inventory')
                                 start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS if evidence.kind=='reward' and stable else 1.0)
                                 event('pickup_attempted',cycle=cycles,attempts=pickup_tries)
-                            since=time.monotonic()
                     elif stage=='pickup_retry_wait':
                         if now-since>.08:
                             if pickup_tries>=3:raise RuntimeError('Pickup prompt still present after three held-T attempts')
@@ -582,6 +591,7 @@ def main():
                             recovered=inventory.check_pending();inventory_open=False
                             if menu_scan_due:
                                 confirmed_recast=None
+                                last_verified_rod=None
                                 inp.cast_target=None;cast_needs_settle=True
                             if recovered:
                                 pickup_confirmed+=1;last_reward=f"{recovered['item']} X{recovered['quantity']} (inventory)"

@@ -17,11 +17,19 @@ from pickup_policy import Pickup, before_cast_decision
 class PendingPickupTests(unittest.TestCase):
     def drive(self, initial='collect', pause_after_cast=False, pause_in_ocr=False, active_minigame=False, pending_after_cast=False,
               post_reward=None, pause_after_reward=False, menu_after_reward=False, minigame_after_reward=False,
-              pause_in_post_reward_ocr=False):
+              pause_in_post_reward_ocr=False, auto_rod=False, rod_changed_after_reward=False):
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
         root=Path(temporary.name);clock=[100.];mode=[initial];held_at=[None]
         paused_at=[None];cast_released=[False];inputs=[];states=[]
         accepted_at=[None];region=[None];self.scene_scans=[];self.reward_time=None
+        self.rod_reads=[];self.rod_rechecks=[]
+        rod={'name':'rare','x':1586,'y':1385,'equipped':True,'score':.99,'ring':.85}
+        def read_rod(unused):
+            self.rod_reads.append(clock[0])
+            return {**rod,'name':'common'} if rod_changed_after_reward and accepted_at[0] is not None else dict(rod)
+        def recheck_rod(unused,previous):
+            self.rod_rechecks.append((clock[0],previous))
+            return None if rod_changed_after_reward and accepted_at[0] is not None else previous
         gui=Mock();gui.IsWindow.return_value=True;gui.IsIconic.return_value=False
         gui.GetForegroundWindow.return_value=1;gui.GetAncestor.return_value=1
         gui.GetCursorPos.return_value=(1600,800)
@@ -98,16 +106,17 @@ class PendingPickupTests(unittest.TestCase):
                 (fishing,'InventoryWatcher',Mock(return_value=inventory)),
                 (fishing,'Ledger',Mock(return_value=ledger)),(fishing,'read_metrics',read),
                 (fishing,'write_metrics',status),(fishing,'move_pointer',Mock()),
-                (fishing,'locate_rod',Mock(return_value=None)),
+                (fishing,'locate_rod',Mock(side_effect=read_rod)),
+                (fishing,'recheck_selected_rod',Mock(side_effect=recheck_rod)),
                 (fishing,'CaptureSession',Mock(return_value=capture)),(fishing,'Listener',Mock()),
-                (fishing,'load_config',Mock(return_value={'camera_mode':'keep','auto_rod':False,'cast_point':(1600,800)}))]:
+                (fishing,'load_config',Mock(return_value={'camera_mode':'keep','auto_rod':auto_rod,'cast_point':(1600,800)}))]:
                 stack.enter_context(patch.object(target,name,value))
             stack.enter_context(patch.object(full_pause.InputGate,'start'))
             stack.enter_context(patch.object(fishing.time,'monotonic',side_effect=lambda:clock[0]))
             stack.enter_context(patch.object(fishing.time,'sleep',side_effect=sleep))
             stack.enter_context(patch.object(fishing.cv2,'imread',return_value=None))
             stack.enter_context(patch.object(fishing.landmarks,'profile',return_value=None))
-            stack.enter_context(patch.object(sys,'argv',['fishing_assistant.py','--seconds','9']))
+            stack.enter_context(patch.object(sys,'argv',['fishing_assistant.py','--seconds','24' if auto_rod else '9']))
             stack.enter_context(patch('builtins.print'))
             try:fishing.main()
             except FishingFault as caught:error=caught
@@ -250,6 +259,21 @@ class PendingPickupTests(unittest.TestCase):
         self.assertEqual(before_cast_decision(Pickup('empty'),False,.1,receipt,True),'wait')
         self.assertEqual(before_cast_decision(Pickup('ambiguous'),True,.1,receipt,True),'wait')
         self.assertEqual(before_cast_decision(Pickup('collect','T Collect'),True,.1,receipt,True),'collect')
+
+    def test_periodic_rod_check_reuses_location_with_fresh_verification(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,auto_rod=True)
+        self.assertIsNone(error)
+        self.assertGreaterEqual(len(self.rod_rechecks),2)
+        self.assertEqual(len(self.rod_reads),1)
+        self.assertIsNone(self.rod_rechecks[0][1])
+        self.assertEqual(self.rod_rechecks[1][1]['name'],'rare')
+        self.assertTrue(any(event['event']=='cast' for event in events))
+
+    def test_changed_rod_recheck_falls_back_to_full_hotbar(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,auto_rod=True,rod_changed_after_reward=True)
+        self.assertIsNone(error)
+        self.assertGreaterEqual(len(self.rod_reads),2)
+        self.assertGreater(self.rod_reads[1],self.reward_time)
 
 
 if __name__=='__main__':unittest.main()
