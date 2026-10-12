@@ -372,6 +372,8 @@ Confirmed recasts finish due inventory/reference work before the fresh scene che
 
 The collection frame and fault evidence are captured immediately. Only its two JPEG file writes run on a bounded background writer with one owned frame. Later screenshots and shutdown wait for it so archive/latest ordering is preserved. Input, reward logs, counters and inventory state stay synchronous. Controlled replay latency and saved-frame processing measurements are not live game timing guarantees.
 
+The first Collect hold gets 0.75 seconds of extra grace before retrying: its timeout is 4.75 seconds, and a moved prompt must keep supplying fresh settled Collect evidence for another 0.75 seconds before the early movement retry. Later holds keep their four-second timeout. A confirmed reward still releases T immediately; focus, manual pause and non-fishing interaction guards remain immediate.
+
 On the primary monitor, mouse moves use primary-screen absolute coordinates; targets on other monitors use virtual-desktop coordinates. The actual cursor position is checked before clicking. This avoids the primary-screen hit-test mismatch observed on the tested two-monitor desktop.
 
 When a username is configured, [Roblox's public user lookup](https://create.roblox.com/docs/cloud/reference/features/users) resolves it to an ID and the [presence API](https://create.roblox.com/docs/cloud/reference/domains/presence) is polled every 45 seconds. Persistent absence **and** no fishing activity can request recovery. An API error alone does not mean a disconnect. No Roblox password, cookie, or API key is used or stored.

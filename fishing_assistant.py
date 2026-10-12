@@ -14,7 +14,7 @@ from tracking_watchdog import TrackingWatchdog
 from screen_space import ScreenSpace
 from inventory_watch import InventoryDriver, InventoryWatcher
 import landmarks
-from pickup_policy import Pickup, classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate,waiting_decision,before_cast_decision,retain_collect_hold,CollectHoldMotion
+from pickup_policy import Pickup, classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate,waiting_decision,before_cast_decision,retain_collect_hold,collect_hold_timeout,CollectHoldMotion
 from reward_evidence import reward_quantity
 from faults import FishingFault, FaultRecorder, reason_code
 from full_pause import InputGate, InputPaused, PAUSE_FILE, resumed_stage
@@ -575,7 +575,7 @@ def main():
                             moved_collect=collect_motion.observe(evidence,stable,now,pickup_tries)
                             if evidence.kind=='reward' and stable:
                                 record_reward(evidence.text);screenshot('collected',defer=True);start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS);continue
-                            if evidence.kind=='empty' and stable and inp.t and not retain_collect_hold(evidence,now-since):
+                            if evidence.kind=='empty' and stable and inp.t and not retain_collect_hold(evidence,now-since,attempt=pickup_tries):
                                 inp.grab(False);event('pickup_released',cycle=cycles,reason='Prompt disappeared')
                             elif evidence.kind=='collect' and stable and not inp.t:
                                 if pickup_tries>=3:raise FishingFault('pickup_timeout','Collect remained after three state-driven attempts')
@@ -589,8 +589,8 @@ def main():
                                 event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=evidence.text,
                                       reason='Collect target moved and settled',from_center=prior_center,center=evidence.center)
                         # Confirm the small toast twice while T is held. This
-                        # avoids waiting four seconds when wide OCR misses X1.
-                        if now-since>4.0:
+                        # avoids waiting for the full hold timeout when wide OCR misses X1.
+                        if now-since>collect_hold_timeout(pickup_tries):
                             inp.grab(False);evidence,stable=pickup_text()
                             # A banner can appear just as the T hold ends. Confirm
                             # it across another frame before deferring to the

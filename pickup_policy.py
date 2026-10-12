@@ -4,6 +4,12 @@ import re
 from dataclasses import dataclass
 from reward_evidence import reward_quantity
 
+FIRST_COLLECT_HOLD_GRACE_SECONDS = .75
+
+
+def collect_hold_timeout(attempt):
+    return 4.0+(FIRST_COLLECT_HOLD_GRACE_SECONDS if attempt==1 else 0)
+
 
 @dataclass(frozen=True)
 class Pickup:
@@ -115,27 +121,36 @@ def before_cast_decision(evidence,stable,elapsed,confirmed_reward=None,full_scen
     return 'wait'
 
 
-def retain_collect_hold(evidence,elapsed,confirmed_reward=False):
+def retain_collect_hold(evidence,elapsed,confirmed_reward=False,attempt=0):
     """An OCR miss can hide a prompt during its already-authorized hold."""
-    return not confirmed_reward and evidence.kind not in ('other','ambiguous') and elapsed<4
+    return not confirmed_reward and evidence.kind not in ('other','ambiguous') and elapsed<collect_hold_timeout(attempt)
 
 
 class CollectHoldMotion:
     """One fresh retry when an airborne collect target has moved and settled."""
     def __init__(self):
         self.origin=None;self.previous=None;self.started=0;self.at=0
+        self.retry_ready_at=None
 
     def start(self,evidence,now):
         self.origin=evidence.center;self.previous=None;self.started=self.at=now
+        self.retry_ready_at=None
 
     def observe(self,evidence,stable,now,attempt):
         previous=self.previous;age=now-self.at
         self.previous=evidence;self.at=now
-        return (self.origin is not None and attempt==1 and stable
+        ready=(self.origin is not None and attempt==1 and stable
                 and evidence.kind=='collect' and previous is not None and previous.kind=='collect'
                 and now-self.started>=.65 and age<=1.5
                 and math.dist(self.origin,evidence.center)>180
                 and math.dist(previous.center,evidence.center)<=35)
+        if not ready:
+            self.retry_ready_at=None;return False
+        # A moving/changing Collect prompt often settles before its original
+        # hold completes. Give that first hold another .75s while fresh settled
+        # evidence continues; a reward can still finish it immediately.
+        if self.retry_ready_at is None:self.retry_ready_at=now
+        return now>=self.retry_ready_at+FIRST_COLLECT_HOLD_GRACE_SECONDS
 
 
 class PickupGate:

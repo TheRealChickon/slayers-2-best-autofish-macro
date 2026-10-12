@@ -158,8 +158,10 @@ class Reliability(unittest.TestCase):
         from pickup_policy import Pickup,CollectHoldMotion
         motion=CollectHoldMotion();motion.start(Pickup('collect',center=(1370,285)),0)
         self.assertFalse(motion.observe(Pickup('collect',center=(1380,610)),True,1,1))
-        self.assertTrue(motion.observe(Pickup('collect',center=(1382,625)),True,1.4,1))
-        self.assertFalse(motion.observe(Pickup('collect',center=(1380,629)),True,1.8,2))
+        self.assertFalse(motion.observe(Pickup('collect',center=(1382,625)),True,1.4,1))
+        self.assertFalse(motion.observe(Pickup('collect',center=(1380,629)),True,2.1,1))
+        self.assertTrue(motion.observe(Pickup('collect',center=(1380,629)),True,2.15,1))
+        self.assertFalse(motion.observe(Pickup('collect',center=(1380,629)),True,2.2,2))
 
     def test_stationary_or_still_moving_target_does_not_reset_a_valid_hold(self):
         from pickup_policy import Pickup,CollectHoldMotion
