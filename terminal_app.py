@@ -57,7 +57,7 @@ class Terminal:
     settings_groups=(('Account',('Username',)),('Fishing',('Mode','Rod slot','Auto rod','Fishing titles')),
                      ('Overnight',('Overnight enabled','Auto focus','Focus grace seconds','Auto-enable after idle','Idle minutes')),
                      ('Location and camera',('Cast point','Capture pointer','Camera','Heading','Position correction','Save reference','Disable reference')),
-                     ('Bait route',('Record bait route','Open bait recordings')),
+                     ('Bait restock',('Fish Head reserve','Refill buffer','Run bait restock','Check bait route','Stop bait restock','BaitBot status','Record bait route','Open bait recordings')),
                      ('Buy bait',('Purchase amount','Amount type','After purchase','Buy bait now','Resume bait purchase','Bait purchase status')),
                      ('Discord reports',('Discord webhook','Test webhook','Remove webhook')),('Display',('Motion',)))
     settings_keys=tuple(key for _,keys in settings_groups for key in keys)
@@ -77,6 +77,12 @@ class Terminal:
         'Motion':'Reduce terminal effects and animations.',
         'Record bait route':'Pause Fishing first. F7 records the selected game; F6 saves checkpoints; F10 finishes. No replay.',
         'Open bait recordings':'Open local game video, timed physical inputs and checkpoint images.'}
+    setting_help.update({'Fish Head reserve':'Minimum Fish Heads to keep. The separate shrine-route bot defaults to 2,500.',
+        'Refill buffer':'Extra Fish Heads per trip. Defaults to 500, rounded up to whole 99-unit batches.',
+        'Run bait restock':'The separate bot resets, teleports to Hidden Mist, walks to Nori, buys and verifies the reset return. Requires a complete route.',
+        'Check bait route':'Read-only route readiness check. Reports missing calibration without controlling Roblox.',
+        'Stop bait restock':'Stop only the separate BaitBot and release its input.',
+        'BaitBot status':'Current standalone trip or last stopping point. Automatic refills await a verified full trip.'})
     setting_help.update({'Purchase amount':'Whole number or k suffix. Budget is gold; quantity is Fish Heads. No purchase until Buy bait now.',
         'Amount type':'Choose gold budget or exact bait quantity.',
         'After purchase':'Optionally reset/rejoin and start Full farmer after every debit is verified.',
@@ -186,6 +192,9 @@ class Terminal:
                     save_config(resolve_account(value)); return 'Account saved'
                 self.job(account)
             elif key == 'Rod slot': save_config({'rod_slot': int(value)})
+            elif key in ('Fish Head reserve','Refill buffer'):
+                save_config({{'Fish Head reserve':'bait_reserve','Refill buffer':'bait_refill_buffer'}[key]:int(value)})
+                self.toast(key+' saved')
             elif key=='Purchase amount':
                 from bait_buy import amount
                 save_config({'bait_buy_amount':amount(value)})
@@ -235,6 +244,13 @@ class Terminal:
                 self.switch(2); self.query = name; self.category = 1; self.follow = True
         elif self.page == 3:
             key = self.settings_keys[self.selection]
+            if key in ('Fish Head reserve','Refill buffer'):
+                self.edit(key,self.config[{'Fish Head reserve':'bait_reserve','Refill buffer':'bait_refill_buffer'}[key]]);return
+            if key in ('Run bait restock','Check bait route','Stop bait restock','BaitBot status'):
+                import baitbot_controls
+                self.job({'Run bait restock':baitbot_controls.launch,'Check bait route':baitbot_controls.check,
+                          'Stop bait restock':lambda:baitbot_controls.invoke('stop'),
+                          'BaitBot status':baitbot_controls.status}[key]);return
             if key=='Purchase amount':self.edit(key,self.config.get('bait_buy_amount',169000));return
             if key=='Amount type':
                 save_config({'bait_buy_kind':'quantity' if self.config.get('bait_buy_kind','budget')=='budget' else 'budget'});return
@@ -487,6 +503,10 @@ class Terminal:
                     ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On')]
         values={key:value for key,(_,value) in zip(('Username','Mode','Rod slot','Auto rod','Camera','Heading','Fishing titles','Cast point','Capture pointer','Position correction','Save reference','Disable reference','Motion'),settings)}
         values.update({'Overnight enabled':'On' if self.config['overnight_enabled'] else 'Off',
+            'Fish Head reserve':f"{self.config['bait_reserve']:,}",'Refill buffer':f"{self.config['bait_refill_buffer']:,}",
+            'Run bait restock':'Reset / shrine / Nori / return','Check bait route':'Enter for readiness',
+            'Stop bait restock':'Enter to release bot input',
+            'BaitBot status':__import__('baitbot_controls').summary(),
             'Purchase amount':f"{self.config.get('bait_buy_amount',169000):,}",
             'Amount type':'Gold budget' if self.config.get('bait_buy_kind','budget')=='budget' else 'Fish Head quantity',
             'After purchase':'Reset + start Full farmer' if self.config.get('bait_buy_then_full',False) else 'Stay at seller',

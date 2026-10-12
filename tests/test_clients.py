@@ -327,11 +327,14 @@ class IsolatedState(unittest.TestCase):
 
     def test_run_page_launches_each_explicit_mode_without_changing_focus_itself(self):
         app=terminal_app.Terminal()
-        with patch.object(app,'job',side_effect=lambda fn:fn()), patch.object(control_actions,'resume') as resume:
+        with patch.object(app,'job',side_effect=lambda fn:fn()), patch.object(control_actions,'resume') as resume,\
+                patch.object(control_actions,'restart_full') as restart,patch.object(control_actions,'focus_game') as focus:
             for index,mode in enumerate(('assist','spot','full','here','rejoin')):
                 app.selection=index;app.key('ENTER')
                 resume.assert_called_with(mode)
-            app.key('END');self.assertEqual(app.selection,7)
+            app.key('END');self.assertEqual(app.selection,8)
+            app.key('ENTER');restart.assert_called_once_with()
+            self.assertEqual(resume.call_count,5);focus.assert_not_called()
 
     def test_run_modes_and_stop_reason_are_visible_with_keyboard_scrolling(self):
         (self.root/'STOP').write_text('Stopped by F12 in Roblox')
