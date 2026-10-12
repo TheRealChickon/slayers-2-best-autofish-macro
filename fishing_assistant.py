@@ -14,7 +14,7 @@ from tracking_watchdog import TrackingWatchdog
 from screen_space import ScreenSpace
 from inventory_watch import InventoryDriver, InventoryWatcher
 import landmarks
-from pickup_policy import classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate,waiting_decision,before_cast_decision,retain_collect_hold,CollectHoldMotion
+from pickup_policy import Pickup, classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate,waiting_decision,before_cast_decision,retain_collect_hold,CollectHoldMotion
 from reward_evidence import reward_quantity
 from faults import FishingFault, FaultRecorder, reason_code
 from full_pause import InputGate, InputPaused, PAUSE_FILE, resumed_stage
@@ -29,6 +29,7 @@ USER.SetProcessDPIAware()
 # Two missed hooks can be ordinary bad luck; wait for a third before rejoining.
 BITE_WAIT_TIMEOUT_SECONDS = 10
 MISSED_CASTS_BEFORE_REJOIN = 3
+CONFIRMED_REWARD_COOLDOWN_SECONDS = .12
 
 def move_pointer(x,y):
     # Both monitors are valid; coordinates are absolute virtual-desktop pixels.
@@ -184,6 +185,7 @@ def main():
     motion=ReelMotion();tracking_watchdog=TrackingWatchdog()
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_toast_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
     cooldown_delay=1.0;prompt_detected_at=None;reward_gate=RewardGate();collect_motion=CollectHoldMotion()
+    confirmed_recast=None;reward_confirmed_at=None
     needs_scene_check=True;scene_check_started=None;hooked_cycles=0;last_wait_pickup_check=0
     last_reference_check=0;reference_matcher=None;paused_at=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
@@ -195,10 +197,11 @@ def main():
             'stage':'inventory','inventory':kw,'last_game_activity':last_game_activity,
             'held_mouse':False,'held_t':False,'cycles':hooked_cycles,'casts':casts})
     def record_reward(raw):
-        nonlocal pickup_confirmed,last_reward
+        nonlocal pickup_confirmed,last_reward,confirmed_recast,reward_confirmed_at
         if not reward_gate.accept(cycles):
             inp.grab(False);event('duplicate_reward_ignored',cycle=cycles);return False
         inp.grab(False);pickup_confirmed+=1;last_reward=raw
+        confirmed_recast=Pickup('reward',raw);reward_confirmed_at=time.monotonic()
         reward_id=f'{session}:{cycles}:{pickup_confirmed}'
         event('reward_observed',cycle=cycles,text=raw,reward_id=reward_id)
         inventory.observe(raw,last_prompt,reward_id)
@@ -215,7 +218,7 @@ def main():
     def read_text(im):
         result,_=ocr(im)
         return ' '.join(r[1] for r in result or [] if r[2]>.8)
-    def pickup_text():
+    def pickup_text(full_scene=False):
         nonlocal last_pickup_evidence,prompt_detected_at
         # Prompt height changes with the camera. The previous crop missed
         # Collect above y=480, causing blind T holds on otherwise empty rounds.
@@ -227,7 +230,8 @@ def main():
             narrow=(max(480,min(1660,int(cx)-240)),max(150,min(1030,int(cy)-110)),480,220)
         else:narrow=(1080,480,660,460)
         evidence=None
-        for x,y,w,h in (narrow,(480,150,1630,1110)):
+        regions=((480,150,1630,1110),) if full_scene else (narrow,(480,150,1630,1110))
+        for x,y,w,h in regions:
             im=screen.capture(sct,(x,y,w,h))
             scale=1 if w<1000 else .75
             results,_=ocr(cv2.resize(im,None,fx=scale,fy=scale),use_cls=False)
@@ -283,6 +287,7 @@ def main():
             needs_inventory_start=True;inventory_open=False
             while now-started<limit:
                 if inp.gate.reason() or inp.gate.interrupted.is_set():
+                    confirmed_recast=None
                     paused_at=time.monotonic();inp.release();motion.suspend();prev=None
                     event('input_paused',stage=stage,reason=inp.gate.reason() or 'paused_focus')
                     while True:
@@ -340,6 +345,7 @@ def main():
                             first_person_active=True
                             now=time.monotonic();since=now;cast_needs_settle=True
                         # Menu/camera work invalidates the previous empty-scene read.
+                        confirmed_recast=None
                         needs_scene_check=True;scene_check_started=None;pickup_gate=PickupGate()
                     if (RUN/'RECOVER').exists():
                         (RUN/'RECOVER').unlink();raise RuntimeError('Roblox presence requested reconnect after stalled activity')
@@ -366,16 +372,22 @@ def main():
                         # interrupted worker. Repeat this check after pause and at
                         # every cast boundary; only fresh evidence authorizes T.
                         if scene_check_started is None:scene_check_started=time.monotonic()
-                        evidence,stable=pickup_text();now=time.monotonic()
-                        decision=before_cast_decision(evidence,stable,now-scene_check_started)
+                        full_scene=confirmed_recast is not None
+                        evidence,stable=pickup_text(full_scene=full_scene);now=time.monotonic()
+                        decision=before_cast_decision(evidence,stable,now-scene_check_started,confirmed_recast,full_scene)
                         if decision=='collect':
                             if cycles==0 or cycles in reward_gate.confirmed or last_tracking_cast!=casts:
                                 cycles+=1;last_tracking_cast=casts;end_percent=None
                             inventory.begin_round();prompt_seen=True;pickup_tries=0;last_prompt=evidence.text
+                            confirmed_recast=None
                             needs_scene_check=False;scene_check_started=None
                             stage='pickup_wait';since=now-.1;last_pickup_scan=0
                             event('pending_pickup_recovered',cycle=cycles,text=evidence.text)
                         elif decision=='clear':
+                            if confirmed_recast is not None:
+                                event('recast_ready',cycle=cycles,matching_receipt=same_reward(evidence,confirmed_recast),
+                                      reward_to_ready_seconds=round(now-reward_confirmed_at,3),
+                                      scan_seconds=last_pickup_evidence['scan_seconds'])
                             needs_scene_check=False;scene_check_started=None;last_wait_pickup_check=now
                             if needs_inventory_start and stage=='casting':continue
                         elif decision=='timeout':
@@ -383,6 +395,7 @@ def main():
                         else:
                             time.sleep(.08);continue
                     if d is not None:
+                        confirmed_recast=None
                         needs_scene_check=False;scene_check_started=None
                         if tracking_watchdog.observe(d,now):
                             inp.release();screenshot('frozen-minigame')
@@ -445,6 +458,7 @@ def main():
                         # Time the actual press, not entry into the casting state:
                         # OCR and rod detection can delay this iteration substantially.
                         if not inp.mouse:
+                            confirmed_recast=None
                             inventory.begin_round()
                             if not first_person_active:
                                 inp.aim_cast(*screen.point(*load_config()['cast_point']),after_menu=cast_needs_settle)
@@ -476,7 +490,7 @@ def main():
                             evidence,stable=pickup_text();now=time.monotonic();last_pickup_scan=now;prompt_seen=evidence.kind=='collect' and stable
                             decision=waiting_decision(evidence,stable,now-since,last_tracking_cast==casts,end_percent)
                             if decision=='reward':
-                                record_reward(evidence.text);screenshot('collected');start_cooldown(.45)
+                                record_reward(evidence.text);screenshot('collected');start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS)
                             elif decision=='collect':
                                 last_prompt=evidence.text
                                 inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;last_toast_scan=0
@@ -494,14 +508,14 @@ def main():
                             if first.kind=='reward':
                                 time.sleep(.06);second=pickup_toast()
                                 if same_reward(first,second):
-                                    record_reward(second.text);screenshot('collected');start_cooldown(.25);continue
+                                    record_reward(second.text);screenshot('collected');start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS);continue
                             now=time.monotonic()
                         if now-since>.45 and now-last_pickup_scan>.15:
                             evidence,stable=pickup_text();last_pickup_scan=time.monotonic()
                             now=time.monotonic()
                             moved_collect=collect_motion.observe(evidence,stable,now,pickup_tries)
                             if evidence.kind=='reward' and stable:
-                                record_reward(evidence.text);screenshot('collected');start_cooldown(.12);continue
+                                record_reward(evidence.text);screenshot('collected');start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS);continue
                             if evidence.kind=='empty' and stable and inp.t and not retain_collect_hold(evidence,now-since):
                                 inp.grab(False);event('pickup_released',cycle=cycles,reason='Prompt disappeared')
                             elif evidence.kind=='collect' and stable and not inp.t:
@@ -539,7 +553,7 @@ def main():
                             else:
                                 if evidence.kind=='reward' and stable:record_reward(evidence.text)
                                 elif prompt_seen:inventory.observe_unconfirmed(last_prompt,f'{session}:{cycles}:inventory')
-                                start_cooldown(.25 if evidence.kind=='reward' and stable else 1.0)
+                                start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS if evidence.kind=='reward' and stable else 1.0)
                                 event('pickup_attempted',cycle=cycles,attempts=pickup_tries)
                             since=time.monotonic()
                     elif stage=='pickup_retry_wait':
@@ -567,6 +581,7 @@ def main():
                             inventory_open=True
                             recovered=inventory.check_pending();inventory_open=False
                             if menu_scan_due:
+                                confirmed_recast=None
                                 inp.cast_target=None;cast_needs_settle=True
                             if recovered:
                                 pickup_confirmed+=1;last_reward=f"{recovered['item']} X{recovered['quantity']} (inventory)"
