@@ -21,10 +21,13 @@ DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             'damage_target': 10000000, 'damage_check_seconds': 180,
             'overnight_enabled':True,'overnight_autofocus':True,
             'overnight_auto_enable_idle':True,'overnight_idle_minutes':10,
-            'overnight_focus_grace_seconds':30}
+            'overnight_focus_grace_seconds':30,'bait_reserve':2500,'bait_refill_buffer':500}
 
 
 def validate_options(values):
+    for key,low,high in (('bait_reserve',1,100000),('bait_refill_buffer',0,10000)):
+        if type(values[key]) is not int or not low<=values[key]<=high:
+            raise ValueError(f'{key} must be a whole number from {low} to {high}')
     for key in ('overnight_enabled','overnight_autofocus','overnight_auto_enable_idle'):
         if not isinstance(values[key],bool):raise ValueError(key+' must be on or off')
     for key,low,high in (('overnight_idle_minutes',1,120),('overnight_focus_grace_seconds',5,300)):

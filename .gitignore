@@ -2,6 +2,7 @@
 /.runtime/
 /config.local.json
 /runtime.local.json
+/baitbot.local.json
 /data/
 /Logs/
 /Screenshots/

@@ -286,9 +286,36 @@ variation is visible. `autofish route status` shows the recorder's liveness and
 latest saved take. An unclosed/crashed take remains marked incomplete/running;
 its video may need repair. Keep all files together for the later route analysis.
 
-The shrine and shopping recognizers still need to be built and tested from your
-demonstration. A saved checkpoint is evidence for that work, not proof that the
-macro can navigate or buy bait yet.
+### Bait restock in CLI Settings
+
+Open `autofish`, choose **Settings → Bait restock**, then use **Run bait restock**,
+**Check bait route**, **Stop bait restock** or **BaitBot status**. **Fish Head reserve**
+defaults to **2,500** and **Refill buffer** to **500**; edit either with Enter.
+The existing **Buy bait** shop controls remain available in their own group.
+
+The restock entry launches the separate route bot with this autofish account,
+settings and controller data. That process owns reset, Hidden Mist shrine travel,
+scenery navigation, Nori purchases, inventory verification and reset return.
+It refuses an incomplete route before game input and another active controller
+prevents it starting. The current route still requires drop, seller endpoint and
+return-camera calibration. This Settings entry does not enable automatic refills
+or certify a complete live trip. `Check bait route` is read-only.
+
+The same controls are available without the dashboard:
+
+```powershell
+autofish baitbot check
+autofish baitbot run                 # Uses the saved reserve and buffer
+autofish baitbot run --reserve 2500 --buffer 500
+autofish baitbot status
+autofish baitbot stop
+```
+
+`baitbot.local.json` connects this installation to the standalone bot's Python,
+script, dependency folder and route folder; it stays local and outside Git.
+Bot progress is saved beside that route and command output in the normal data
+folder's `baitbot-stdout.log` and `baitbot-stderr.log`. Reopen only the CLI view
+after a Settings update; the farmer and its manual holds can keep their state.
 
 The item journal records confirmed quantity/NEW reward banners, original OCR text, quantity, and time. A round without a reward is normal. Unread or partial names are retained instead of silently discarded. OCR can misread text; the original observation remains in the log.
 
