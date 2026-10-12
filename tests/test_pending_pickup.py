@@ -15,10 +15,13 @@ from pickup_policy import Pickup, before_cast_decision
 
 
 class PendingPickupTests(unittest.TestCase):
-    def drive(self, initial='collect', pause_after_cast=False, pause_in_ocr=False, active_minigame=False, pending_after_cast=False):
+    def drive(self, initial='collect', pause_after_cast=False, pause_in_ocr=False, active_minigame=False, pending_after_cast=False,
+              post_reward=None, pause_after_reward=False, menu_after_reward=False, minigame_after_reward=False,
+              pause_in_post_reward_ocr=False):
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
         root=Path(temporary.name);clock=[100.];mode=[initial];held_at=[None]
         paused_at=[None];cast_released=[False];inputs=[];states=[]
+        accepted_at=[None];region=[None];self.scene_scans=[];self.reward_time=None
         gui=Mock();gui.IsWindow.return_value=True;gui.IsIconic.return_value=False
         gui.GetForegroundWindow.return_value=1;gui.GetAncestor.return_value=1
         gui.GetCursorPos.return_value=(1600,800)
@@ -36,18 +39,26 @@ class PendingPickupTests(unittest.TestCase):
             if pending_after_cast and cast_released[0] and mode[0]=='empty':mode[0]='collect'
             if pause_after_cast and cast_released[0] and paused_at[0] is None:
                 paused_at[0]=clock[0];(root/'F8_PAUSE').write_text('Paused by user')
+            if pause_after_reward and accepted_at[0] is not None and paused_at[0] is None:
+                paused_at[0]=clock[0];(root/'F8_PAUSE').write_text('Paused after reward')
             if paused_at[0] is not None and clock[0]-paused_at[0]>1:
                 (root/'F8_PAUSE').unlink(missing_ok=True)
-                mode[0]='empty' if pause_in_ocr else 'collect'
+                mode[0]='reward' if pause_after_reward or pause_in_post_reward_ocr else 'empty' if pause_in_ocr else 'collect'
                 paused_at[0]=-1000;cast_released[0]=False
         def ocr(image,**unused):
             clock[0]+=.12
             if pause_in_ocr and paused_at[0] is None:
                 paused_at[0]=clock[0];(root/'F8_PAUSE').write_text('Paused during OCR')
             if held_at[0] is not None and clock[0]-held_at[0]>.8:mode[0]='reward'
+            reading=mode[0]
+            if accepted_at[0] is not None:
+                self.scene_scans.append((clock[0],region[0]))
+                if pause_in_post_reward_ocr and paused_at[0] is None:
+                    paused_at[0]=clock[0];(root/'F8_PAUSE').write_text('Paused during recast OCR')
+                if post_reward and region[0]==(480,150,1630,1110):reading=post_reward
             labels={'collect':[('T',120,80),('Krathulon',240,60),('Collect',240,85)],
                     'reward':[('Krathulon',140,60),('X1',220,60)],
-                    'ambiguous':[('Collect',160,80),('Purchase',180,85)],'empty':[]}[mode[0]]
+                    'ambiguous':[('Collect',160,80),('Purchase',180,85)],'empty':[]}[reading]
             return ([[[[x-5,y-5],[x+5,y-5],[x+5,y+5],[x-5,y+5]],text,.99]
                      for text,x,y in labels],None)
         def status(name,value):
@@ -58,9 +69,19 @@ class PendingPickupTests(unittest.TestCase):
             if name=='bait-observation.json':return {'supervisor_started':1}
             return {}
         screen=Mock();screen.point.return_value=(1600,800)
-        screen.capture.return_value=np.zeros((1440,2560,3),np.uint8)
+        frame=np.zeros((1440,2560,3),np.uint8)
+        def capture_frame(unused,box=None):
+            region[0]=box
+            return frame
+        screen.capture.side_effect=capture_frame
         capture=Mock();capture.__enter__=Mock(return_value=Mock(resets=0));capture.__exit__=Mock(return_value=False)
         inventory=Mock();inventory.pending=[];inventory.check_pending.return_value=None
+        def observed(*unused):
+            accepted_at[0]=clock[0];self.reward_time=clock[0]
+            if menu_after_reward:
+                inventory.pending=[{'reward_id':'unknown'}]
+                inventory.clock.return_value=1000;inventory.next_check_at=0
+        inventory.observe.side_effect=observed
         ledger=Mock();ledger.base={}
         error=None
         with ExitStack() as stack:
@@ -70,8 +91,9 @@ class PendingPickupTests(unittest.TestCase):
                 (fishing,'rectangle',Mock(return_value=(0,0,2560,1440))),
                 (fishing,'ScreenSpace',Mock(return_value=screen)),
                 (fishing,'RapidOCR',Mock(return_value=ocr)),
-                (fishing,'detect',Mock(return_value={'ball':100,'target':100,'height':50,'ball_height':10,'inside':True} if active_minigame else None)),
-                (fishing,'ui_visible',Mock(return_value=active_minigame)),
+                (fishing,'detect',Mock(side_effect=lambda unused:{'ball':100,'target':100,'height':50,'ball_height':10,'inside':True}
+                                     if active_minigame or minigame_after_reward and accepted_at[0] is not None else None)),
+                (fishing,'ui_visible',Mock(side_effect=lambda *unused:active_minigame or minigame_after_reward and accepted_at[0] is not None)),
                 (fishing,'ReelMotion',Mock(return_value=Mock(step=Mock(return_value=False),velocity=0,target_velocity=0))),
                 (fishing,'InventoryWatcher',Mock(return_value=inventory)),
                 (fishing,'Ledger',Mock(return_value=ledger)),(fishing,'read_metrics',read),
@@ -164,6 +186,70 @@ class PendingPickupTests(unittest.TestCase):
         self.assertEqual(before_cast_decision(Pickup('empty'),True,.5),'clear')
         self.assertEqual(before_cast_decision(Pickup('other','Purchase'),True,1),'wait')
         self.assertEqual(before_cast_decision(Pickup('other','Purchase'),True,8),'timeout')
+
+    def test_confirmed_receipt_recasts_quickly_after_fresh_full_scene(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True)
+        self.assertIsNone(error)
+        recasts=[at for kind,flags,at in inputs if kind=='mouse' and flags==2 and at>self.reward_time]
+        self.assertTrue(recasts)
+        self.assertLess(recasts[0]-self.reward_time,.6)
+        ready=next(event for event in events if event['event']=='recast_ready')
+        self.assertTrue(ready['matching_receipt'])
+        self.assertEqual(self.scene_scans[0][1],(480,150,1630,1110))
+        self.assertEqual(sum(event['event']=='reward_observed' for event in events),1)
+        self.assertFalse(states[-1]['held_t'])
+
+    def test_other_prompt_outside_toast_crop_blocks_fast_recast(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,post_reward='ambiguous')
+        self.assertFalse(any(kind=='mouse' and flags==2 and at>self.reward_time for kind,flags,at in inputs))
+        self.assertFalse(any(event['event']=='recast_ready' for event in events))
+
+    def test_new_collect_outside_toast_crop_takes_priority(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,post_reward='collect')
+        names=[event['event'] for event in events]
+        reward=names.index('reward_observed')
+        self.assertIn('pending_pickup_recovered',names[reward+1:])
+        self.assertNotIn('cast',names[reward+1:])
+
+    def test_pause_after_reward_discards_fast_recast_receipt(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,pause_after_reward=True)
+        self.assertIsNone(error)
+        self.assertTrue(any(event['event']=='input_resumed' for event in events))
+        self.assertFalse(any(event['event']=='recast_ready' for event in events))
+        self.assertTrue(any(kind=='mouse' and flags==2 and at>self.reward_time for kind,flags,at in inputs))
+        self.assertTrue(all(not state['held_t'] and not state['held_mouse'] for state in states if state['stage']=='paused_manual'))
+
+    def test_inventory_menu_discards_fast_recast_receipt(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,menu_after_reward=True)
+        self.assertIsNone(error)
+        self.assertTrue(inventory.check_pending.called)
+        self.assertFalse(any(event['event']=='recast_ready' for event in events))
+        self.assertTrue(any(kind=='mouse' and flags==2 and at>self.reward_time for kind,flags,at in inputs))
+
+    def test_pause_during_fast_scan_invalidates_receipt_before_click(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,pause_in_post_reward_ocr=True)
+        self.assertIsNone(error)
+        names=[event['event'] for event in events]
+        reward=names.index('reward_observed')
+        resumed=names.index('input_resumed',reward)
+        self.assertNotIn('cast',names[reward+1:resumed])
+        self.assertNotIn('recast_ready',names)
+        self.assertTrue(any(kind=='mouse' and flags==2 and at>self.reward_time for kind,flags,at in inputs))
+
+    def test_active_minigame_after_reward_blocks_fast_recast(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,minigame_after_reward=True)
+        self.assertIsNone(error)
+        self.assertFalse(any(event['event']=='recast_ready' for event in events))
+        self.assertFalse(any(kind=='mouse' and flags==2 and at>self.reward_time for kind,flags,at in inputs))
+
+    def test_fast_receipt_requires_exact_confirmed_reward_and_full_scene(self):
+        receipt=Pickup('reward','Krathulon X1')
+        self.assertEqual(before_cast_decision(receipt,False,.1,receipt,True),'clear')
+        self.assertEqual(before_cast_decision(receipt,False,.1,receipt,False),'wait')
+        self.assertEqual(before_cast_decision(receipt,False,.1,Pickup('reward','Zebra Fish X1'),True),'wait')
+        self.assertEqual(before_cast_decision(Pickup('empty'),False,.1,receipt,True),'wait')
+        self.assertEqual(before_cast_decision(Pickup('ambiguous'),True,.1,receipt,True),'wait')
+        self.assertEqual(before_cast_decision(Pickup('collect','T Collect'),True,.1,receipt,True),'collect')
 
 
 if __name__=='__main__':unittest.main()

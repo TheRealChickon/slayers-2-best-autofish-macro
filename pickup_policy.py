@@ -103,9 +103,13 @@ def waiting_decision(evidence,stable,elapsed,fresh_round=False,percent=None):
     return 'wait'
 
 
-def before_cast_decision(evidence,stable,elapsed):
+def before_cast_decision(evidence,stable,elapsed,confirmed_reward=None,full_scene=False):
     """Reconcile ground loot before casting; a toast alone is not a new catch."""
     if stable and evidence.kind=='collect':return 'collect'
+    # A receipt already confirmed across frames does not need another generic
+    # dwell and two more OCR passes. Require the exact same receipt in a fresh
+    # full scene so a Collect/other interaction outside the toast crop wins.
+    if full_scene and confirmed_reward is not None and same_reward(evidence,confirmed_reward):return 'clear'
     if stable and evidence.kind in ('empty','reward') and elapsed>=.35:return 'clear'
     if elapsed>7:return 'timeout'
     return 'wait'
