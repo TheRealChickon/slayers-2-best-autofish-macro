@@ -89,6 +89,32 @@ def selected_rod(rod):
     return bool(rod and rod.get('equipped') and rod.get('score',0)>=.88 and rod.get('ring',0)>=.30)
 
 
+def recheck_selected_rod(frame, previous):
+    """Verify fresh icon and ring pixels at a known slot; never reuse a verdict."""
+    if frame.shape[:2]!=(1440,2560) or not selected_rod(previous):return None
+    matches=[]
+    for variant in templates():
+        if not variant['selected'] or variant['name']!=previous['name']:continue
+        icon=variant['icon'];scale=variant['scale'];sy=variant.get('sy',scale)
+        x=round(previous['x']-variant['anchor'][0]*scale)
+        y=round(previous['y']-variant['anchor'][1]*sy)
+        left,right=max(500,x-4),min(2060,x+icon.shape[1]+5)
+        top,bottom=max(1320,y-4),min(1430,y+icon.shape[0]+5)
+        if right-left<icon.shape[1] or bottom-top<icon.shape[0]:continue
+        region=cv2.cvtColor(frame[top:bottom,left:right],cv2.COLOR_BGR2GRAY)
+        _,score,_,point=cv2.minMaxLoc(cv2.matchTemplate(region,icon,cv2.TM_CCOEFF_NORMED))
+        if not np.isfinite(score) or score<.88:continue
+        cx=left+point[0]+variant['anchor'][0]*scale
+        cy=top+point[1]+variant['anchor'][1]*sy
+        if abs(cx-previous['x'])>4 or abs(cy-previous['y'])>4:continue
+        ring,selected=selected_ring(frame,cx,cy,scale,sy)
+        if selected:
+            matches.append({'x':round(cx),'y':round(cy),'score':round(score,3),'ring':round(ring,3),
+                            'equipped':True,'shape_unselected':False,
+                            'name':variant['name'],'priority':variant['priority']})
+    return max(matches,key=lambda rod:rod['score']) if matches else None
+
+
 def unselected_rod(rod):
     """Only a clear icon without the selected ring authorizes a rod click."""
     return bool(rod and not rod.get('equipped') and rod.get('score',0)>=.88
