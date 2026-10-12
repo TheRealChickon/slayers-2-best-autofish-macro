@@ -18,7 +18,8 @@ class PendingPickupTests(unittest.TestCase):
     def drive(self, initial='collect', pause_after_cast=False, pause_in_ocr=False, active_minigame=False, pending_after_cast=False,
               post_reward=None, pause_after_reward=False, menu_after_reward=False, minigame_after_reward=False,
               pause_in_post_reward_ocr=False, auto_rod=False, rod_changed_after_reward=False,
-              tracking_seconds=0, timing=False, disconnect_after_reward=False, minigame_in_recast_ocr=False):
+              tracking_seconds=0, timing=False, disconnect_after_reward=False, minigame_in_recast_ocr=False,
+              reward_after=.8, stationary_prompt=False, duration=None):
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
         root=Path(temporary.name);clock=[100.];mode=[initial];held_at=[None]
         paused_at=[None];cast_released=[False];inputs=[];states=[]
@@ -61,7 +62,7 @@ class PendingPickupTests(unittest.TestCase):
             clock[0]+=(.20 if region[0]==(760,410,1040,580) else .17 if region[0]==(480,150,1630,1110) else .12) if timing else .12
             if pause_in_ocr and paused_at[0] is None:
                 paused_at[0]=clock[0];(root/'F8_PAUSE').write_text('Paused during OCR')
-            if held_at[0] is not None and clock[0]-held_at[0]>.8:mode[0]='reward'
+            if held_at[0] is not None and clock[0]-held_at[0]>reward_after:mode[0]='reward'
             reading=mode[0]
             if accepted_at[0] is not None:
                 self.scene_scans.append((clock[0],region[0]))
@@ -76,6 +77,12 @@ class PendingPickupTests(unittest.TestCase):
                     'ambiguous':[('Collect',160,80),('Purchase',180,85)],'empty':[],
                     'disconnect':[('Disconnected',500,280),('Krathulon',140,60),('X1',220,60)]}[reading]
             if reading=='disconnect' and disconnect_after_reward=='outside':labels[0]=('Disconnected',500,80)
+            if stationary_prompt and reading in ('collect','reward'):
+                labels=([('T',1250,700),('Krathulon',1350,675),('Collect',1350,700)] if reading=='collect'
+                        else [('Krathulon',1400,740),('X1',1490,740)])
+                x0,y0,w,h=region[0]
+                scale=1.5 if region[0]==(1240,670,310,180) else .75 if w>=1000 else 1
+                labels=[(text,(x-x0)*scale,(y-y0)*scale) for text,x,y in labels]
             return ([[[[x-5,y-5],[x+5,y-5],[x+5,y+5],[x-5,y+5]],text,
                        .79 if text=='Disconnected' and disconnect_after_reward=='low' else .99]
                      for text,x,y in labels],None)
@@ -139,7 +146,7 @@ class PendingPickupTests(unittest.TestCase):
                 if hasattr(fishing,'SnapshotWriter'):
                     writer=Mock();writer.__enter__=Mock(return_value=Mock());writer.__exit__=Mock(return_value=False)
                     stack.enter_context(patch.object(fishing,'SnapshotWriter',return_value=writer))
-            stack.enter_context(patch.object(sys,'argv',['fishing_assistant.py','--seconds','24' if auto_rod or tracking_seconds else '9']))
+            stack.enter_context(patch.object(sys,'argv',['fishing_assistant.py','--seconds',str(duration or (24 if auto_rod or tracking_seconds else 9))]))
             stack.enter_context(patch('builtins.print'))
             try:fishing.main()
             except RuntimeError as caught:error=caught
@@ -338,6 +345,29 @@ class PendingPickupTests(unittest.TestCase):
         self.assertFalse(any(kind=='mouse' and flags==2 and at>self.reward_time for kind,flags,at in inputs))
         self.assertTrue(any(event['event'] in ('minigame','tracking_reacquired') for event in events))
         self.assertTrue(any(state['stage']=='tracking' for state in states))
+
+    def test_first_hold_collects_late_reward_without_releasing_and_retrying(self):
+        events,inputs,states,error,inventory=self.drive(reward_after=4.4,stationary_prompt=True)
+        self.assertIsNone(error)
+        t_down=[at for kind,flags,at in inputs if kind=='T' and flags==0]
+        self.assertEqual(len(t_down),1)
+        t_up=next(at for kind,flags,at in inputs if kind=='T' and flags==2)
+        self.assertGreaterEqual(t_up-t_down[0],4.4)
+        self.assertEqual(sum(event['event']=='reward_observed' for event in events),1)
+        self.assertFalse(states[-1]['held_t'])
+
+    def test_first_timeout_gets_extra_grace_but_second_hold_stays_four_seconds(self):
+        events,inputs,states,error,inventory=self.drive(reward_after=100,stationary_prompt=True,duration=16)
+        holds=[];down=None
+        for kind,flags,at in inputs:
+            if kind!='T':continue
+            if flags==0:down=at
+            elif down is not None:holds.append(at-down);down=None
+        self.assertGreaterEqual(len(holds),2)
+        self.assertGreaterEqual(holds[0],4.75)
+        self.assertLess(holds[0],5.15)
+        self.assertGreaterEqual(holds[1],4.0)
+        self.assertLess(holds[1],4.4)
 
 
 if __name__=='__main__':unittest.main()
