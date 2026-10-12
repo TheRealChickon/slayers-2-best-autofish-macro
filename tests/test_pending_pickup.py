@@ -17,11 +17,13 @@ from pickup_policy import Pickup, before_cast_decision
 class PendingPickupTests(unittest.TestCase):
     def drive(self, initial='collect', pause_after_cast=False, pause_in_ocr=False, active_minigame=False, pending_after_cast=False,
               post_reward=None, pause_after_reward=False, menu_after_reward=False, minigame_after_reward=False,
-              pause_in_post_reward_ocr=False, auto_rod=False, rod_changed_after_reward=False):
+              pause_in_post_reward_ocr=False, auto_rod=False, rod_changed_after_reward=False,
+              tracking_seconds=0, timing=False, disconnect_after_reward=False, minigame_in_recast_ocr=False):
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
         root=Path(temporary.name);clock=[100.];mode=[initial];held_at=[None]
         paused_at=[None];cast_released=[False];inputs=[];states=[]
         accepted_at=[None];region=[None];self.scene_scans=[];self.reward_time=None
+        first_cast_at=[None];minigame_after_ocr=[False]
         self.rod_reads=[];self.rod_rechecks=[]
         rod={'name':'rare','x':1586,'y':1385,'equipped':True,'score':.99,'ring':.85}
         def read_rod(unused):
@@ -40,7 +42,9 @@ class PendingPickupTests(unittest.TestCase):
                 if flags==0:held_at[0]=clock[0]
         def mouse(flags,*unused):
             inputs.append(('mouse',flags,clock[0]))
-            if flags==4:cast_released[0]=True
+            if flags==4:
+                cast_released[0]=True
+                if first_cast_at[0] is None:first_cast_at[0]=clock[0]
         user.keybd_event.side_effect=key;user.mouse_event.side_effect=mouse
         def sleep(seconds):
             clock[0]+=seconds
@@ -54,20 +58,26 @@ class PendingPickupTests(unittest.TestCase):
                 mode[0]='reward' if pause_after_reward or pause_in_post_reward_ocr else 'empty' if pause_in_ocr else 'collect'
                 paused_at[0]=-1000;cast_released[0]=False
         def ocr(image,**unused):
-            clock[0]+=.12
+            clock[0]+=(.20 if region[0]==(760,410,1040,580) else .17 if region[0]==(480,150,1630,1110) else .12) if timing else .12
             if pause_in_ocr and paused_at[0] is None:
                 paused_at[0]=clock[0];(root/'F8_PAUSE').write_text('Paused during OCR')
             if held_at[0] is not None and clock[0]-held_at[0]>.8:mode[0]='reward'
             reading=mode[0]
             if accepted_at[0] is not None:
                 self.scene_scans.append((clock[0],region[0]))
+                if disconnect_after_reward and region[0] in ((480,150,1630,1110),(760,410,1040,580)):
+                    reading='disconnect'
+                if minigame_in_recast_ocr and region[0]==(480,150,1630,1110):minigame_after_ocr[0]=True
                 if pause_in_post_reward_ocr and paused_at[0] is None:
                     paused_at[0]=clock[0];(root/'F8_PAUSE').write_text('Paused during recast OCR')
                 if post_reward and region[0]==(480,150,1630,1110):reading=post_reward
             labels={'collect':[('T',120,80),('Krathulon',240,60),('Collect',240,85)],
                     'reward':[('Krathulon',140,60),('X1',220,60)],
-                    'ambiguous':[('Collect',160,80),('Purchase',180,85)],'empty':[]}[reading]
-            return ([[[[x-5,y-5],[x+5,y-5],[x+5,y+5],[x-5,y+5]],text,.99]
+                    'ambiguous':[('Collect',160,80),('Purchase',180,85)],'empty':[],
+                    'disconnect':[('Disconnected',500,280),('Krathulon',140,60),('X1',220,60)]}[reading]
+            if reading=='disconnect' and disconnect_after_reward=='outside':labels[0]=('Disconnected',500,80)
+            return ([[[[x-5,y-5],[x+5,y-5],[x+5,y+5],[x-5,y+5]],text,
+                       .79 if text=='Disconnected' and disconnect_after_reward=='low' else .99]
                      for text,x,y in labels],None)
         def status(name,value):
             if name=='status.json':states.append(dict(value))
@@ -80,6 +90,7 @@ class PendingPickupTests(unittest.TestCase):
         frame=np.zeros((1440,2560,3),np.uint8)
         def capture_frame(unused,box=None):
             region[0]=box
+            if timing:clock[0]+=.01
             return frame
         screen.capture.side_effect=capture_frame
         capture=Mock();capture.__enter__=Mock(return_value=Mock(resets=0));capture.__exit__=Mock(return_value=False)
@@ -91,6 +102,10 @@ class PendingPickupTests(unittest.TestCase):
                 inventory.clock.return_value=1000;inventory.next_check_at=0
         inventory.observe.side_effect=observed
         ledger=Mock();ledger.base={}
+        def tracking_now():
+            return (active_minigame or minigame_after_reward and accepted_at[0] is not None
+                    or minigame_after_ocr[0] or tracking_seconds and first_cast_at[0] is not None
+                    and .3<clock[0]-first_cast_at[0]<tracking_seconds)
         error=None
         with ExitStack() as stack:
             for target,name,value in [
@@ -100,8 +115,8 @@ class PendingPickupTests(unittest.TestCase):
                 (fishing,'ScreenSpace',Mock(return_value=screen)),
                 (fishing,'RapidOCR',Mock(return_value=ocr)),
                 (fishing,'detect',Mock(side_effect=lambda unused:{'ball':100,'target':100,'height':50,'ball_height':10,'inside':True}
-                                     if active_minigame or minigame_after_reward and accepted_at[0] is not None else None)),
-                (fishing,'ui_visible',Mock(side_effect=lambda *unused:active_minigame or minigame_after_reward and accepted_at[0] is not None)),
+                                     if tracking_now() else None)),
+                (fishing,'ui_visible',Mock(side_effect=lambda *unused:tracking_now())),
                 (fishing,'ReelMotion',Mock(return_value=Mock(step=Mock(return_value=False),velocity=0,target_velocity=0))),
                 (fishing,'InventoryWatcher',Mock(return_value=inventory)),
                 (fishing,'Ledger',Mock(return_value=ledger)),(fishing,'read_metrics',read),
@@ -116,10 +131,18 @@ class PendingPickupTests(unittest.TestCase):
             stack.enter_context(patch.object(fishing.time,'sleep',side_effect=sleep))
             stack.enter_context(patch.object(fishing.cv2,'imread',return_value=None))
             stack.enter_context(patch.object(fishing.landmarks,'profile',return_value=None))
-            stack.enter_context(patch.object(sys,'argv',['fishing_assistant.py','--seconds','24' if auto_rod else '9']))
+            if timing:
+                recorder=Mock();recorder.observe.side_effect=lambda *unused:clock.__setitem__(0,clock[0]+.03)
+                recorder.save.return_value={'sequence':1}
+                stack.enter_context(patch.object(fishing,'FaultRecorder',return_value=recorder))
+                stack.enter_context(patch.object(fishing.cv2,'imwrite',side_effect=lambda *unused:clock.__setitem__(0,clock[0]+.04)))
+                if hasattr(fishing,'SnapshotWriter'):
+                    writer=Mock();writer.__enter__=Mock(return_value=Mock());writer.__exit__=Mock(return_value=False)
+                    stack.enter_context(patch.object(fishing,'SnapshotWriter',return_value=writer))
+            stack.enter_context(patch.object(sys,'argv',['fishing_assistant.py','--seconds','24' if auto_rod or tracking_seconds else '9']))
             stack.enter_context(patch('builtins.print'))
             try:fishing.main()
-            except FishingFault as caught:error=caught
+            except RuntimeError as caught:error=caught
         events=[json.loads(line) for line in next(root.glob('events-*.jsonl')).read_text().splitlines()]
         return events,inputs,states,error,inventory
 
@@ -274,6 +297,47 @@ class PendingPickupTests(unittest.TestCase):
         self.assertIsNone(error)
         self.assertGreaterEqual(len(self.rod_reads),2)
         self.assertGreater(self.rod_reads[1],self.reward_time)
+
+    def test_recast_critical_path_stays_under_half_second_with_due_gui_scan(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,tracking_seconds=7,timing=True)
+        self.assertIsNone(error)
+        presses=[at for kind,flags,at in inputs if kind=='mouse' and flags==2 and at>self.reward_time]
+        releases=[at for kind,flags,at in inputs if kind=='mouse' and flags==4 and at>presses[0]]
+        self.assertTrue(releases)
+        self.assertLess(releases[0]-self.reward_time,.5)
+        self.assertGreaterEqual(releases[0]-presses[0],.16)
+        ready=next(event for event in events if event['event']=='recast_ready')
+        self.assertTrue(ready['matching_receipt'])
+        self.assertEqual(self.scene_scans[0][1],(480,150,1630,1110))
+
+    def test_combined_scan_disconnect_wins_over_matching_receipt(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,disconnect_after_reward=True)
+        self.assertIn('Disconnect GUI detected',str(error))
+        self.assertFalse(any(kind=='mouse' and flags==2 and at>self.reward_time for kind,flags,at in inputs))
+        self.assertTrue(any(event['event']=='disconnect_gui' for event in events))
+        self.assertFalse(states[-1]['held_mouse'])
+        self.assertFalse(states[-1]['held_t'])
+
+    def test_due_inventory_menu_checks_disconnect_before_opening(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,tracking_seconds=7,
+                                                      menu_after_reward=True,disconnect_after_reward=True)
+        self.assertIn('Disconnect GUI detected',str(error))
+        inventory.check_pending.assert_not_called()
+
+    def test_combined_disconnect_check_preserves_old_gui_bounds_and_confidence(self):
+        for kind in ('outside','low'):
+            with self.subTest(kind=kind):
+                events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,disconnect_after_reward=kind)
+                self.assertIsNone(error)
+                self.assertTrue(any(kind=='mouse' and flags==2 and at>self.reward_time for kind,flags,at in inputs))
+                self.assertFalse(any(event['event']=='disconnect_gui' for event in events))
+
+    def test_minigame_arriving_during_recast_ocr_owns_input(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,minigame_in_recast_ocr=True)
+        self.assertIsNone(error)
+        self.assertFalse(any(kind=='mouse' and flags==2 and at>self.reward_time for kind,flags,at in inputs))
+        self.assertTrue(any(event['event'] in ('minigame','tracking_reacquired') for event in events))
+        self.assertTrue(any(state['stage']=='tracking' for state in states))
 
 
 if __name__=='__main__':unittest.main()

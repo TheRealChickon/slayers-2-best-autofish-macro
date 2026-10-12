@@ -20,6 +20,7 @@ from faults import FishingFault, FaultRecorder, reason_code
 from full_pause import InputGate, InputPaused, PAUSE_FILE, resumed_stage
 from unattended_focus import TaggedInput
 from capture_session import CaptureSession
+from snapshot_writer import SnapshotWriter
 
 ROOT = Path(__file__).resolve().parent
 USER = TaggedInput(ctypes.windll.user32)
@@ -214,17 +215,25 @@ def main():
         # Count that work in the short dwell, then still read a fresh scene.
         since=(reward_confirmed_at if confirmed_recast is not None
                and seconds==CONFIRMED_REWARD_COOLDOWN_SECONDS else time.monotonic())
-    def screenshot(tag):
+    def screenshot(tag,defer=False):
+        image_writer.wait()
         im=screen.capture(sct)
         diagnostics.observe(im,tag)
-        cv2.imwrite(str(RUN/f'{session}-{cycles%12:03d}-{tag}.jpg'),im,[cv2.IMWRITE_JPEG_QUALITY,88])
-        cv2.imwrite(str(RUN/'latest.jpg'),im,[cv2.IMWRITE_JPEG_QUALITY,80])
+        image_writer.save(im,RUN/f'{session}-{cycles%12:03d}-{tag}.jpg',RUN/'latest.jpg',defer=defer)
         return im
     def read_text(im):
         result,_=ocr(im)
         return ' '.join(r[1] for r in result or [] if r[2]>.8)
+    def check_disconnect(raw):
+        if any(t in raw.lower() for t in ('disconnected','connection lost','connection error','failed to connect','same account launched','error code','reconnect')):
+            inp.release();event('disconnect_gui',text=raw.lower());raise RuntimeError('Disconnect GUI detected; rejoin required')
+    def scan_gui():
+        nonlocal last_gui_scan
+        gui=screen.capture(sct,(760,410,1040,580))
+        raw=read_text(cv2.resize(gui,None,fx=.75,fy=.75))
+        inp.guard_press(True);last_gui_scan=time.monotonic();check_disconnect(raw)
     def pickup_text(full_scene=False):
-        nonlocal last_pickup_evidence,prompt_detected_at
+        nonlocal last_pickup_evidence,prompt_detected_at,last_gui_scan
         # Prompt height changes with the camera. The previous crop missed
         # Collect above y=480, causing blind T holds on otherwise empty rounds.
         scan_started=time.monotonic()
@@ -239,11 +248,18 @@ def main():
         for x,y,w,h in regions:
             im=screen.capture(sct,(x,y,w,h))
             scale=1 if w<1000 else .75
-            results,_=ocr(cv2.resize(im,None,fx=scale,fy=scale),use_cls=False)
+            results,_=ocr(cv2.resize(im,None,fx=scale,fy=scale),use_cls=full_scene)
             inp.guard_press(True)
             rows=[{'text':r[1],'score':float(r[2]),
                    'center':(x+float(np.mean(np.array(r[0])[:,0]))/scale,
                              y+float(np.mean(np.array(r[0])[:,1]))/scale)} for r in results or []]
+            if full_scene:
+                # The full frame contains the old GUI crop at the same scale.
+                # Keep its bounds, orientation and confidence checks so labels
+                # outside that region cannot masquerade as a disconnect.
+                check_disconnect(' '.join(row['text'] for row in rows if row['score']>.8
+                                         and 760<=row['center'][0]<=1800 and 410<=row['center'][1]<=990))
+                last_gui_scan=time.monotonic()
             evidence=classify_pickup(rows)
             if evidence.kind!='empty':break
         finished=time.monotonic()
@@ -285,9 +301,36 @@ def main():
     def ui_active():
         im=screen.capture(sct,(1190,1360,180,70))
         return ui_visible(im,exit_template)
+    def finish_cooldown():
+        nonlocal last_reference_check,reference_matcher,inventory_open,confirmed_recast,last_verified_rod
+        nonlocal cast_needs_settle,pickup_confirmed,last_reward,stage,now,since,cast_press_started
+        nonlocal needs_scene_check,scene_check_started,pickup_gate
+        if now-last_reference_check>180 and landmarks.profile():
+            last_reference_check=now
+            reference_matcher=reference_matcher or landmarks.load_matcher(landmarks.profile())
+            measured=reference_matcher.measure(screen.capture(sct))
+            if measured and measured['rms']>10:
+                second=reference_matcher.measure(screen.capture(sct))
+                if second and second['rms']>10:
+                    screenshot('drift')
+                    raise FishingFault('alignment_drift','Fishing reference drifted; local alignment required',error=round(second['rms'],2))
+        menu_scan_due=bool(inventory.pending and inventory.clock()>=inventory.next_check_at)
+        # A due inventory menu still gets the separate disconnect check before
+        # any menu input. Ordinary recasts use the fresh full-scene OCR below.
+        if menu_scan_due and time.monotonic()-last_gui_scan>8:scan_gui()
+        inventory_open=True
+        recovered=inventory.check_pending();inventory_open=False
+        if menu_scan_due:
+            confirmed_recast=None;last_verified_rod=None
+            inp.cast_target=None;cast_needs_settle=True
+        if recovered:
+            pickup_confirmed+=1;last_reward=f"{recovered['item']} X{recovered['quantity']} (inventory)"
+        inventory.end_round()
+        stage='casting';now=time.monotonic();since=now;cast_press_started=None
+        needs_scene_check=True;scene_check_started=None;pickup_gate=PickupGate()
     event('started',pid=os.getpid(),session=session)
     try:
-        with CaptureSession(event) as sct:
+        with CaptureSession(event) as sct, SnapshotWriter() as image_writer:
             inventory=InventoryWatcher(InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer),event,inventory_progress)
             needs_inventory_start=True;inventory_open=False
             while now-started<limit:
@@ -365,11 +408,13 @@ def main():
                     roi=screen.capture(sct,(1850,400,140,600))
                     d=detect(roi)
                     if d is not None and not ui_active():d=None
-                    if d is None and stage in ('casting','waiting','cooldown') and now-last_gui_scan>8:
-                        gui=screen.capture(sct,(760,410,1040,580))
-                        raw_gui=read_text(cv2.resize(gui,None,fx=.75,fy=.75)).lower();last_gui_scan=time.monotonic()
-                        if any(t in raw_gui for t in ('disconnected','connection lost','connection error','failed to connect','same account launched','error code','reconnect')):
-                            inp.release();event('disconnect_gui',text=raw_gui);raise RuntimeError('Disconnect GUI detected; rejoin required')
+                    if d is None and stage=='cooldown' and now-since>cooldown_delay:
+                        finish_cooldown()
+                        d=detect(screen.capture(sct,(1850,400,140,600)))
+                        if d is not None and not ui_active():d=None
+                    combined_scene=confirmed_recast is not None and (stage=='cooldown' or stage=='casting' and needs_scene_check)
+                    if d is None and stage in ('casting','waiting','cooldown') and now-last_gui_scan>8 and not combined_scene:
+                        scan_gui()
                     if d is None and stage=='waiting' and not needs_scene_check and now-last_wait_pickup_check>.75:
                         # A cast can be ignored while an existing drop owns the
                         # interaction. Do not wait for the bite timeout to find it.
@@ -397,6 +442,10 @@ def main():
                                       scan_seconds=last_pickup_evidence['scan_seconds'])
                             needs_scene_check=False;scene_check_started=None;last_wait_pickup_check=now
                             if needs_inventory_start and stage=='casting':continue
+                            if full_scene:
+                                # A minigame that appeared during OCR owns input.
+                                d=detect(screen.capture(sct,(1850,400,140,600)))
+                                if d is not None and not ui_active():d=None
                         elif decision=='timeout':
                             raise FishingFault('pickup_timeout','Cannot confirm a clear scene before casting; pending loot retained',evidence=last_pickup_evidence)
                         else:
@@ -500,7 +549,7 @@ def main():
                             evidence,stable=pickup_text();now=time.monotonic();last_pickup_scan=now;prompt_seen=evidence.kind=='collect' and stable
                             decision=waiting_decision(evidence,stable,now-since,last_tracking_cast==casts,end_percent)
                             if decision=='reward':
-                                record_reward(evidence.text);screenshot('collected');start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS)
+                                record_reward(evidence.text);screenshot('collected',defer=True);start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS)
                             elif decision=='collect':
                                 last_prompt=evidence.text
                                 inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;last_toast_scan=0
@@ -518,14 +567,14 @@ def main():
                             if first.kind=='reward':
                                 time.sleep(.06);second=pickup_toast()
                                 if same_reward(first,second):
-                                    record_reward(second.text);screenshot('collected');start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS);continue
+                                    record_reward(second.text);screenshot('collected',defer=True);start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS);continue
                             now=time.monotonic()
                         if now-since>.45 and now-last_pickup_scan>.15:
                             evidence,stable=pickup_text();last_pickup_scan=time.monotonic()
                             now=time.monotonic()
                             moved_collect=collect_motion.observe(evidence,stable,now,pickup_tries)
                             if evidence.kind=='reward' and stable:
-                                record_reward(evidence.text);screenshot('collected');start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS);continue
+                                record_reward(evidence.text);screenshot('collected',defer=True);start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS);continue
                             if evidence.kind=='empty' and stable and inp.t and not retain_collect_hold(evidence,now-since):
                                 inp.grab(False);event('pickup_released',cycle=cycles,reason='Prompt disappeared')
                             elif evidence.kind=='collect' and stable and not inp.t:
@@ -558,7 +607,7 @@ def main():
                                 first=pickup_toast();time.sleep(.08);second=pickup_toast()
                                 if same_reward(first,second):
                                     evidence,stable=second,True
-                            screenshot('after-pickup')
+                            screenshot('after-pickup',defer=evidence.kind=='reward' and stable)
                             if evidence.kind=='collect':stage='pickup_retry_wait';since=time.monotonic()
                             else:
                                 if evidence.kind=='reward' and stable:record_reward(evidence.text)
@@ -576,28 +625,7 @@ def main():
                                       scan_seconds=last_pickup_evidence['scan_seconds'])
                             else:stage='pickup_wait';since=time.monotonic()
                     elif stage=='cooldown':
-                        if now-since>cooldown_delay:
-                            if now-last_reference_check>180 and landmarks.profile():
-                                last_reference_check=now
-                                reference_matcher=reference_matcher or landmarks.load_matcher(landmarks.profile())
-                                measured=reference_matcher.measure(screen.capture(sct))
-                                if measured and measured['rms']>10:
-                                    second=reference_matcher.measure(screen.capture(sct))
-                                    if second and second['rms']>10:
-                                        screenshot('drift')
-                                        raise FishingFault('alignment_drift','Fishing reference drifted; local alignment required',error=round(second['rms'],2))
-                            menu_scan_due=bool(inventory.pending and inventory.clock()>=inventory.next_check_at)
-                            inventory_open=True
-                            recovered=inventory.check_pending();inventory_open=False
-                            if menu_scan_due:
-                                confirmed_recast=None
-                                last_verified_rod=None
-                                inp.cast_target=None;cast_needs_settle=True
-                            if recovered:
-                                pickup_confirmed+=1;last_reward=f"{recovered['item']} X{recovered['quantity']} (inventory)"
-                            inventory.end_round()
-                            stage='casting';now=time.monotonic();since=now;cast_press_started=None
-                            needs_scene_check=True;scene_check_started=None;pickup_gate=PickupGate()
+                        pass  # The guarded transition above runs before the fresh scene read.
                     if now-laststate>1:
                         status={'running':True,'pid':os.getpid(),'session':session,'updated':time.time(),'elapsed':round(now-started,1),'stage':stage,'cycles':hooked_cycles,'recovered_pickups':cycles-hooked_cycles,'casts':casts,'completed_100_percent':completed,'failed_rounds':failed,'unknown_rounds':unknown,'reward_banners_observed':pickup_confirmed,'last_reward':last_reward,'track_frames':track_frames,'inside_fraction':round(inside_frames/max(1,track_frames),3),'last_detection':d,'held_mouse':inp.mouse,'held_t':inp.t}
                         status['last_game_activity']=last_game_activity
