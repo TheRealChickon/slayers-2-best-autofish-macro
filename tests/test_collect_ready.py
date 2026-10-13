@@ -14,8 +14,19 @@ class CollectReadyTests(unittest.TestCase):
         gate=CollectReadyGate()
         self.assertFalse(gate.observe(self.prompt(1500,300),True,1))
         self.assertFalse(gate.observe(self.prompt(1340,550),True,1.15))
-        self.assertFalse(gate.observe(self.prompt(1280,650),True,1.3))
-        self.assertTrue(gate.observe(self.prompt(1282,651),True,1.45))
+        self.assertFalse(gate.observe(self.prompt(1280,650),True,1.25))
+        self.assertTrue(gate.observe(self.prompt(1282,651),True,1.4))
+
+    def test_animated_prompt_cannot_delay_the_first_hold_for_seconds(self):
+        gate=CollectReadyGate();gate.observe(self.prompt(1550,300),True,1)
+        self.assertFalse(gate.observe(self.prompt(1490,430),True,1.15))
+        self.assertTrue(gate.observe(self.prompt(1420,560),True,1.31))
+
+    def test_newly_visible_t_rebinds_the_occluded_first_hold_promptly(self):
+        motion=CollectHoldMotion();motion.start(Pickup('collect','Fish Collect',(1380,650)),1)
+        self.assertFalse(motion.observe(self.prompt(),True,1.8,1))
+        self.assertFalse(motion.observe(self.prompt(),True,2,1))
+        self.assertTrue(motion.observe(self.prompt(),True,2.13,1))
 
     def test_missing_or_stale_or_ambiguous_prompt_cannot_press(self):
         for evidence,stable,at in ((Pickup('empty'),True,1.2),

@@ -147,18 +147,21 @@ class CollectHoldMotion:
         keyed=self.key_origin is not None and evidence.key_center is not None and previous is not None and previous.key_center is not None
         position=evidence.key_center if keyed else evidence.center
         prior_position=previous.key_center if keyed else previous.center if previous is not None else None
+        new_key=(self.key_origin is None and evidence.key_center is not None
+                 and previous is not None and previous.key_center is not None
+                 and math.dist(evidence.key_center,previous.key_center)<=25)
         ready=(self.origin is not None and (self.key_origin is None or keyed) and attempt==1 and stable
                 and evidence.kind=='collect' and previous is not None and previous.kind=='collect'
                 and now-self.started>=.65 and age<=1.5
-                and math.dist(self.origin,position)>(65 if keyed else 180)
-                and math.dist(prior_position,position)<=25)
+                and (new_key or math.dist(self.origin,position)>(65 if keyed else 180)
+                     and math.dist(prior_position,position)<=25))
         if not ready:
             self.retry_ready_at=None;return False
         # A moving/changing Collect prompt often settles before its original
         # hold completes. Give that first hold another .75s while fresh settled
         # evidence continues; a reward can still finish it immediately.
         if self.retry_ready_at is None:self.retry_ready_at=now
-        return now>=self.retry_ready_at+(.12 if keyed else FIRST_COLLECT_HOLD_GRACE_SECONDS)
+        return now>=self.retry_ready_at+(.12 if keyed or new_key else FIRST_COLLECT_HOLD_GRACE_SECONDS)
 
 
 class CollectReadyGate:
@@ -172,7 +175,8 @@ class CollectReadyGate:
         if self.first_seen is None:self.first_seen=now
         if not stable or previous is None or previous.kind!='collect' or age>1.5:return False
         if evidence.key_center is not None and previous.key_center is not None:
-            return .08<=age and math.dist(evidence.key_center,previous.key_center)<=18
+            return .08<=age and (math.dist(evidence.key_center,previous.key_center)<=18
+                                or now-self.first_seen>=.3)
         # Some prompt text occludes T. Retain a bounded, repeated-label fallback.
         return now-self.first_seen>=.6 and math.dist(evidence.center,previous.center)<=25
 
