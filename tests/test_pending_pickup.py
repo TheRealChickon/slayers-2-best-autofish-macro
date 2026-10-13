@@ -19,7 +19,7 @@ class PendingPickupTests(unittest.TestCase):
               post_reward=None, pause_after_reward=False, menu_after_reward=False, minigame_after_reward=False,
               pause_in_post_reward_ocr=False, auto_rod=False, rod_changed_after_reward=False,
               tracking_seconds=0, timing=False, disconnect_after_reward=False, minigame_in_recast_ocr=False,
-              reward_after=.8, stationary_prompt=False, duration=None):
+              reward_after=.8, stationary_prompt=True, duration=None):
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
         root=Path(temporary.name);clock=[100.];mode=[initial];held_at=[None]
         paused_at=[None];cast_released=[False];inputs=[];states=[]
@@ -77,7 +77,7 @@ class PendingPickupTests(unittest.TestCase):
                     'ambiguous':[('Collect',160,80),('Purchase',180,85)],'empty':[],
                     'disconnect':[('Disconnected',500,280),('Krathulon',140,60),('X1',220,60)]}[reading]
             if reading=='disconnect' and disconnect_after_reward=='outside':labels[0]=('Disconnected',500,80)
-            if stationary_prompt and reading in ('collect','reward'):
+            if stationary_prompt and region[0] is not None and reading in ('collect','reward'):
                 labels=([('T',1250,700),('Krathulon',1350,675),('Collect',1350,700)] if reading=='collect'
                         else [('Krathulon',1400,740),('X1',1490,740)])
                 x0,y0,w,h=region[0]
