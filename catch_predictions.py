@@ -5,9 +5,16 @@ import re
 import time
 from reward_evidence import reward_quantity
 
-# User-provided prices. Historical Crustadon/Krathulon 110 is intentionally absent.
-PRICES={'ouwfish':33,'ouwfwesh':33,'coral':33,'clownfish':66,'goldenfish':66}
-NAMES={'ouwfish':'OuwFish','ouwfwesh':'OuwFwesh','coral':'Coral','clownfish':'Clown Fish','goldenfish':'Golden Fish'}
+# NPC (Ginzo) sell prices in gold (Wen), fish only. Researched 2026-10-13:
+# slayers2guide.wiki/fish lists Common 33 and Rare 66 on the current build
+# (OuwFish, OuwFwesh, Coral 33; Clown Fish, Golden Fish 66), matching the
+# user-provided values. Sea Horse (Common) and Zebra Fish (Rare) have no read
+# price there and are priced by tier. Crustadon/Krathulon 110 is from an
+# earlier build only, so it stays unknown. Materials and ores are not fish.
+PRICES={'ouwfish':33,'ouwfwesh':33,'coral':33,'seahorse':33,'clownfish':66,'goldenfish':66,'zebrafish':66}
+TIER_INFERRED={'seahorse','zebrafish'}
+NAMES={'ouwfish':'OuwFish','ouwfwesh':'OuwFwesh','coral':'Coral','seahorse':'Sea Horse','clownfish':'Clown Fish',
+       'goldenfish':'Golden Fish','zebrafish':'Zebra Fish'}
 MIN_CATCHES=20
 MIN_ACTIVE_SECONDS=600
 
@@ -87,7 +94,7 @@ def calculate(rows,run,hours=8,now=None,live_source=None):
     items={}
     for catch in catches.values():
         name=catch['name'];key=normalize(name)
-        item=items.setdefault(key,{'name':NAMES.get(key,name),'catches':0,'quantity':0,'unit_price_wen':PRICES.get(key)})
+        item=items.setdefault(key,{'name':NAMES.get(key,name),'catches':0,'quantity':0,'unit_price_wen':PRICES.get(key),'price_inferred':key in TIER_INFERRED})
         item['catches']+=1;item['quantity']+=catch['quantity']
     active,uncertain=activity_seconds(rows,start,end,live_source)
     enough=len(catches)>=MIN_CATCHES and active>=MIN_ACTIVE_SECONDS and not uncertain
@@ -112,7 +119,7 @@ def calculate(rows,run,hours=8,now=None,live_source=None):
             'projection_available':enough,'items':sorted(items.values(),key=lambda item:(-item['quantity'],item['name'])),
             'known_price_subtotal_wen':known if any(i['unit_price_wen'] is not None for i in items.values()) else None,
             'projected_known_price_subtotal_wen':projected_known if enough and any(i['unit_price_wen'] is not None for i in items.values()) else None,
-            'unknown_price_quantity':unknown,'actual_sold_proceeds_wen':sum(sold.values()) if sold else None,'warnings':warnings}
+            'unknown_price_quantity':unknown,'known_price_per_hour_wen':known*3600/active if active>=120 and any(i['unit_price_wen'] is not None for i in items.values()) else None,'actual_sold_proceeds_wen':sum(sold.values()) if sold else None,'warnings':warnings}
 
 
 def load(root,run,hours=8,now=None):

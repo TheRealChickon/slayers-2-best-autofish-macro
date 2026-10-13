@@ -394,21 +394,24 @@ class Terminal:
               f"Worker-active {duration(p['active_seconds'])}   ·   Elapsed {duration(p['elapsed_seconds'])}",
               f"{p['unique_catches']} unique catches / {p['quantity']} units   ·   Observed {rate}"]
         rows.extend(tint(w,'gold') for w in p['warnings'])
-        rows+=['',tint('ITEM                     CATCHES / UNITS    /HOUR    PROJECTED    WEN/EACH','dim')]
+        value='Unknown' if p['known_price_subtotal_wen'] is None else f"{p['known_price_subtotal_wen']:,} gold"
+        hourly=p.get('known_price_per_hour_wen')
+        projected_value='Unavailable' if p['projected_known_price_subtotal_wen'] is None else f"~{p['projected_known_price_subtotal_wen']:,.0f} gold"
+        rows+=['',tint('GOLD','dim')+'  '+tint(value,'gold')+tint('   PER HOUR','dim')+'  '+tint('—' if hourly is None else f'~{hourly:,.0f}','gold')
+               +tint(f"   IN {p['hours']:g}H",'dim')+'  '+tint(projected_value,'gold')]
+        rows+=['',tint('FISH                     CATCHES / UNITS    /HOUR    PROJECTED   GOLD/EACH     GOLD','dim')]
         for item in p['items']:
             rate='—' if item['items_per_hour'] is None else f"{item['items_per_hour']:.1f}"
             projected='insufficient' if item['projected_quantity'] is None else f"~{item['projected_quantity']:.1f}"
-            price='Unknown' if item['unit_price_wen'] is None else str(item['unit_price_wen'])
-            rows.append(f"{item['name'][:24]:<24} {item['catches']:>6} / {item['quantity']:<5} {rate:>8} {projected:>12} {price:>11}")
-        value='Unknown' if p['known_price_subtotal_wen'] is None else f"{p['known_price_subtotal_wen']:,} Wen"
-        projected_value='Unavailable' if p['projected_known_price_subtotal_wen'] is None else f"~{p['projected_known_price_subtotal_wen']:,.0f} Wen"
-        sold='No confirmed sales logged' if p['actual_sold_proceeds_wen'] is None else f"{p['actual_sold_proceeds_wen']:,} Wen"
-        rows+=['',f"Estimated NPC value: known-price subtotal {value}",
-               f"Projected known-price subtotal for {p['hours']:g}h: {projected_value}",
-               f"Unpriced units: {p['unknown_price_quantity']}  ·  Actual sold proceeds: {sold}",
-               tint('Worker-active time includes casting, pickup and inventory work.','dim'),
-               tint('Projections assume the observed pace continues. Prices are user-provided.','dim'),
-               tint('Crustadon/Krathulon 110 Wen is historical only; current price unknown.','dim')]
+            price='—' if item['unit_price_wen'] is None else str(item['unit_price_wen'])+('*' if item.get('price_inferred') else '')
+            earned='—' if item['estimated_npc_value_wen'] is None else f"{item['estimated_npc_value_wen']:,}"
+            rows.append(tint(f"{item['name'][:24]:<24} {item['catches']:>6} / {item['quantity']:<5} {rate:>8} {projected:>12} {price:>11} {earned:>8}",
+                             'text' if item['unit_price_wen'] is not None else 'dim'))
+        sold='No confirmed sales logged' if p['actual_sold_proceeds_wen'] is None else f"{p['actual_sold_proceeds_wen']:,} gold"
+        rows+=['',f"Unpriced units (materials, ores, legendaries): {p['unknown_price_quantity']}  ·  Actual sold proceeds: {sold}",
+               tint('Gold = Ginzo NPC sell price × units; fish only. * price inferred from rarity tier.','dim'),
+               tint('Crustadon/Krathulon 110 gold is from an earlier build; current price unknown.','dim'),
+               tint('Projections assume the observed worker-active pace continues.','dim')]
         return rows
 
     def body(self, available):
