@@ -296,13 +296,13 @@ class Recovery:
         finally:self.inp.hold(False)
         self.event('private_join_released',seconds=round(time.monotonic()-started,2),reason=reason)
         return True
-    def recover(self,force_menu=False,equip_rod=True,allow_rejoin=True):
+    def recover(self,force_menu=False,equip_rod=True,allow_rejoin=True,prefer_current=False):
         self.inp.release();self.event('recovery_started',force_menu=force_menu)
         try:self.select()
         except RuntimeError as error:
             if getattr(error,'code',reason_code(str(error))) not in ('client_lost','disconnect'):raise
             self.launch()
-        deadline=time.monotonic()+180;pacer=MenuPacer();join_attempts=0;last_class=''
+        deadline=time.monotonic()+180;pacer=MenuPacer();join_attempts=0;last_class='';joined_world=False
         while time.monotonic()<deadline:
             self.guard();self.progress(detail=last_class or 'inspecting');im=self.capture()
             rows=self.text(im);text=' '.join(r['text'].lower() for r in rows)
@@ -313,12 +313,12 @@ class Recovery:
             cancel=[r for r in rows if r['text'].strip().lower()=='cancel']
             if any(term in text for term in ('banned','captcha','security challenge','verify you are human')):
                 raise FishingFault('user_required','Roblox requires user action; automatic recovery suspended')
-            if isinstance(im,np.ndarray) and getattr(self,'exit_template',None) is not None and ui_visible(im[1360:1430,1190:1370],self.exit_template):
-                kind='minigame';target=(1280,1395)
-            elif any(term in text for term in ['disconnected','connection lost','connection error','failed to connect','same account launched','error code:']):
+            if any(term in text for term in ['disconnected','connection lost','connection error','failed to connect','same account launched','error code:']):
                 kind='disconnect'
                 reconnect=[r for r in rows if re.fullmatch(r'(reconnect|rejoin|retry)',r['text'].strip(),re.I)]
                 target=reconnect[0]['center'] if len(reconnect)==1 else None
+            elif isinstance(im,np.ndarray) and getattr(self,'exit_template',None) is not None and ui_visible(im[1360:1430,1190:1370],self.exit_template):
+                kind='minigame';target=(1280,1395)
             elif skip:kind='skip_loading';target=skip[0]['center']
             elif 'purchase' in text and len(cancel)==1:kind='vendor_dialog';target=cancel[0]['center']
             elif confirm_target is not None or 'go back to the main menu' in text:
@@ -339,8 +339,14 @@ class Recovery:
                 kind='world'
             else:kind='loading'
             self.last_screen_kind=kind
+            if kind in ('disconnect','main_menu','world_selection','private_join'):
+                # Once a real join is needed, prepare the loaded world normally.
+                prefer_current=False;joined_world=True
             pacer.observe(kind,target,now)
             if kind!=last_class:self.event('screen',kind=kind);last_class=kind
+            if kind=='minigame' and prefer_current:
+                self.restarts=0;self.event('startup_current_minigame')
+                return 'current_minigame'
             if kind=='disconnect' and pacer.ready(kind,now):
                 allow_rejoin=True  # Positive visible evidence, including Farm here.
                 self.capture(kind);self.event('disconnect_observed',text=text[:600])
@@ -352,13 +358,17 @@ class Recovery:
                 # End an interrupted/stalled minigame locally; changing server
                 # is unnecessary. Every click still uses the normal input gate.
                 self.click(*target);self.event('local_minigame_cancelled');pacer.acted(kind,time.monotonic(),3)
-            elif kind in ('game_menu','confirm_menu') and not allow_rejoin:
+            elif kind in ('game_menu','confirm_menu') and (not allow_rejoin or prefer_current):
                 if pacer.ready(kind,now):
                     self.key('M');self.event('local_menu_closed');pacer.acted(kind,time.monotonic(),2)
             elif kind in ('main_menu','world_selection','private_join') and not allow_rejoin:
                 raise FishingFault('user_required','Farm here needs an existing game world; startup does not join a server')
             elif kind=='world':
-                if force_menu:
+                if prefer_current:
+                    if pacer.ready('world_ready',now,stable_seconds=3):
+                        self.restarts=0;self.event('startup_current_world')
+                        return 'current_world'
+                elif force_menu:
                     if pacer.ready('open_menu',now):
                         self.capture('before-menu');self.key('M');pacer.acted('open_menu',time.monotonic(),2);self.event('open_menu')
                 elif pacer.ready('world_ready',now,stable_seconds=3):
@@ -367,7 +377,7 @@ class Recovery:
                         self.equip_rod();self.capture('equipped');self.event('equipped_rod')
                     else:
                         self.capture('world-ready');self.event('world_ready')
-                    self.restarts=0;return
+                    self.restarts=0;return 'joined_world' if joined_world else None
             elif kind=='private_join' and pacer.ready(kind,now):
                 if target is None:
                     self.event('private_join_retry',reason='Waiting for an unambiguous private Join button')
@@ -384,10 +394,34 @@ class Recovery:
                     'confirm_menu':('confirm_menu',4),'game_menu':('back_to_main_menu',1),
                     'world_selection':('select_ouwland',1),'main_menu':('play',1)}[kind]
                 self.event(action);pacer.acted(kind,time.monotonic(),delay)
-                if kind=='vendor_dialog':force_menu=True
+                if kind=='vendor_dialog':force_menu=not prefer_current
                 elif kind in ('confirm_menu','main_menu'):force_menu=False
             self.sleep(.25)
         self.capture('timeout');raise RecoveryError('Rejoin did not reach the game within three minutes')
+
+def prepare_worker(driver,force,allow_rejoin,prefer_current,current_position,here,titles_checked):
+    """Adopt a live position without menu, camera or saved-reference work."""
+    result=driver.recover(force_menu=force,allow_rejoin=allow_rejoin,prefer_current=prefer_current)
+    if result in ('current_minigame','current_world'):current_position=True
+    elif result=='joined_world':current_position=False
+    if not here and not current_position:
+        target_heading=load_config()['camera_heading']
+        if target_heading is not None and landmarks.profile() is None:
+            landmarks.restore_heading(driver,target_heading)
+            actual_heading=landmarks.heading(driver,driver.capture())
+            difference=(actual_heading-target_heading+180)%360-180 if actual_heading is not None else 360
+            if abs(difference)>8:
+                raise FishingFault('alignment','Saved fishing heading could not be restored',
+                    target=target_heading,actual=actual_heading)
+            driver.event('saved_heading_ready',heading=round(actual_heading,1))
+        landmarks.align(driver)
+    if load_config()['auto_fishing_titles'] and not titles_checked and not current_position:
+        try:TitleManager(driver).run()
+        except ValueError as title_error:
+            driver.event('fishing_titles_unreadable',reason=str(title_error))
+        titles_checked=True
+    return current_position,titles_checked
+
 
 def main():
     import argparse
@@ -488,6 +522,7 @@ def main():
             driver.launch()
         if a.restart:driver.launch(restart=True)
         force=startup_rejoin('here' if a.here else 'full',a.rejoin)
+        prefer_current=True;current_position=False
         while time.monotonic()<deadline:
             while driver.inp.gate.reason() or not driver.inp.gate.acknowledge():
                 driver.check_stop();driver.inp.release();status(driver.inp.gate.reason() or 'paused_focus');time.sleep(.1)
@@ -495,25 +530,12 @@ def main():
             if time.monotonic()>=deadline:break
             status('recovering')
             try:
-                driver.recover(force_menu=force,allow_rejoin=not a.here or here_disconnect)
+                current_position,titles_checked=prepare_worker(driver,force,not a.here or here_disconnect,
+                    prefer_current,current_position,a.here,titles_checked)
+                prefer_current=False
                 here_disconnect=False
-                target_heading=None if a.here else load_config()['camera_heading']
-                if target_heading is not None and landmarks.profile() is None:
-                    landmarks.restore_heading(driver,target_heading)
-                    actual_heading=landmarks.heading(driver,driver.capture())
-                    difference=(actual_heading-target_heading+180)%360-180 if actual_heading is not None else 360
-                    if abs(difference)>8:
-                        raise FishingFault('alignment','Saved fishing heading could not be restored',
-                            target=target_heading,actual=actual_heading)
-                    driver.event('saved_heading_ready',heading=round(actual_heading,1))
-                if not a.here:landmarks.align(driver)
                 display_repair.progress()
                 rod_policy.progress()
-                if load_config()['auto_fishing_titles'] and not titles_checked:
-                    try:TitleManager(driver).run()
-                    except ValueError as title_error:
-                        driver.event('fishing_titles_unreadable',reason=str(title_error))
-                    titles_checked=True
             except InputPaused as paused:
                 driver.inp.release();driver.event('recovery_input_paused',reason=str(paused),gate=driver.inp.gate.reason())
                 if (str(paused)=='paused_focus' and driver.inp.gate.reason() is None
@@ -590,7 +612,9 @@ def main():
             if time.monotonic()>=deadline:break
             remaining=max(1,int(deadline-time.monotonic())) if a.seconds>0 else 0;status('fishing');worker_started=time.time()
             with open(RUN/'worker-stdout.log','a') as stdout,open(RUN/'worker-stderr.log','a') as stderr:
-                child=subprocess.Popen([sys.executable,str(ROOT/'fishing_assistant.py'),'--seconds',str(remaining)],stdout=stdout,stderr=stderr)
+                command=[sys.executable,str(ROOT/'fishing_assistant.py'),'--seconds',str(remaining)]
+                if current_position:command.append('--current-position')
+                child=subprocess.Popen(command,stdout=stdout,stderr=stderr)
             while child.poll() is None:
                 driver.check_stop()
                 worker=read_metrics('status.json')

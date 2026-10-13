@@ -16,6 +16,8 @@ autofish start
 
 Choose the game, then **Minigame only**, **Fish here**, or **Full farmer**, with arrows and Enter. The dashboard opens after starting. Only Project Slayers 2 / Ouwland is supported currently; future supported games can appear in the same picker.
 
+Full farmer first checks the current world instead of forcing a startup rejoin. A visible fishing minigame goes straight to the worker without cancelling it; a stable loaded world starts fishing from the current position. A failed first catch continues from there. Saved heading, landmark alignment and title menus are skipped for that adopted position. Disconnects, menu-based joins and repeated inability to start fishing retain normal recovery; an actual rejoin restores the saved setup. Stop, F8, focus, capture and window guards still apply.
+
 The CLI opens with a full-terminal rod cast over water and reels the float back across the scene when you press **Q**. **Setup → Motion → Reduced** skips both animations.
 Ore pickups have their own short mineral-glint animation in the dashboard; it does not interrupt fishing or alter the item log.
 
@@ -57,7 +59,7 @@ the inventory dialog places those buttons higher on screen.
 | Operating system | Windows x64; not macOS, Linux, mobile, or Roblox console |
 | Game | This game's Ouwland fishing minigame; not arbitrary Roblox games |
 | Display | Automatic scaling for a 16:9 Roblox client area, with normal game UI scale. 1920 × 1080 and 2560 × 1440 tested live; see resolution notes below |
-| Position | Full farmer uses a saved spawn; Fish here stays wherever you put it. No travel across the map |
+| Position | Full farmer starts at the current position and uses the saved spawn when recovery requires a rejoin; Fish here stays wherever you put it. No travel across the map |
 | Focus | Roblox must stay visible and foreground; switching apps pauses input |
 
 Setup has been tested from a clean source checkout on Windows with Python 3.12. Portability removes hardcoded account and computer paths; it does not remove the screen-layout and in-game setup requirements.
@@ -90,7 +92,7 @@ The account is configurable. Each account must own a fishing rod, have it in a v
 - An unreadable rod keeps the supervisor alive with released input and a visible retry countdown. Full farmer tries two local repairs, then rejoins the saved spawn, at most once per ten minutes while this fault persists. Farm here keeps checking locally and only reconnects after positive disconnect evidence. Manual Stop, Pause, F8 and focus guards still apply.
 - In CLI **Setup → Cast point**, enter an X, Y target in the 2560 × 1440 reference view for Full farmer. The default is `1650, 800`. **Capture pointer** gives you four seconds to place the mouse over the Roblox game world, then saves its position without clicking or changing focus. This target scales with the Roblox window. Fish here continues to use the pointer position you choose in-game; Minigame only never casts.
 - **Camera** in Setup can keep your current zoom (default) or zoom into first person automatically when Full farmer starts. First person may slowly pitch toward a nearby railing; a missed cast then triggers a rejoin to restore the view. Keep the third-person view for a spot where first person does not consistently reach water. **Heading** is an optional compass direction for a saved spawn, restored after a rejoin when no fishing reference is saved. Set it while facing a working cast. A saved fishing reference takes precedence over the heading.
-- **Fishing titles** defaults to keeping your loadout. **Auto best** checks the visible Fishing titles once when Full farmer starts, reads completed requirements, and equips the three strongest known fishing titles. It leaves an unreadable or unfamiliar loadout alone. This game's observed order is Legendary Fisherman, Salvager, Leviathan Hunter, Deep Water Angler, then Angler; luck takes priority for rare drops. It does not scan titles every round.
+- **Fishing titles** defaults to keeping your loadout. **Auto best** checks the visible Fishing titles once during normal world preparation after a needed join, reads completed requirements, and equips the three strongest known fishing titles. Adopting the current fishing position skips that menu work. It leaves an unreadable or unfamiliar loadout alone. This game's observed order is Legendary Fisherman, Salvager, Leviathan Hunter, Deep Water Angler, then Angler; luck takes priority for rare drops. It does not scan titles every round.
 - Bait is optional. Equip it in-game if desired. Full farmer reads the equipped bait once at startup and estimates how many hooks remain. The CLI warns on a nighttime start when the observed stock is under about 30 minutes at the recent pace. Fishing continues after bait runs out. There is no purchasing automation.
 
 ## Resolution notes

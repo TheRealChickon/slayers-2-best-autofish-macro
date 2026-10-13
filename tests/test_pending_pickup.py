@@ -19,7 +19,8 @@ class PendingPickupTests(unittest.TestCase):
               post_reward=None, pause_after_reward=False, menu_after_reward=False, minigame_after_reward=False,
               pause_in_post_reward_ocr=False, auto_rod=False, rod_changed_after_reward=False,
               tracking_seconds=0, timing=False, disconnect_after_reward=False, minigame_in_recast_ocr=False,
-              reward_after=.8, stationary_prompt=True, duration=None):
+              reward_after=.8, stationary_prompt=True, duration=None,
+              startup_tracking_seconds=0,percent_result=None,current_position=False,missing_startup_markers=False):
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
         root=Path(temporary.name);clock=[100.];mode=[initial];held_at=[None]
         paused_at=[None];cast_released=[False];inputs=[];states=[]
@@ -111,6 +112,7 @@ class PendingPickupTests(unittest.TestCase):
         ledger=Mock();ledger.base={}
         def tracking_now():
             return (active_minigame or minigame_after_reward and accepted_at[0] is not None
+                    or startup_tracking_seconds and clock[0]-100<startup_tracking_seconds
                     or minigame_after_ocr[0] or tracking_seconds and first_cast_at[0] is not None
                     and .3<clock[0]-first_cast_at[0]<tracking_seconds)
         error=None
@@ -122,7 +124,7 @@ class PendingPickupTests(unittest.TestCase):
                 (fishing,'ScreenSpace',Mock(return_value=screen)),
                 (fishing,'RapidOCR',Mock(return_value=ocr)),
                 (fishing,'detect',Mock(side_effect=lambda unused:{'ball':100,'target':100,'height':50,'ball_height':10,'inside':True}
-                                     if tracking_now() else None)),
+                                     if tracking_now() and not (missing_startup_markers and clock[0]-100<.6) else None)),
                 (fishing,'ui_visible',Mock(side_effect=lambda *unused:tracking_now())),
                 (fishing,'ReelMotion',Mock(return_value=Mock(step=Mock(return_value=False),velocity=0,target_velocity=0))),
                 (fishing,'InventoryWatcher',Mock(return_value=inventory)),
@@ -137,7 +139,11 @@ class PendingPickupTests(unittest.TestCase):
             stack.enter_context(patch.object(fishing.time,'monotonic',side_effect=lambda:clock[0]))
             stack.enter_context(patch.object(fishing.time,'sleep',side_effect=sleep))
             stack.enter_context(patch.object(fishing.cv2,'imread',return_value=None))
-            stack.enter_context(patch.object(fishing.landmarks,'profile',return_value=None))
+            stack.enter_context(patch.object(fishing.landmarks,'profile',return_value={'saved':True} if current_position else None))
+            if current_position:
+                stack.enter_context(patch.object(fishing.landmarks,'load_matcher',side_effect=AssertionError('Adopted position used saved reference')))
+            if percent_result is not None:
+                stack.enter_context(patch('minigame_result.read_percent',return_value=(percent_result,[])))
             if timing:
                 recorder=Mock();recorder.observe.side_effect=lambda *unused:clock.__setitem__(0,clock[0]+.03)
                 recorder.save.return_value={'sequence':1}
@@ -146,7 +152,9 @@ class PendingPickupTests(unittest.TestCase):
                 if hasattr(fishing,'SnapshotWriter'):
                     writer=Mock();writer.__enter__=Mock(return_value=Mock());writer.__exit__=Mock(return_value=False)
                     stack.enter_context(patch.object(fishing,'SnapshotWriter',return_value=writer))
-            stack.enter_context(patch.object(sys,'argv',['fishing_assistant.py','--seconds',str(duration or (24 if auto_rod or tracking_seconds else 9))]))
+            arguments=['fishing_assistant.py','--seconds',str(duration or (24 if auto_rod or tracking_seconds else 9))]
+            if current_position:arguments.append('--current-position')
+            stack.enter_context(patch.object(sys,'argv',arguments))
             stack.enter_context(patch('builtins.print'))
             try:fishing.main()
             except RuntimeError as caught:error=caught
@@ -391,6 +399,26 @@ class PendingPickupTests(unittest.TestCase):
         self.assertLess(holds[0],4.15)
         self.assertGreaterEqual(holds[1],3.5)
         self.assertLess(holds[1],3.9)
+
+    def test_adopted_minigame_waits_for_markers_without_casting_over_visible_ui(self):
+        events,inputs,states,error,inventory=self.drive('empty',active_minigame=True,current_position=True,
+                                                      missing_startup_markers=True,duration=2)
+        self.assertIsNone(error)
+        names=[event['event'] for event in events]
+        self.assertLess(names.index('startup_minigame_wait'),names.index('minigame'))
+        self.assertFalse(any(kind=='mouse' and flags==2 or kind=='T' and flags==0 for kind,flags,at in inputs))
+        self.assertEqual(states[-1]['cycles'],1)
+
+    def test_failed_first_adopted_minigame_still_recasts_from_current_position(self):
+        events,inputs,states,error,inventory=self.drive('empty',startup_tracking_seconds=.8,percent_result=50,
+                                                      current_position=True,duration=9)
+        self.assertIsNone(error)
+        names=[event['event'] for event in events]
+        self.assertLess(names.index('minigame'),names.index('cast'))
+        self.assertEqual(next(event['percent'] for event in events if event['event']=='minigame_ended'),50)
+        self.assertEqual(states[-1]['failed_rounds'],1)
+        self.assertGreater(states[-1]['casts'],0)
+        self.assertFalse(any(event['event'] in ('saved_heading_ready','disconnect_gui','no_minigame') for event in events))
 
 
 if __name__=='__main__':unittest.main()
