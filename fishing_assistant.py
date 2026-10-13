@@ -31,7 +31,7 @@ USER.SetProcessDPIAware()
 BITE_WAIT_TIMEOUT_SECONDS = 10
 MISSED_CASTS_BEFORE_REJOIN = 3
 CONFIRMED_REWARD_COOLDOWN_SECONDS = .04
-CAST_PRESS_SECONDS = .08
+CAST_PRESS_SECONDS = .16
 
 def move_pointer(x,y):
     # Both monitors are valid; coordinates are absolute virtual-desktop pixels.
