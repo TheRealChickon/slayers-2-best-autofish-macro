@@ -318,6 +318,17 @@ class PendingPickupTests(unittest.TestCase):
         self.assertTrue(ready['matching_receipt'])
         self.assertEqual(self.scene_scans[0][1],(480,150,1630,1110))
 
+    def test_confirmed_item_has_no_dwell_and_image_encoding_does_not_delay_recast(self):
+        events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,tracking_seconds=7,timing=True)
+        self.assertIsNone(error)
+        presses=[at for kind,flags,at in inputs if kind=='mouse' and flags==2 and at>self.reward_time]
+        release=next(at for kind,flags,at in inputs if kind=='mouse' and flags==4 and at>presses[0])
+        self.assertLess(presses[0]-self.reward_time,.23)
+        self.assertLess(release-self.reward_time,.4)
+        self.assertEqual(fishing.CONFIRMED_REWARD_COOLDOWN_SECONDS,0)
+        self.assertEqual(sum(event['event']=='recast_pressed' for event in events),1)
+        self.assertFalse(states[-1]['held_t'])
+
     def test_combined_scan_disconnect_wins_over_matching_receipt(self):
         events,inputs,states,error,inventory=self.drive('empty',pending_after_cast=True,disconnect_after_reward=True)
         self.assertIn('Disconnect GUI detected',str(error))
