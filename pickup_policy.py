@@ -103,13 +103,21 @@ class RewardGate:
         self.confirmed.add(cycle);return True
 
 
+# Across 12,290 logged prompts the Collect label was readable 0.75 s (median)
+# and 1.36 s (99.5th percentile) after the minigame closed. Waiting 10 s on a
+# completed round without loot cost ~8 s per empty round. A rare later drop is
+# still collected by the scene check that runs before every cast.
+EMPTY_AFTER_COMPLETE_SECONDS = 2.0
+EMPTY_AFTER_FAILED_SECONDS = 1.5
+
+
 def waiting_decision(evidence,stable,elapsed,fresh_round=False,percent=None):
     """A completed catch may render its loot later than the result percentage."""
     if stable and evidence.kind in ('collect','reward'):return evidence.kind
-    empty_limit=10 if fresh_round and percent==100 else 3.5
-    if evidence.kind=='empty' and elapsed>(empty_limit if stable else max(4,empty_limit)):return 'empty'
+    empty_limit=EMPTY_AFTER_COMPLETE_SECONDS if fresh_round and percent==100 else EMPTY_AFTER_FAILED_SECONDS
+    if evidence.kind=='empty' and elapsed>(empty_limit if stable else empty_limit+.5):return 'empty'
     if evidence.kind=='other' and elapsed>4:return 'empty'
-    if elapsed>max(7,empty_limit+1):return 'timeout'
+    if elapsed>max(7,empty_limit+2):return 'timeout'
     return 'wait'
 
 

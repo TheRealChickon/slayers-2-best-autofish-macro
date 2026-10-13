@@ -1,9 +1,9 @@
 """Screen-only Roblox fishing controller; F9, F12 or Escape stops all input."""
-import argparse, ctypes, json, os, time, sys, traceback, re, threading
+import argparse, ctypes, json, math, os, time, sys, traceback, re, threading
 from ctypes import wintypes
 from pathlib import Path
 import cv2, mss, numpy as np, psutil, win32gui, win32process, win32api
-from rapidocr_onnxruntime import RapidOCR
+from ocr_engine import RapidOCR
 from pynput.keyboard import Listener,Key
 from metrics import Ledger, read as read_metrics, write as write_metrics, RUN
 from app_config import load_config,save_config
@@ -21,6 +21,8 @@ from full_pause import InputGate, InputPaused, PAUSE_FILE, resumed_stage
 from unattended_focus import TaggedInput
 from capture_session import CaptureSession
 from snapshot_writer import SnapshotWriter
+from prompt_shape import find_discs, DiscTrack
+import ocr_engine
 
 ROOT = Path(__file__).resolve().parent
 USER = TaggedInput(ctypes.windll.user32)
@@ -32,6 +34,13 @@ BITE_WAIT_TIMEOUT_SECONDS = 10
 MISSED_CASTS_BEFORE_REJOIN = 3
 CONFIRMED_REWARD_COOLDOWN_SECONDS = 0.
 CAST_PRESS_SECONDS = .16
+# A drop's prompt appears ~0.7 s after the minigame while the item is still
+# airborne. Two thirds of logged pickups held T on that moving prompt, lost the
+# hold when it landed, and needed a second ~2.6 s hold. Wait for the key disc
+# to stop (bounded), and re-press as soon as a held disc lands elsewhere.
+PROMPT_REGION = (480,150,1630,1110)
+LANDING_WAIT_LIMIT_SECONDS = 1.8
+HELD_DISC_MOVE_PIXELS = 40
 
 def move_pointer(x,y):
     # Both monitors are valid; coordinates are absolute virtual-desktop pixels.
@@ -190,6 +199,7 @@ def main():
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_toast_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
     cooldown_delay=1.0;prompt_detected_at=None;reward_gate=RewardGate();collect_motion=CollectHoldMotion();collect_ready=CollectReadyGate()
     confirmed_recast=None;reward_confirmed_at=None
+    disc_track=DiscTrack();pending_collect=None;hold_anchor=None;landing_wait_logged=False
     last_verified_rod=None
     needs_scene_check=True;scene_check_started=None;hooked_cycles=0;last_wait_pickup_check=0;startup_ui_wait_since=None
     last_reference_check=0;reference_matcher=None;paused_at=None
@@ -301,6 +311,27 @@ def main():
                'center':(float(np.mean(np.array(r[0])[:,0])),float(np.mean(np.array(r[0])[:,1])))}
               for r in results or []]
         return classify_toast(rows)
+    def disc_observe():
+        x,y,w,h=PROMPT_REGION
+        found=[(x+cx,y+cy) for cx,cy in find_discs(screen.capture(sct,(x,y,w,h)))]
+        inp.guard_press(True)
+        return disc_track.observe(found,time.monotonic())
+    def reset_disc(near=None):
+        nonlocal pending_collect,hold_anchor,landing_wait_logged
+        disc_track.reset(near);pending_collect=None;hold_anchor=None;landing_wait_logged=False
+    def landed(now):
+        # No visible disc (occluded or off-crop) leaves the OCR gates in charge.
+        if disc_track.seen_at is None or now-disc_track.seen_at>.25:return True
+        if disc_track.settled(now):return True
+        return prompt_detected_at is not None and now-prompt_detected_at>LANDING_WAIT_LIMIT_SECONDS
+    def start_hold(evidence):
+        nonlocal last_prompt,stage,since,pickup_tries,last_toast_scan,pending_collect,hold_anchor
+        last_prompt=evidence.text
+        inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;last_toast_scan=0
+        collect_motion.start(evidence,since);pending_collect=None;hold_anchor=disc_track.position
+        event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=evidence.text,key_center=evidence.key_center,
+              scan_seconds=last_pickup_evidence['scan_seconds'],prompt_to_hold_seconds=round(since-(prompt_detected_at or since),3),
+              disc=disc_track.position,disc_settled=disc_track.settled(since));screenshot('pickup',defer=True)
     def ui_active():
         im=screen.capture(sct,(1190,1360,180,70))
         return ui_visible(im,exit_template)
@@ -332,7 +363,7 @@ def main():
         inventory.end_round()
         stage='casting';now=time.monotonic();since=now;cast_press_started=None
         needs_scene_check=True;scene_check_started=None;pickup_gate=PickupGate()
-    event('started',pid=os.getpid(),session=session,current_position=a.current_position)
+    event('started',pid=os.getpid(),session=session,current_position=a.current_position,ocr_device=ocr_engine.device)
     try:
         with CaptureSession(event) as sct, SnapshotWriter() as image_writer:
             inventory=InventoryWatcher(InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer),event,inventory_progress)
@@ -363,7 +394,7 @@ def main():
                         casts+=1;event('cast',cast=casts,interrupted=True)
                     cast_press_started=None
                     if stage!=previous_stage:since=time.monotonic()
-                    pickup_gate=PickupGate();collect_ready=CollectReadyGate();last_pickup_scan=0;laststate=0
+                    pickup_gate=PickupGate();collect_ready=CollectReadyGate();last_pickup_scan=0;laststate=0;reset_disc()
                     needs_scene_check=stage in ('casting','waiting','cooldown','equipping')
                     scene_check_started=None
                     event('input_resumed',stage=stage,paused_seconds=round(pause_seconds,2))
@@ -452,7 +483,7 @@ def main():
                             collect_ready=CollectReadyGate();collect_ready.observe(evidence,stable,now)
                             confirmed_recast=None
                             needs_scene_check=False;scene_check_started=None
-                            stage='pickup_wait';since=now-.1;last_pickup_scan=0
+                            stage='pickup_wait';since=now-.1;last_pickup_scan=0;reset_disc(evidence.key_center or evidence.center)
                             event('pending_pickup_recovered',cycle=cycles,text=evidence.text)
                         elif decision=='clear':
                             if confirmed_recast is not None:
@@ -515,7 +546,7 @@ def main():
                             else:unknown+=1
                             event('minigame_ended',cycle=cycles,seconds=round(now-since,2),percent=end_percent,
                                   percent_evidence=percent_evidence)
-                            stage='pickup_wait';since=time.monotonic();prev=None;last_pickup_scan=0;collect_ready=CollectReadyGate()
+                            stage='pickup_wait';since=time.monotonic();prev=None;last_pickup_scan=0;collect_ready=CollectReadyGate();reset_disc()
                             if consecutive_failed>=5:raise RuntimeError('Five consecutive failed rounds; stopped for review')
                         elif now-lastseen>12:
                             screenshot('missing-markers')
@@ -572,24 +603,44 @@ def main():
                             if missing_casts>=MISSED_CASTS_BEFORE_REJOIN:
                                 raise FishingFault('no_minigame','Three casts without a recognized minigame',
                                     missed_casts=missing_casts,wait_seconds=BITE_WAIT_TIMEOUT_SECONDS)
-                            stage='pickup_wait';since=now
+                            stage='pickup_wait';since=now;reset_disc()
                     elif stage=='pickup_wait':
-                        if now-since>.08 and now-last_pickup_scan>.08:
+                        if prompt_detected_at is not None:
+                            disc_observe();now=time.monotonic()
+                        if pending_collect is not None and landed(now):
+                            # The OCR-confirmed prompt has landed; hold on this frame.
+                            if now-pending_collect[1]<.6:start_hold(pending_collect[0])
+                            else:pending_collect=None
+                        elif now-since>.08 and now-last_pickup_scan>.08:
                             evidence,stable=pickup_text();now=time.monotonic();last_pickup_scan=now;prompt_seen=evidence.kind=='collect' and stable
+                            if evidence.kind=='collect' and disc_track.position is None:
+                                disc_track.near=evidence.key_center or evidence.center
                             collect_is_ready=collect_ready.observe(evidence,stable,now)
                             decision=waiting_decision(evidence,stable,now-since,last_tracking_cast==casts,end_percent)
                             if decision=='reward':
                                 record_reward(evidence.text);screenshot('collected',defer=True);start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS)
                             elif decision=='collect' and collect_is_ready:
-                                last_prompt=evidence.text
-                                inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1;last_toast_scan=0
-                                collect_motion.start(evidence,since)
-                                event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=evidence.text,key_center=evidence.key_center,scan_seconds=last_pickup_evidence['scan_seconds'],prompt_to_hold_seconds=round(since-(prompt_detected_at or since),3));screenshot('pickup',defer=True)
+                                if landed(now):start_hold(evidence)
+                                else:
+                                    pending_collect=(evidence,now)
+                                    if not landing_wait_logged:
+                                        landing_wait_logged=True;event('pickup_landing_wait',cycle=cycles,disc=disc_track.position)
                             elif decision=='empty':
                                 empty_round(.4 if evidence.kind=='empty' and stable else 1.0)
                             elif decision=='timeout':
                                 raise FishingFault('pickup_timeout','Pickup prompt remained ambiguous after wide scans',evidence=last_pickup_evidence)
                     elif stage=='pickup':
+                        if inp.t and pickup_tries<3:
+                            # Follow the held key disc every frame; OCR is too slow
+                            # to see a drop land and replace its prompt.
+                            position=disc_observe();now=time.monotonic()
+                            if position is not None and hold_anchor is None:hold_anchor=position
+                            if (position is not None and math.dist(position,hold_anchor)>HELD_DISC_MOVE_PIXELS
+                                    and disc_track.settled(now)):
+                                inp.grab(False);time.sleep(.06);inp.grab(True);pickup_tries+=1;since=time.monotonic()
+                                event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=last_prompt,
+                                      reason='Prompt disc landed elsewhere',from_center=hold_anchor,center=position)
+                                hold_anchor=position;collect_motion.start(Pickup('collect',last_prompt,position,position),since)
                         # The tiny toast is much faster than another scene OCR.
                         if now-since>.20 and now-last_toast_scan>.08:
                             last_toast_scan=time.monotonic()
@@ -610,12 +661,12 @@ def main():
                             elif evidence.kind=='collect' and stable and not inp.t:
                                 if pickup_tries>=3:raise FishingFault('pickup_timeout','Collect remained after three state-driven attempts')
                                 inp.grab(True);pickup_tries+=1;since=time.monotonic()
-                                collect_motion.start(evidence,since)
+                                collect_motion.start(evidence,since);hold_anchor=disc_track.position
                                 event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=evidence.text)
                             elif evidence.kind=='collect' and inp.t and moved_collect:
                                 prior_center=collect_motion.origin
                                 inp.grab(False);time.sleep(.06);inp.grab(True);pickup_tries+=1;since=time.monotonic()
-                                collect_motion.start(evidence,since)
+                                collect_motion.start(evidence,since);hold_anchor=disc_track.position
                                 event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=evidence.text,
                                       reason='Collect target moved and settled',from_center=prior_center,center=evidence.center,key_center=evidence.key_center)
                         # Confirm the small toast twice while T is held. This
@@ -644,7 +695,7 @@ def main():
                                 # Its OCR took longer than a release frame; do not
                                 # add another dwell and duplicate scan to retry.
                                 inp.grab(True);pickup_tries+=1;since=time.monotonic()
-                                collect_motion.start(evidence,since)
+                                collect_motion.start(evidence,since);hold_anchor=disc_track.position
                                 event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=evidence.text,
                                       reason='Collect persisted after hold deadline',key_center=evidence.key_center)
                             elif evidence.kind=='collect':stage='pickup_retry_wait';since=time.monotonic()
@@ -659,7 +710,7 @@ def main():
                             evidence,stable=pickup_text()
                             if evidence.kind=='collect' and stable:
                                 inp.grab(True);stage='pickup';since=time.monotonic();pickup_tries+=1
-                                collect_motion.start(evidence,since)
+                                collect_motion.start(evidence,since);hold_anchor=disc_track.position
                                 event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=evidence.text,
                                       scan_seconds=last_pickup_evidence['scan_seconds'])
                             else:stage='pickup_wait';since=time.monotonic()
