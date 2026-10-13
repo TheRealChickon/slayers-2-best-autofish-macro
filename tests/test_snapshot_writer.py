@@ -45,5 +45,26 @@ class SnapshotWriting(unittest.TestCase):
         self.assertEqual([call.args[0] for call in save.call_args_list],['archive.jpg','latest.jpg'])
         self.assertEqual([call.args[2][-1] for call in save.call_args_list],[88,80])
 
+    def test_slow_evidence_encoding_is_deferred_with_owned_frame_before_image_write(self):
+        started=threading.Event();release=threading.Event();calls=[]
+        original=np.full((8,8,3),17,np.uint8)
+        def observe(frame):
+            started.set();release.wait(2);calls.append(('evidence',int(frame[0,0,0])))
+        def write(frame,*unused):calls.append(('image',int(frame[0,0,0])))
+        with patch.object(SnapshotWriter,'write',side_effect=write),SnapshotWriter() as writer:
+            writer.save(original,'receipt.jpg','latest.jpg',defer=True,observe=observe)
+            self.assertTrue(started.wait(1))
+            self.assertFalse(writer.pending.done())
+            self.assertEqual(calls,[])
+            original[:]=99;release.set();writer.wait()
+        self.assertEqual(calls,[('evidence',17),('image',17)])
+
+    def test_evidence_encoding_failure_reaches_barrier_without_writing_image(self):
+        with patch.object(SnapshotWriter,'write') as write,SnapshotWriter() as writer:
+            def fail(unused):raise OSError('evidence storage failed')
+            writer.save(np.zeros((8,8,3),np.uint8),'receipt.jpg','latest.jpg',defer=True,observe=fail)
+            with self.assertRaisesRegex(OSError,'evidence storage failed'):writer.wait()
+            write.assert_not_called()
+
 
 if __name__=='__main__':unittest.main()

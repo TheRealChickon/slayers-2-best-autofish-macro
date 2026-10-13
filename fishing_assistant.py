@@ -30,7 +30,7 @@ USER.SetProcessDPIAware()
 # Two missed hooks can be ordinary bad luck; wait for a third before rejoining.
 BITE_WAIT_TIMEOUT_SECONDS = 10
 MISSED_CASTS_BEFORE_REJOIN = 3
-CONFIRMED_REWARD_COOLDOWN_SECONDS = .04
+CONFIRMED_REWARD_COOLDOWN_SECONDS = 0.
 CAST_PRESS_SECONDS = .16
 
 def move_pointer(x,y):
@@ -212,15 +212,15 @@ def main():
     def start_cooldown(seconds):
         nonlocal stage,since,cooldown_delay
         stage='cooldown';cooldown_delay=seconds
-        # Receipt logging/screenshots already give Roblox time to release T.
-        # Count that work in the short dwell, then still read a fresh scene.
+        # A confirmed item banner releases T and proceeds straight to the
+        # fresh scene check; there is no post-collection dwell.
         since=(reward_confirmed_at if confirmed_recast is not None
                and seconds==CONFIRMED_REWARD_COOLDOWN_SECONDS else time.monotonic())
     def screenshot(tag,defer=False):
         image_writer.wait()
         im=screen.capture(sct)
-        diagnostics.observe(im,tag)
-        image_writer.save(im,RUN/f'{session}-{cycles%12:03d}-{tag}.jpg',RUN/'latest.jpg',defer=defer)
+        image_writer.save(im,RUN/f'{session}-{cycles%12:03d}-{tag}.jpg',RUN/'latest.jpg',defer=defer,
+                          observe=lambda frame:diagnostics.observe(frame,tag))
         return im
     def read_text(im):
         result,_=ocr(im)
@@ -412,8 +412,11 @@ def main():
                     if d is not None and not ui_active():d=None
                     if d is None and stage=='cooldown' and now-since>cooldown_delay:
                         finish_cooldown()
-                        d=detect(screen.capture(sct,(1850,400,140,600)))
-                        if d is not None and not ui_active():d=None
+                        if confirmed_recast is None:
+                            d=detect(screen.capture(sct,(1850,400,140,600)))
+                            if d is not None and not ui_active():d=None
+                        # A confirmed recast gets its fresh minigame read after
+                        # the scene OCR below, immediately before casting.
                     combined_scene=confirmed_recast is not None and (stage=='cooldown' or stage=='casting' and needs_scene_check)
                     if d is None and stage in ('casting','waiting','cooldown') and now-last_gui_scan>8 and not combined_scene:
                         scan_gui()
@@ -520,12 +523,16 @@ def main():
                         # Time the actual press, not entry into the casting state:
                         # OCR and rod detection can delay this iteration substantially.
                         if not inp.mouse:
+                            recast_reward_at=reward_confirmed_at if confirmed_recast is not None else None
                             confirmed_recast=None
                             inventory.begin_round()
                             if not first_person_active:
                                 inp.aim_cast(*screen.point(*load_config()['cast_point']),after_menu=cast_needs_settle)
                             cast_needs_settle=False
                             inp.hold(True);cast_press_started=time.monotonic()
+                            if recast_reward_at is not None:
+                                event('recast_pressed',cycle=cycles,
+                                      reward_to_press_seconds=round(cast_press_started-recast_reward_at,3))
                         if cast_press_started is not None:
                             # Capture/OCR between mouse-down and mouse-up extended
                             # this short press. The focus watcher remains active;
