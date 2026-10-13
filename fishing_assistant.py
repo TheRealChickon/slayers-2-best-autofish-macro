@@ -154,7 +154,9 @@ def is_reward_banner(text):
     return not is_other_interaction(text) and not is_pickup_prompt(text) and reward_quantity(text) is not None
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--seconds',type=float,default=0);p.add_argument('--focus',action='store_true');p.add_argument('--record',action='store_true');p.add_argument('--gain',type=float,default=None,help='Override adaptive braking with the legacy fixed predictor');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--seconds',type=float,default=0);p.add_argument('--focus',action='store_true');p.add_argument('--record',action='store_true');p.add_argument('--gain',type=float,default=None,help='Override adaptive braking with the legacy fixed predictor')
+    p.add_argument('--current-position',action='store_true',help='Use the adopted live position instead of the saved landmark reference')
+    a=p.parse_args()
     limit=a.seconds if a.seconds>0 else float('inf')
     RUN.mkdir(parents=True,exist_ok=True)
     lock=RUN/'pid.json'
@@ -189,7 +191,7 @@ def main():
     cooldown_delay=1.0;prompt_detected_at=None;reward_gate=RewardGate();collect_motion=CollectHoldMotion();collect_ready=CollectReadyGate()
     confirmed_recast=None;reward_confirmed_at=None
     last_verified_rod=None
-    needs_scene_check=True;scene_check_started=None;hooked_cycles=0;last_wait_pickup_check=0
+    needs_scene_check=True;scene_check_started=None;hooked_cycles=0;last_wait_pickup_check=0;startup_ui_wait_since=None
     last_reference_check=0;reference_matcher=None;paused_at=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
     diagnostics=FaultRecorder(RUN,session);pickup_gate=PickupGate();last_pickup_evidence={};failure_code='';failure_details={}
@@ -306,7 +308,7 @@ def main():
         nonlocal last_reference_check,reference_matcher,inventory_open,confirmed_recast,last_verified_rod
         nonlocal cast_needs_settle,pickup_confirmed,last_reward,stage,now,since,cast_press_started
         nonlocal needs_scene_check,scene_check_started,pickup_gate
-        if now-last_reference_check>180 and landmarks.profile():
+        if not a.current_position and now-last_reference_check>180 and landmarks.profile():
             last_reference_check=now
             reference_matcher=reference_matcher or landmarks.load_matcher(landmarks.profile())
             measured=reference_matcher.measure(screen.capture(sct))
@@ -330,7 +332,7 @@ def main():
         inventory.end_round()
         stage='casting';now=time.monotonic();since=now;cast_press_started=None
         needs_scene_check=True;scene_check_started=None;pickup_gate=PickupGate()
-    event('started',pid=os.getpid(),session=session)
+    event('started',pid=os.getpid(),session=session,current_position=a.current_position)
     try:
         with CaptureSession(event) as sct, SnapshotWriter() as image_writer:
             inventory=InventoryWatcher(InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer),event,inventory_progress)
@@ -339,6 +341,7 @@ def main():
                 if inp.gate.reason() or inp.gate.interrupted.is_set():
                     confirmed_recast=None
                     last_verified_rod=None
+                    startup_ui_wait_since=None
                     paused_at=time.monotonic();inp.release();motion.suspend();prev=None
                     event('input_paused',stage=stage,reason=inp.gate.reason() or 'paused_focus')
                     while True:
@@ -410,6 +413,16 @@ def main():
                     roi=screen.capture(sct,(1850,400,140,600))
                     d=detect(roi)
                     if d is not None and not ui_active():d=None
+                    if a.current_position and casts==0 and stage=='casting' and d is None and ui_active():
+                        # A visible startup minigame owns input even while its
+                        # markers are obscured or a capture is still settling.
+                        inp.release()
+                        if startup_ui_wait_since is None:
+                            startup_ui_wait_since=now;event('startup_minigame_wait')
+                        if now-startup_ui_wait_since>12:
+                            raise FishingFault('tracking_lost','Startup fishing UI visible but markers unavailable for 12 seconds')
+                        time.sleep(.02);continue
+                    startup_ui_wait_since=None
                     if d is None and stage=='cooldown' and now-since>cooldown_delay:
                         finish_cooldown()
                         if confirmed_recast is None:
