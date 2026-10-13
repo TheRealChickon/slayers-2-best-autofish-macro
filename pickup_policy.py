@@ -16,6 +16,7 @@ class Pickup:
     kind: str
     text: str = ''
     center: tuple = (0, 0)
+    key_center: tuple | None = None
 
 
 def same_reward(first, second):
@@ -56,7 +57,10 @@ def classify(rows):
     if not candidates:
         return Pickup('empty')
     row = max(candidates, key=lambda r: r['score'])
-    return Pickup(kind, cluster(row), tuple(row['center']))
+    keys=[r for r in rows if kind=='collect' and r.get('score',0)>=.90
+          and r['text'].strip().upper()=='T' and math.dist(r['center'],row['center'])<150]
+    return Pickup(kind, cluster(row), tuple(row['center']),
+                  tuple(keys[0]['center']) if len(keys)==1 else None)
 
 
 def classify_toast(rows):
@@ -129,28 +133,48 @@ def retain_collect_hold(evidence,elapsed,confirmed_reward=False,attempt=0):
 class CollectHoldMotion:
     """One fresh retry when an airborne collect target has moved and settled."""
     def __init__(self):
-        self.origin=None;self.previous=None;self.started=0;self.at=0
+        self.origin=None;self.key_origin=None;self.previous=None;self.started=0;self.at=0
         self.retry_ready_at=None
 
     def start(self,evidence,now):
-        self.origin=evidence.center;self.previous=None;self.started=self.at=now
+        self.key_origin=evidence.key_center
+        self.origin=evidence.key_center or evidence.center;self.previous=None;self.started=self.at=now
         self.retry_ready_at=None
 
     def observe(self,evidence,stable,now,attempt):
         previous=self.previous;age=now-self.at
         self.previous=evidence;self.at=now
-        ready=(self.origin is not None and attempt==1 and stable
+        keyed=self.key_origin is not None and evidence.key_center is not None and previous is not None and previous.key_center is not None
+        position=evidence.key_center if keyed else evidence.center
+        prior_position=previous.key_center if keyed else previous.center if previous is not None else None
+        ready=(self.origin is not None and (self.key_origin is None or keyed) and attempt==1 and stable
                 and evidence.kind=='collect' and previous is not None and previous.kind=='collect'
                 and now-self.started>=.65 and age<=1.5
-                and math.dist(self.origin,evidence.center)>180
-                and math.dist(previous.center,evidence.center)<=35)
+                and math.dist(self.origin,position)>(65 if keyed else 180)
+                and math.dist(prior_position,position)<=25)
         if not ready:
             self.retry_ready_at=None;return False
         # A moving/changing Collect prompt often settles before its original
         # hold completes. Give that first hold another .75s while fresh settled
         # evidence continues; a reward can still finish it immediately.
         if self.retry_ready_at is None:self.retry_ready_at=now
-        return now>=self.retry_ready_at+FIRST_COLLECT_HOLD_GRACE_SECONDS
+        return now>=self.retry_ready_at+(.12 if keyed else FIRST_COLLECT_HOLD_GRACE_SECONDS)
+
+
+class CollectReadyGate:
+    """Avoid pressing into the airborne prompt that Roblox replaces on landing."""
+    def __init__(self):self.previous=None;self.at=0;self.first_seen=None
+
+    def observe(self,evidence,stable,now):
+        previous=self.previous;age=now-self.at
+        self.previous=evidence;self.at=now
+        if evidence.kind!='collect':self.first_seen=None;return False
+        if self.first_seen is None:self.first_seen=now
+        if not stable or previous is None or previous.kind!='collect' or age>1.5:return False
+        if evidence.key_center is not None and previous.key_center is not None:
+            return .08<=age and math.dist(evidence.key_center,previous.key_center)<=18
+        # Some prompt text occludes T. Retain a bounded, repeated-label fallback.
+        return now-self.first_seen>=.6 and math.dist(evidence.center,previous.center)<=25
 
 
 class PickupGate:
