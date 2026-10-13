@@ -31,6 +31,7 @@ USER.SetProcessDPIAware()
 BITE_WAIT_TIMEOUT_SECONDS = 10
 MISSED_CASTS_BEFORE_REJOIN = 3
 CONFIRMED_REWARD_COOLDOWN_SECONDS = .04
+CAST_PRESS_SECONDS = .08
 
 def move_pointer(x,y):
     # Both monitors are valid; coordinates are absolute virtual-desktop pixels.
@@ -526,9 +527,9 @@ def main():
                             inp.hold(True);cast_press_started=time.monotonic()
                         if cast_press_started is not None:
                             # Capture/OCR between mouse-down and mouse-up extended
-                            # this 160ms press. The focus watcher remains active;
+                            # this short press. The focus watcher remains active;
                             # check its gate while completing the bounded press.
-                            while time.monotonic()-cast_press_started<.16:
+                            while time.monotonic()-cast_press_started<CAST_PRESS_SECONDS:
                                 inp.guard_press(True)
                                 time.sleep(.005)
                             inp.hold(False);cast_press_started=None;casts+=1;event('cast',cast=casts);stage='waiting';since=time.monotonic();last_wait_pickup_check=since

@@ -312,7 +312,8 @@ class PendingPickupTests(unittest.TestCase):
         releases=[at for kind,flags,at in inputs if kind=='mouse' and flags==4 and at>presses[0]]
         self.assertTrue(releases)
         self.assertLess(releases[0]-self.reward_time,.5)
-        self.assertGreaterEqual(releases[0]-presses[0],.16)
+        self.assertGreaterEqual(releases[0]-presses[0],.08)
+        self.assertLess(releases[0]-presses[0],.09)
         ready=next(event for event in events if event['event']=='recast_ready')
         self.assertTrue(ready['matching_receipt'])
         self.assertEqual(self.scene_scans[0][1],(480,150,1630,1110))
