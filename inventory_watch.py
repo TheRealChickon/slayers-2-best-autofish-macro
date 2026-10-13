@@ -346,6 +346,7 @@ class InventoryWatcher:
                     'place':config.get('place_id')}
         self.baseline=None;self.known=collections.Counter();self.pending=[]
         self.overflow=False;self.round_active=False;self.failures=0;self.next_check_at=0
+        self.unsupported_total=None;self.unsupported_at=0;self.deferred_notice=False
         saved=read('inventory-watch.json')
         legacy=read('inventory-baseline.json')
         self.had_checkpoint=bool(saved or legacy)
@@ -365,13 +366,30 @@ class InventoryWatcher:
         elif legacy:
             # Old baselines lack known-catch accounting; never guess from them.
             self.next_check_at=min(now+CHECK_INTERVAL,legacy.get('at',0)+CHECK_INTERVAL)
+        if saved.get('scope')==self.scope:
+            total=saved.get('unsupported_total')
+            if isinstance(total,int) and total>100:
+                self.unsupported_total=total;self.unsupported_at=saved.get('unsupported_at',0)
+            elif saved.get('failures',0)>0 and saved.get('baseline') is None:
+                # Migrate only recent count evidence from this unchanged run.
+                evidence=read('inventory-count-evidence.json')
+                if (evidence.get('reason')=='outside_first_page_limit'
+                        and isinstance(evidence.get('parsed_total'),int) and evidence['parsed_total']>100
+                        and self.scope['supervisor'] is not None
+                        and evidence.get('at',0)>=self.scope['supervisor']
+                        and 0<=now-evidence.get('at',0)<CACHE_MAX_AGE):
+                    self.unsupported_total=evidence['parsed_total'];self.unsupported_at=evidence['at']
+
+    @property
+    def comparison_blocked(self):return self.unsupported_total is not None
 
     def checkpoint(self):
         if not self.enabled:return
         write('inventory-watch.json',{'schema':1,'scope':self.scope,'updated_at':self.clock(),
             'baseline':self.baseline,'known':dict(self.known),'pending':self.pending,
             'overflow':self.overflow,'round_active':self.round_active,
-            'failures':self.failures,'next_check_at':self.next_check_at})
+            'failures':self.failures,'next_check_at':self.next_check_at,
+            'unsupported_total':self.unsupported_total,'unsupported_at':self.unsupported_at})
 
     def begin_round(self):
         if not self.enabled or self.round_active:return
@@ -391,10 +409,15 @@ class InventoryWatcher:
         try:
             result=self.scanner.scan(max_seconds=SCAN_BUDGET)
             self.failures=0
+            self.unsupported_total=None;self.unsupported_at=0;self.deferred_notice=False
             self.event('inventory_checked',reason=reason,items=len(result),seconds=round(self.clock()-started,1))
             return result
         except ValueError as error:
             self.failures=min(3,self.failures+1)
+            evidence=read('inventory-count-evidence.json')
+            if (evidence.get('at',0)>=started and evidence.get('reason')=='outside_first_page_limit'
+                    and isinstance(evidence.get('parsed_total'),int) and evidence['parsed_total']>100):
+                self.unsupported_total=evidence['parsed_total'];self.unsupported_at=evidence['at']
             self.event('inventory_unreadable',message=str(error),retry_minutes=min(MAX_BACKOFF,CHECK_INTERVAL*2**self.failures)//60)
             write('inventory-progress.json',{'at':self.clock(),'stage':'unreadable','message':str(error)})
             return None
@@ -432,13 +455,20 @@ class InventoryWatcher:
             self.queue({'reward_id':reward_id,'quantity':1,'unconfirmed':True,'raw':prompt})
 
     def check_pending(self):
+        if getattr(self,'comparison_blocked',False) is True:
+            if self.enabled and self.pending and not self.deferred_notice:
+                self.event('inventory_comparison_deferred',entries=self.unsupported_total,
+                    message='Automatic comparison cannot read this inventory completely; original catch evidence retained')
+                self.deferred_notice=True
+            return
         if not self.enabled or not self.pending or self.clock()<self.next_check_at:return
         pending=self.pending
         # No periodic scans: only unresolved loot can make a check eligible.
         after=self.snapshot('unknown drop' if len(pending)==1 else 'unknown drops')
         if after is None:
             # Losing the baseline prevents a later scan from attributing stale gains.
-            self.baseline=None;self.known.clear();self.pending=[];self.overflow=False
+            self.baseline=None;self.known.clear()
+            if not self.comparison_blocked:self.pending=[];self.overflow=False
             self.checkpoint();return
         # Several unknown catches can be different items or missed pickups.
         # Keep their original evidence instead of allocating an aggregate delta.

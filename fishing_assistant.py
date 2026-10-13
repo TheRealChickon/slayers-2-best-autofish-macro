@@ -315,7 +315,8 @@ def main():
                 if second and second['rms']>10:
                     screenshot('drift')
                     raise FishingFault('alignment_drift','Fishing reference drifted; local alignment required',error=round(second['rms'],2))
-        menu_scan_due=bool(inventory.pending and inventory.clock()>=inventory.next_check_at)
+        menu_scan_due=bool(inventory.pending and inventory.clock()>=inventory.next_check_at
+                           and getattr(inventory,'comparison_blocked',False) is not True)
         # A due inventory menu still gets the separate disconnect check before
         # any menu input. Ordinary recasts use the fresh full-scene OCR below.
         if menu_scan_due and time.monotonic()-last_gui_scan>8:scan_gui()

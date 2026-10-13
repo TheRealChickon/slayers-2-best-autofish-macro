@@ -166,6 +166,38 @@ class InventoryScheduling(unittest.TestCase):
         watcher.scanner.scan.assert_not_called()
         self.assertFalse((self.root/'inventory-watch.json').exists())
 
+    def test_unsupported_inventory_is_not_reopened_and_unknown_evidence_survives(self):
+        watcher=self.watcher();watcher.start();self.now+=600
+        watcher.observe('??? X1','','unknown')
+        def unsupported(**kw):
+            metrics.write('inventory-count-evidence.json',{'at':self.now,
+                'reason':'outside_first_page_limit','parsed_total':187})
+            raise ValueError('Inventory is not fully visible')
+        watcher.scanner.scan.side_effect=unsupported;watcher.check_pending();watcher.end_round()
+        self.assertTrue(watcher.comparison_blocked)
+        self.assertEqual(watcher.pending[0]['reward_id'],'unknown')
+        restarted=self.watcher();self.now+=7200
+        restarted.observe('??? X2','','another');restarted.check_pending();restarted.check_pending()
+        restarted.scanner.scan.assert_not_called()
+        self.assertEqual(len(restarted.pending),2)
+        self.assertEqual(sum(kind=='inventory_comparison_deferred' for kind,_ in self.events),1)
+        self.assertFalse(any(kind in ('inventory_resolved','inventory_recovered') for kind,_ in self.events))
+
+    def test_recent_legacy_large_inventory_failure_is_scoped_to_its_run(self):
+        watcher=self.watcher();watcher.failures=1;watcher.baseline=None;watcher.checkpoint()
+        metrics.write('inventory-count-evidence.json',{'at':self.now-1,
+            'reason':'outside_first_page_limit','parsed_total':187})
+        self.assertTrue(self.watcher().comparison_blocked)
+        self.config['user_id']+=1
+        self.assertFalse(self.watcher().comparison_blocked)
+        self.config['user_id']-=1;metrics.write('supervisor.json',{'started':self.now+1})
+        self.assertFalse(self.watcher().comparison_blocked)
+
+    def test_explicit_successful_comparison_clears_the_capacity_block(self):
+        watcher=self.watcher();watcher.unsupported_total=187;watcher.unsupported_at=self.now
+        self.assertEqual(watcher.snapshot('manual comparison'),{'Coral':3,'Worm':10})
+        self.assertFalse(watcher.comparison_blocked)
+
 
 class ScanBudget(unittest.TestCase):
     def test_expired_budget_still_closes_menu(self):
