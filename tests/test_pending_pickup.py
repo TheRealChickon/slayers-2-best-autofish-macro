@@ -357,6 +357,17 @@ class PendingPickupTests(unittest.TestCase):
         self.assertEqual(sum(event['event']=='reward_observed' for event in events),1)
         self.assertFalse(states[-1]['held_t'])
 
+    def test_faded_receipt_recasts_from_fresh_stable_clear_without_extra_dwell(self):
+        receipt=Pickup('reward','Krathulon X1')
+        clear=Pickup('empty')
+        self.assertEqual(before_cast_decision(clear,True,.18,receipt,True),'clear')
+        self.assertEqual(before_cast_decision(clear,False,.18,receipt,True),'wait')
+        self.assertEqual(before_cast_decision(clear,True,.18,receipt,False),'wait')
+        self.assertEqual(before_cast_decision(clear,True,.18,None,True),'wait')
+        self.assertEqual(before_cast_decision(Pickup('other','Purchase'),True,.18,receipt,True),'wait')
+        self.assertEqual(before_cast_decision(Pickup('ambiguous','Collect'),True,.18,receipt,True),'wait')
+        self.assertEqual(before_cast_decision(Pickup('collect','T Collect'),True,.18,receipt,True),'collect')
+
     def test_failed_holds_retry_sooner_while_first_hold_keeps_a_small_grace(self):
         events,inputs,states,error,inventory=self.drive(reward_after=100,stationary_prompt=True,duration=16)
         holds=[];down=None

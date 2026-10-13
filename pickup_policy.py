@@ -120,6 +120,10 @@ def before_cast_decision(evidence,stable,elapsed,confirmed_reward=None,full_scen
     # dwell and two more OCR passes. Require the exact same receipt in a fresh
     # full scene so a Collect/other interaction outside the toast crop wins.
     if full_scene and confirmed_reward is not None and same_reward(evidence,confirmed_reward):return 'clear'
+    # Once the receipt is confirmed, a fresh full scene with repeated clear
+    # evidence is sufficient even when the toast has faded. Keep the gate's
+    # multi-frame stability requirement, without another generic clear dwell.
+    if full_scene and confirmed_reward is not None and stable and evidence.kind=='empty':return 'clear'
     if stable and evidence.kind in ('empty','reward') and elapsed>=.35:return 'clear'
     if elapsed>7:return 'timeout'
     return 'wait'
