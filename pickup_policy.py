@@ -173,12 +173,13 @@ class CollectReadyGate:
         self.previous=evidence;self.at=now
         if evidence.kind!='collect':self.first_seen=None;return False
         if self.first_seen is None:self.first_seen=now
+        # Stable Collect plus a nearby confident T is already two independent
+        # visual cues. Start now; the motion gate can rebind a replaced prompt.
+        if stable and evidence.key_center is not None:return True
         if not stable or previous is None or previous.kind!='collect' or age>1.5:return False
-        if evidence.key_center is not None and previous.key_center is not None:
-            return .08<=age and (math.dist(evidence.key_center,previous.key_center)<=18
-                                or now-self.first_seen>=.3)
         # Some prompt text occludes T. Retain a bounded, repeated-label fallback.
-        return now-self.first_seen>=.6 and math.dist(evidence.center,previous.center)<=25
+        return now-self.first_seen>=.12 and (math.dist(evidence.center,previous.center)<=25
+                                          or now-self.first_seen>=.3)
 
 
 class PickupGate:
