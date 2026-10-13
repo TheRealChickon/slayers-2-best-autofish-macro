@@ -4,11 +4,11 @@ import re
 from dataclasses import dataclass
 from reward_evidence import reward_quantity
 
-FIRST_COLLECT_HOLD_GRACE_SECONDS = .75
+FIRST_COLLECT_HOLD_GRACE_SECONDS = .25
 
 
 def collect_hold_timeout(attempt):
-    return 4.0+(FIRST_COLLECT_HOLD_GRACE_SECONDS if attempt==1 else 0)
+    return 3.5+(FIRST_COLLECT_HOLD_GRACE_SECONDS if attempt==1 else 0)
 
 
 @dataclass(frozen=True)
@@ -158,7 +158,7 @@ class CollectHoldMotion:
         if not ready:
             self.retry_ready_at=None;return False
         # A moving/changing Collect prompt often settles before its original
-        # hold completes. Give that first hold another .75s while fresh settled
+        # hold completes. Give that first hold a short grace while fresh settled
         # evidence continues; a reward can still finish it immediately.
         if self.retry_ready_at is None:self.retry_ready_at=now
         return now>=self.retry_ready_at+(.12 if keyed or new_key else FIRST_COLLECT_HOLD_GRACE_SECONDS)

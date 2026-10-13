@@ -617,7 +617,16 @@ def main():
                                 if same_reward(first,second):
                                     evidence,stable=second,True
                             screenshot('after-pickup',defer=evidence.kind=='reward' and stable)
-                            if evidence.kind=='collect':stage='pickup_retry_wait';since=time.monotonic()
+                            if evidence.kind=='collect' and stable:
+                                if pickup_tries>=3:raise FishingFault('pickup_timeout','Collect remained after three state-driven attempts')
+                                # This is already a fresh stable scan after T-up.
+                                # Its OCR took longer than a release frame; do not
+                                # add another dwell and duplicate scan to retry.
+                                inp.grab(True);pickup_tries+=1;since=time.monotonic()
+                                collect_motion.start(evidence,since)
+                                event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=evidence.text,
+                                      reason='Collect persisted after hold deadline',key_center=evidence.key_center)
+                            elif evidence.kind=='collect':stage='pickup_retry_wait';since=time.monotonic()
                             else:
                                 if evidence.kind=='reward' and stable:record_reward(evidence.text)
                                 elif prompt_seen:inventory.observe_unconfirmed(last_prompt,f'{session}:{cycles}:inventory')
