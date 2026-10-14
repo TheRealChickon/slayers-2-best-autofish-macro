@@ -423,8 +423,17 @@ def main():
                                 write_metrics('bait-observation.json',{'at':time.time(),'count':bait_count,
                                     'hooks':base_rounds+hooked_cycles,'supervisor_started':supervisor_started})
                                 event('bait_read',count=bait_count)
-                            except ValueError as error:
+                            except (ValueError,RuntimeError) as error:
+                                # The bait badge is an estimate, never a reason to stop
+                                # fishing. A menu failure once looped worker restarts
+                                # and rejoins all night; note it once per supervisor.
+                                if isinstance(error,RuntimeError) and 'inventory' not in str(error).lower():raise
+                                inventory_open=False
                                 event('bait_unreadable',message=str(error))
+                                write_metrics('bait-observation.json',{'at':time.time(),'count':None,
+                                    'unreadable':str(error),'supervisor_started':supervisor_started})
+                                try:inventory.scanner.close()
+                                except RuntimeError as close_error:event('inventory_close_failed',message=str(close_error))
                         if load_config()['camera_mode']=='first_person':
                             inp.zoom_first_person();event('camera_zoom',mode='first_person');screenshot('camera-first-person')
                             first_person_active=True
