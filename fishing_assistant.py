@@ -40,7 +40,7 @@ CAST_PRESS_SECONDS = .16
 # to stop (bounded), and re-press as soon as a held disc lands elsewhere.
 PROMPT_REGION = (480,150,1630,1110)
 LANDING_WAIT_LIMIT_SECONDS = 1.8
-HELD_DISC_MOVE_PIXELS = 40
+HELD_DISC_MOVE_PIXELS = 25
 # A held disc absent this long (several 30-60 Hz frames) means the prompt is gone.
 PROMPT_GONE_SECONDS = .15
 
@@ -201,7 +201,7 @@ def main():
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_toast_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
     cooldown_delay=1.0;prompt_detected_at=None;reward_gate=RewardGate();collect_motion=CollectHoldMotion();collect_ready=CollectReadyGate()
     confirmed_recast=None;reward_confirmed_at=None
-    disc_track=DiscTrack();pending_collect=None;hold_anchor=None;landing_wait_logged=False
+    disc_track=DiscTrack(settle_seconds=.06);pending_collect=None;hold_anchor=None;landing_wait_logged=False;disc_gone_logged=None;disc_represses=0;disc_repress_cycle=None
     last_verified_rod=None
     needs_scene_check=True;scene_check_started=None;hooked_cycles=0;last_wait_pickup_check=0;startup_ui_wait_since=None
     last_reference_check=0;reference_matcher=None;paused_at=None
@@ -322,8 +322,12 @@ def main():
         nonlocal pending_collect,hold_anchor,landing_wait_logged
         disc_track.reset(near);pending_collect=None;hold_anchor=None;landing_wait_logged=False
     def landed(now):
-        # No visible disc (occluded or off-crop) leaves the OCR gates in charge.
-        if disc_track.seen_at is None or now-disc_track.seen_at>.25:return True
+        # A fresh prompt often reads as text a frame before its moving disc is found;
+        # give the disc 0.3 s to show up. Otherwise (occluded or off-crop) the OCR
+        # gates stay in charge.
+        if disc_track.seen_at is None:
+            return prompt_detected_at is None or now-prompt_detected_at>.3
+        if now-disc_track.seen_at>.25:return True
         if disc_track.settled(now):return True
         return prompt_detected_at is not None and now-prompt_detected_at>LANDING_WAIT_LIMIT_SECONDS
     def start_hold(evidence):
@@ -641,33 +645,27 @@ def main():
                             elif decision=='timeout':
                                 raise FishingFault('pickup_timeout','Pickup prompt remained ambiguous after wide scans',evidence=last_pickup_evidence)
                     elif stage=='pickup':
-                        if inp.t and pickup_tries<3:
+                        if inp.t and pickup_tries<3 and not (disc_repress_cycle==cycles and disc_represses>=3):
                             # Follow the held key disc every frame; OCR is too slow
                             # to see a drop land and replace its prompt.
                             position=disc_observe();now=time.monotonic()
                             if position is not None and hold_anchor is None:hold_anchor=position
                             if (position is not None and math.dist(position,hold_anchor)>HELD_DISC_MOVE_PIXELS
                                     and disc_track.settled(now)):
-                                inp.grab(False);time.sleep(.06);inp.grab(True);pickup_tries+=1;since=time.monotonic()
+                                # Re-presses on a landed disc do not use up the three
+                                # state-driven attempts; they are capped separately.
+                                inp.grab(False);time.sleep(.04);inp.grab(True);since=time.monotonic()
+                                disc_represses=disc_represses+1 if disc_repress_cycle==cycles else 1;disc_repress_cycle=cycles
                                 event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=last_prompt,
-                                      reason='Prompt disc landed elsewhere',from_center=hold_anchor,center=position)
+                                      reason='Prompt disc landed elsewhere',from_center=hold_anchor,center=position,repress=disc_represses)
                                 hold_anchor=position;collect_motion.start(Pickup('collect',last_prompt,position,position),since)
                             # Only trust absence when the disc stayed detectable mid-hold.
-                            if (hold_anchor is not None and disc_track.seen_at is not None and disc_track.seen_at-since>.2
-                                    and disc_track.missing_for(now)>=PROMPT_GONE_SECONDS):
-                                # The held prompt vanished: the claim is done. Read the
-                                # receipt briefly for the journal, then recast at once.
-                                gone_at=now;inp.grab(False);receipt=None
-                                while time.monotonic()-gone_at<.45:
-                                    first=pickup_toast()
-                                    if first.kind=='reward':
-                                        second=pickup_toast()
-                                        if same_reward(first,second):receipt=second;break
-                                event('pickup_prompt_gone',cycle=cycles,attempt=pickup_tries,hold_seconds=round(gone_at-since,3),
-                                      receipt=receipt.text if receipt else None,receipt_seconds=round(time.monotonic()-gone_at,3))
-                                if receipt is not None:record_reward(receipt.text)
-                                else:inventory.observe_unconfirmed(last_prompt,f'{session}:{cycles}:inventory')
-                                screenshot('collected',defer=True);start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS);continue
+                            if (hold_anchor is not None and disc_gone_logged!=(cycles,pickup_tries) and disc_track.seen_at is not None
+                                    and disc_track.seen_at-since>.2 and disc_track.missing_for(now)>=PROMPT_GONE_SECONDS):
+                                # Keep holding: at hold completion the disc can vanish
+                                # before the claim registers. Log the moment for timing.
+                                disc_gone_logged=(cycles,pickup_tries)
+                                event('pickup_disc_gone',cycle=cycles,attempt=pickup_tries,hold_seconds=round(now-since,3))
                         # The tiny toast is much faster than another scene OCR.
                         if now-since>.20 and now-last_toast_scan>.08:
                             last_toast_scan=time.monotonic()
