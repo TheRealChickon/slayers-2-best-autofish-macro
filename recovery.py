@@ -502,7 +502,6 @@ def main():
         if key==Key.f8:toggle.press()
         if key in (Key.esc,Key.f9,Key.f12) and driver.hwnd and win32gui.GetForegroundWindow()==driver.hwnd:
             stop.write_text('Stopped by physical hotkey')
-            save_config({'overnight_enabled':False,'overnight_auto_enable_idle':False})
     def released_key(key):
         if key==Key.f8:toggle.release()
     listener=Listener(on_press=emergency_key,on_release=released_key,win32_event_filter=lambda message,data:not data.flags&0x10);listener.start()

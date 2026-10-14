@@ -57,6 +57,7 @@ class Terminal:
     pages =('Run', 'Items', 'Logs', 'Settings', 'Predictions')
     categories = ('All', 'Catches', 'Recovery', 'Warnings')
     run_modes = ('assist', 'spot', 'full', 'here', 'rejoin')
+    other_modes = ('here', 'spot', 'assist', 'rejoin')
     mode_details = {
         'assist': ('green', 'you cast / auto reel'),
         'spot': ('cyan', 'cast / reel / collect'),
@@ -97,7 +98,7 @@ class Terminal:
     setting_help.update({'Purchase amount':'Whole number or k suffix. Budget is gold; quantity is Fish Heads. No purchase until Buy bait now.',
         'Amount type':'Choose gold budget or exact bait quantity.',
         'After purchase':'Optionally reset/rejoin and start Full farmer after every debit is verified.',
-        'Buy bait now':'Stand at Baitmonger Nori with the shop open and the farmer paused. Enter launches the standalone CLI.',
+        'Buy bait now':'Stand at Baitmonger Nori with the shop open. Enter pauses the farmer if needed and buys straight away.',
         'Resume bait purchase':'Reconcile an interrupted transaction, then finish the ORIGINAL remaining amount.',
         'Bait purchase status':'Read the CLI purchase log and actual controller liveness.'})
     setting_help.update({'Overnight enabled':'Persistent intent: physical input yields; Stop or turning this off prevents auto restart.',
@@ -138,6 +139,39 @@ class Terminal:
         self.build_at = 0
         import landmark_controls
         self.reference_position=landmark_controls.status()['position_enabled']
+        self.show_other_modes=False
+
+    def run_actions(self):
+        """Run page controls as (label, detail, accent, action); Full farmer leads."""
+        config=getattr(self,'config',None) or {}
+        kind=config.get('bait_buy_kind','budget');amount=config.get('bait_buy_amount',169000)
+        bait=f"{amount:,} gold" if kind=='budget' else f"{amount:,} Fish Heads"
+        running=(getattr(self,'data',None) or {}).get('running')
+        expanded=getattr(self,'show_other_modes',False)
+        rows=[('Continue Full farmer' if running else 'Start Full farmer','rejoin · equip rod · fish','gold',lambda:actions.resume('full')),
+              ('Pause','release input, keep counters','text',actions.pause),
+              ('Stop','hold until Continue','text',actions.stop),
+              ('Reset + start Full farmer','rejoin at the saved spawn','text',actions.restart_full),
+              ('Buy bait now',bait+' · pauses the farmer first','text',self.buy_bait_now),
+              ('Other modes','▾ hide' if expanded else '▸ Farm here, Fish here, Minigame, Rejoin','dim',None)]
+        if expanded:
+            rows+=[('   '+MODES[mode],self.mode_details[mode][1],self.mode_details[mode][0],(lambda mode=mode:actions.resume(mode)))
+                   for mode in self.other_modes]
+            rows.append(('   Export log','save the item log as CSV','dim',lambda:'Saved '+str(self.journal.export())))
+        return rows
+
+    def buy_bait_now(self):
+        """Pause a running farmer, wait for it to release the controller, then start the buyer."""
+        from bait_buy import launch
+        config=load_config()
+        if actions.alive() or actions.starting():
+            actions.pause()
+            until=time.monotonic()+20
+            while actions.alive() or actions.starting():
+                if time.monotonic()>until:raise RuntimeError('Farmer is still stopping; Buy bait again in a moment.')
+                time.sleep(.2)
+        kind=config.get('bait_buy_kind','budget')
+        return launch(then_full=config.get('bait_buy_then_full',False),**{kind:config.get('bait_buy_amount',169000)})
 
     def refresh(self):
         while not self.jobs.empty():
@@ -249,12 +283,12 @@ class Terminal:
         if self.page==4:
             self.edit('Prediction hours',self.prediction_hours);return
         if self.page == 0:
-            if self.selection < len(self.run_modes):
-                mode=self.run_modes[self.selection]
-                self.job(lambda:actions.resume(mode))
-            else:
-                self.job((actions.pause, actions.stop,
-                          lambda: 'Saved ' + str(self.journal.export()), actions.restart_full)[self.selection-len(self.run_modes)])
+            rows=self.run_actions()
+            action=rows[min(self.selection,len(rows)-1)][3]
+            if action is None:
+                self.show_other_modes=not getattr(self,'show_other_modes',False)
+                self.selection=min(self.selection,len(self.run_actions())-1)
+            else:self.job(action)
         elif self.page == 1:
             rows = self.item_rows()
             if rows:
@@ -274,14 +308,12 @@ class Terminal:
                 save_config({'bait_buy_kind':'quantity' if self.config.get('bait_buy_kind','budget')=='budget' else 'budget'});return
             if key=='After purchase':
                 save_config({'bait_buy_then_full':not self.config.get('bait_buy_then_full',False)});return
-            if key in ('Buy bait now','Resume bait purchase'):
+            if key=='Buy bait now':
+                self.job(self.buy_bait_now);return
+            if key=='Resume bait purchase':
                 from bait_buy import launch
                 after=self.config.get('bait_buy_then_full',False)
-                if key=='Resume bait purchase':self.job(lambda:launch('resume',then_full=after))
-                else:
-                    kind=self.config.get('bait_buy_kind','budget');amount=self.config.get('bait_buy_amount',169000)
-                    self.job(lambda:launch(then_full=after,**{kind:amount}))
-                return
+                self.job(lambda:launch('resume',then_full=after));return
             if key=='Bait purchase status':
                 saved=read('bait-buy-status.json')
                 self.toast(f"{saved.get('stage','Not started')}: {saved.get('bought',0):,} bought / {saved.get('spent',0):,} gold; "
@@ -401,8 +433,69 @@ class Terminal:
                 self.follow = key == 'END'
                 self.scroll = 0 if key == 'HOME' else limit if key == 'END' else max(0, min(limit, self.scroll+step))
             else:
-                count = len(self.run_modes)+4 if self.page == 0 else len(self.settings_keys) if self.page == 3 else len(self.item_rows())
+                count = len(self.run_actions()) if self.page == 0 else len(self.settings_keys) if self.page == 3 else len(self.item_rows())
                 self.selection = 0 if key == 'HOME' else max(0, count-1) if key == 'END' else max(0, min(count-1, self.selection+step))
+
+    def run_card(self, d, width):
+        """Run stats as titled sections with aligned label/value pairs."""
+        s=self.stats or {};t=s.get('timings') or {}
+        half=max(24,(width-2)//2)
+        pair=lambda label,value,tone='text':pad(tint(f'{label:<13}','dim')+tint(value,tone),half)
+        title=lambda text:tint(text,'gold')
+        gold=s.get('gold');per_hour=s.get('gold_per_hour')
+        sections=[[title('THIS RUN'),
+                   '  '+pair('Catches',f"{d['items']:,}",'gold')+pair('Hooks',f"{d['hooks']:,}"),
+                   '  '+pair('Fishing time',duration(d['active_seconds']))
+                   +pair('Gold','—' if gold is None else f'{gold:,}'+('' if per_hour is None else f'  ~{per_hour:,.0f}/h'),'gold'),
+                   '  '+tint(f"{'Last catch':<13}",'dim')+(d['last_item'] or '—')]]
+        recent=d.get('recent')
+        if recent:
+            sections.append([title('PACE')+'   '+tint(f"{recent['hooks_per_minute']:.2f} hooks/min  ·  {recent['items_per_minute']:.2f} items/min",'cyan')])
+        if t.get('sample'):
+            sections.append([title('ROUND TIMING'),
+                             '  '+pair('Cycle',seconds(t['cycle']),'cyan')+pair('Bite',seconds(t['cast_to_bite']),'cyan'),
+                             '  '+pair('Hold',seconds(t['end_to_hold']),'cyan')+pair('Collect',seconds(t['hold_to_reward']),'cyan'),
+                             '  '+pair('Recast',seconds(t['reward_to_cast']),'cyan')+pair('Empty recast',seconds(t['empty_to_cast']),'cyan')])
+        if s:
+            sections[-1].append('  '+tint(f"{s['rounds']:,} hooked  ·  {s['empty']} empty  ·  {s['failed']} failed"
+                                         +(f"  ·  {t['second_holds']} re-holds" if t.get('sample') else ''),'dim'))
+        amount=estimate(d, self.hours)
+        bait=(f"~{d['bait_remaining_estimate']:,} left" if d['bait_remaining_estimate'] is not None else 'unknown')
+        rows=[title('BAIT')+'   '+tint(f"{bait}  ·  {self.hours:g}h needs "+(f'~{amount:,}' if amount is not None else 'a rate sample'),'dim')]
+        alert=bait_warning(d) if d.get('running') or d.get('starting') else None
+        if alert:rows.append(tint(alert,'red'))
+        sections.append(rows)
+        return sections
+
+    def run_page(self, d, available, width):
+        """Full farmer front page: stats with room to breathe, controls, recent logs on the right."""
+        wide=width>=100
+        # Stats and controls need about 70 columns; the recent log takes the rest.
+        left_width=min(80,max(68,width//2)) if wide else width
+        sections=self.run_card(d,left_width-2)
+        if d.get('reason'):sections.insert(0,[tint(d['reason'],'gold')])
+        controls=[tint('CONTROLS','gold')]
+        for i,(label,detail,accent,_) in enumerate(self.run_actions()):
+            chosen=self.selection==i
+            active='  ◉' if d.get('running') and i==0 and d.get('mode')=='full' else ''
+            controls.append(tint(('› ' if chosen else '  ')+f'{label:<27}','selected' if chosen else accent)
+                            +tint(detail+active,'text' if chosen else 'dim'))
+        compact=[line for section in sections for line in section]+['']
+        spaced=[line for section in sections for line in section+['']]
+        # Sections get a blank line between them whenever the controls still fit.
+        stats=spaced if len(spaced)+len(controls)<=available else compact
+        rows=stats+controls
+        start=max(0,len(stats)+1+self.selection-available+1)
+        rows=rows[start:]
+        feed=lambda count:[tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+tint(r['text'],event_tone(r))
+                           for r in self.feed.rows[-count:]] if count>0 else []
+        if wide:
+            right=[tint('RECENT','gold')]+feed(available-1)
+            return [pad(rows[i] if i<len(rows) else '',left_width)+tint('│ ','dim')+(right[i] if i<len(right) else '')
+                    for i in range(available)]
+        if available>len(rows)+2:
+            rows+=['',tint('RECENT','gold')]+feed(available-len(rows)-2)
+        return rows[:available]
 
     def run_summary(self, d):
         """Run card: what was caught, what it is worth, and where the seconds go."""
@@ -479,37 +572,10 @@ class Terminal:
                 rows += [tint('NO CASTS · NO ATTACKS · NO GEAR CHANGES', 'dim'), '']
                 action_start = len(rows)
                 rows += [tint('› ' if self.selection == i else '  ', 'selected')+
-                         tint(MODES[mode]+'  /  '+self.mode_details[mode][1], 'gold' if self.selection==i else 'dim')
-                         for i,mode in enumerate(self.run_modes)]
-                rows += [tint('› ' if self.selection == i else '  ', 'selected')+label
-                         for i,label in enumerate(('Pause','Stop','Export log','Reset + start Full farmer'),start=len(self.run_modes))]
+                         tint(label+'  /  '+detail, 'gold' if self.selection==i else 'dim')
+                         for i,(label,detail,_,_) in enumerate(self.run_actions())]
                 return rows[max(0,action_start+self.selection-available+1):][:available]
-            rows = self.run_summary(d)
-            if d.get('reason'):rows[0:0]=[tint(d['reason'], 'gold'), '']
-            rows += [tint('CHOOSE THE HAND ON THE ROD', 'dim')]
-            action_start=len(rows)
-            for i, mode in enumerate(self.run_modes):
-                accent, detail = self.mode_details[mode]
-                marker = '› ' if self.selection == i else '  '
-                active = '  ◉' if d['running'] and d.get('mode') == mode else ''
-                rows.append(tint(marker + f'{MODES[mode]:<17}', 'selected' if self.selection == i else accent)
-                            + tint(detail + active, accent if self.selection == i else 'dim'))
-            rows += [tint('› ' + label, 'selected') if self.selection == i else '  ' + label
-                     for i, label in enumerate(('Pause', 'Stop', 'Export log','Reset + start Full farmer'), start=len(self.run_modes))]
-            # Keep the chosen mode/control visible in a short terminal.
-            start=max(0,action_start+self.selection-available+1)
-            rows=rows[start:]
-            feed=lambda count:[tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+tint(r['text'],event_tone(r))
-                               for r in self.feed.rows[-count:]] if count>0 else []
-            left_width=62
-            if getattr(self,'width',0)-4>=left_width+40:
-                # Wide terminal: run card and controls on the left, live events beside them.
-                right=[tint('RECENT', 'dim')]+feed(available-1)
-                return [pad(rows[i] if i<len(rows) else '',left_width)+'  '+(right[i] if i<len(right) else '')
-                        for i in range(min(available,max(len(rows),len(right))))]
-            if available > len(rows)+2:
-                rows += ['', tint('RECENT', 'dim')]+feed(available-len(rows)-2)
-            return rows
+            return self.run_page(d,available,getattr(self,'width',100)-4)
         if self.page == 1:
             rows = self.item_rows()
             visible = max(1, available-2)
@@ -554,7 +620,7 @@ class Terminal:
             'Purchase amount':f"{self.config.get('bait_buy_amount',169000):,}",
             'Amount type':'Gold budget' if self.config.get('bait_buy_kind','budget')=='budget' else 'Fish Head quantity',
             'After purchase':'Reset + start Full farmer' if self.config.get('bait_buy_then_full',False) else 'Stay at seller',
-            'Buy bait now':'Enter to launch CLI','Resume bait purchase':'Finish interrupted amount',
+            'Buy bait now':'Enter to buy','Resume bait purchase':'Finish interrupted amount',
             'Bait purchase status':read('bait-buy-status.json').get('stage','Not started'),
             'Record bait route':'Enter while paused','Open bait recordings':'Video, inputs and checkpoints',
             'Auto focus':'On' if self.config['overnight_autofocus'] else 'Off',

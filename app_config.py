@@ -12,6 +12,8 @@ MODES = {'full': 'Full farmer', 'here':'Farm here', 'assist': 'Minigame only', '
          'rejoin': 'Auto rejoin'}
 GUI_MODES = {key: label for key, label in MODES.items() if key != 'rejoin'}
 CONFIG = ROOT / 'config.local.json'
+# Bump to switch Overnight and Auto-enable after idle back on once in every saved config.
+OVERNIGHT_DEFAULTS_VERSION = 2
 DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             'rod_slot': 5, 'auto_rod': True, 'reduced_motion': False, 'inventory_check': True,
             'place_id': 16205713724, 'mode': 'full', 'cast_point': list(DEFAULT_CAST_POINT),
@@ -23,7 +25,7 @@ DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             'overnight_auto_enable_idle':True,'overnight_idle_minutes':10,
             'overnight_focus_grace_seconds':30,'bait_reserve':2500,'bait_refill_buffer':500,
             # Drop the caught item with a click, recast at once, and claim it while the line is out.
-            'drop_cast':False}
+            'drop_cast':False,'overnight_defaults_version':OVERNIGHT_DEFAULTS_VERSION}
 
 
 def validate_options(values):
@@ -60,7 +62,13 @@ def validate_options(values):
 def load_config():
     values = dict(DEFAULTS)
     if CONFIG.exists():
-        values.update(json.loads(CONFIG.read_text(encoding='utf-8-sig')))
+        saved = json.loads(CONFIG.read_text(encoding='utf-8-sig'))
+        if saved.get('overnight_defaults_version', 0) < OVERNIGHT_DEFAULTS_VERSION:
+            saved.update({'overnight_enabled': True, 'overnight_auto_enable_idle': True,
+                          'overnight_defaults_version': OVERNIGHT_DEFAULTS_VERSION})
+            from discord_hourly import atomic_json
+            atomic_json(CONFIG, saved)
+        values.update(saved)
     if values['mode'] in ('farm_here','farm-here'):values['mode']='here'
     if not 1 <= int(values['rod_slot']) <= 9:
         raise ValueError('Rod slot must be between 1 and 9')

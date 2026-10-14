@@ -261,12 +261,14 @@ class Reliability(unittest.TestCase):
         driver.hwnd=123;driver.inp=Mock();driver.guard=Mock();driver.check_stop=Mock();driver.sct=Mock();driver.select=Mock();driver.event=Mock()
         driver.screen=Mock(actual_width=2560,actual_height=1440)
         driver.sleep=Mock(side_effect=recovery.UserStop('Stopped by user'))
-        with patch.object(recovery,'find_window',return_value=123),patch.object(recovery,'USER') as user:
+        # A live farmer's PAUSE file must not leak into this test.
+        temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
+        with patch.object(recovery,'RUN',Path(temporary.name)),patch.object(recovery,'find_window',return_value=123),patch.object(recovery,'USER') as user:
             with self.assertRaises(recovery.UserStop):driver.refresh_display()
             self.assertEqual(user.keybd_event.call_args_list[-1].args[2],2)
         driver.sct.reset.assert_not_called();driver.inp.release.assert_called_once()
         driver.sleep=Mock()
-        with patch.object(recovery,'find_window',return_value=123),patch.object(recovery,'USER'):
+        with patch.object(recovery,'RUN',Path(temporary.name)),patch.object(recovery,'find_window',return_value=123),patch.object(recovery,'USER'):
             driver.refresh_display()
         driver.sct.reset.assert_called_once();driver.select.assert_called_once()
 

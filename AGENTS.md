@@ -34,10 +34,12 @@ Do not enable it outside an authorized period or extend its expiry silently.
 Physical activity telemetry is timestamps only. Never bypass the normal input
 gate or restore focus while the user is active or a manual stop/pause is set.
 
-Overnight and Auto-enable after idle default to on when no setting is saved,
-with a ten-minute idle delay and no clock or night condition. Preserve a saved
-Off. Off and explicit Stop disarm future idle activation; manual Pause/F8 retain
-intent but block the restart guard until Continue. Idle activation requires Player
+Overnight and Auto-enable after idle default to on, with a ten-minute idle
+delay and no clock or night condition. Configs saved before
+`overnight_defaults_version` 2 are switched back on once at load; after that a
+saved Off from the Overnight toggle is preserved. Stop, Esc/F9/F12 and Pause/F8
+are manual holds that block the restart guard until Continue; they no longer
+save Overnight off. Idle activation requires Player
 open and enabled autofocus/idle settings. All input
 injection is tagged; only hardware activity counts as human input. Yield for the
 configured grace after competing injected input instead of fighting other apps.

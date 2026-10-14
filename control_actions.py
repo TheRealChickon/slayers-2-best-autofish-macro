@@ -86,7 +86,7 @@ def stop():
     with guard():
         (RUN / 'STOP').write_text('Stopped by user')
         (RUN / 'PAUSE').unlink(missing_ok=True)
-        save_config({'overnight_enabled':False,'overnight_auto_enable_idle':False})
+        # The STOP file is the hold; Overnight keeps its saved setting for the next Continue.
         event('stop', 'Stopped by user; saved totals retained.')
     return 'Stop requested. Saved totals are retained.'
 

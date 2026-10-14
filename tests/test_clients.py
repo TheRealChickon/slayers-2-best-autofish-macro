@@ -90,6 +90,13 @@ class IsolatedState(unittest.TestCase):
         self.assertFalse(app_config.load_config()['overnight_enabled'])
         self.assertFalse(app_config.load_config()['overnight_auto_enable_idle'])
 
+    def test_overnight_switches_back_on_once_for_an_older_saved_off(self):
+        app_config.CONFIG.write_text(json.dumps({'overnight_enabled':False,'overnight_auto_enable_idle':False}))
+        config=app_config.load_config()
+        self.assertTrue(config['overnight_enabled']);self.assertTrue(config['overnight_auto_enable_idle'])
+        app_config.save_config({'overnight_enabled':False})
+        self.assertFalse(app_config.load_config()['overnight_enabled'])
+
     def test_log_navigation_reaches_last_row_without_enabling_follow(self):
         app=terminal_app.Terminal();app.page=2;app.height=22;app.follow=False
         app.feed.rows=[{'text':f'entry-{i}','at':i,'level':'normal','group':'fishing'} for i in range(100)]
@@ -325,16 +332,27 @@ class IsolatedState(unittest.TestCase):
         with patch.object(control_actions,'stop',return_value='Stopped') as stop:
             app.key('s'); stop.assert_called_once()
 
-    def test_run_page_launches_each_explicit_mode_without_changing_focus_itself(self):
+    def test_run_page_leads_with_full_farmer_and_keeps_other_modes_one_level_down(self):
         app=terminal_app.Terminal()
         with patch.object(app,'job',side_effect=lambda fn:fn()), patch.object(control_actions,'resume') as resume,\
                 patch.object(control_actions,'restart_full') as restart,patch.object(control_actions,'focus_game') as focus:
-            for index,mode in enumerate(('assist','spot','full','here','rejoin')):
-                app.selection=index;app.key('ENTER')
-                resume.assert_called_with(mode)
-            app.key('END');self.assertEqual(app.selection,8)
-            app.key('ENTER');restart.assert_called_once_with()
+            app.selection=0;app.key('ENTER');resume.assert_called_with('full')
+            app.selection=3;app.key('ENTER');restart.assert_called_once_with()
+            app.key('END');self.assertEqual(app.selection,5)
+            app.key('ENTER');self.assertTrue(app.show_other_modes)
+            for offset,mode in enumerate(('here','spot','assist','rejoin')):
+                app.selection=6+offset;app.key('ENTER');resume.assert_called_with(mode)
+            app.key('END');self.assertEqual(app.selection,10)
             self.assertEqual(resume.call_count,5);focus.assert_not_called()
+
+    def test_buy_bait_now_pauses_a_running_farmer_before_launching(self):
+        app=terminal_app.Terminal()
+        live=[True,True,False]
+        with patch.object(control_actions,'alive',side_effect=lambda *a:live.pop(0) if live else False),\
+                patch.object(control_actions,'starting',return_value=False),\
+                patch.object(control_actions,'pause') as pause,patch('bait_buy.launch',return_value='launched') as launch:
+            self.assertEqual(app.buy_bait_now(),'launched')
+        pause.assert_called_once();launch.assert_called_once()
 
     def test_run_modes_and_stop_reason_are_visible_with_keyboard_scrolling(self):
         (self.root/'STOP').write_text('Stopped by F12 in Roblox')
@@ -344,11 +362,10 @@ class IsolatedState(unittest.TestCase):
         self.assertIn('Stopped by F12 in Roblox','\n'.join(fishing_cli.status_lines(data)))
         app=terminal_app.Terminal();app.data=data
         normal='\n'.join(app.render(100,32))
-        for text in ('Minigame only','Fish here','Full farmer','Stopped by F12 in Roblox'):
+        for text in ('Start Full farmer','Other modes','Full farmer','Stopped by F12 in Roblox','RECENT'):
             self.assertIn(text,normal)
-        for text in ('reel', 'cast', 'collect', 'rejoin'):
-            self.assertIn(text,normal)
-        for index,label in enumerate(('Minigame only','Fish here','Full farmer','Farm here','Auto rejoin','Pause','Stop','Export log')):
+        app.show_other_modes=True
+        for index,(label,_,_,_) in enumerate(app.run_actions()):
             app.selection=index
             self.assertIn('› '+label,'\n'.join(app.render(65,22)))
 
