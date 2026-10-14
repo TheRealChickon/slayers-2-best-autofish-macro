@@ -7,8 +7,13 @@ from reward_evidence import reward_quantity
 FIRST_COLLECT_HOLD_GRACE_SECONDS = .25
 
 
+# All 404 successful holds on 2026-10-14 claimed within 2.72 s of T-down (2 s game hold
+# plus toast confirmation); a hold still unclaimed past ~3 s is on a replaced prompt.
+COLLECT_HOLD_SECONDS = 2.75
+
+
 def collect_hold_timeout(attempt):
-    return 3.5+(FIRST_COLLECT_HOLD_GRACE_SECONDS if attempt==1 else 0)
+    return COLLECT_HOLD_SECONDS+(FIRST_COLLECT_HOLD_GRACE_SECONDS if attempt==1 else 0)
 
 
 @dataclass(frozen=True)

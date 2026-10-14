@@ -367,12 +367,12 @@ class PendingPickupTests(unittest.TestCase):
         self.assertTrue(any(state['stage']=='tracking' for state in states))
 
     def test_first_hold_collects_late_reward_without_releasing_and_retrying(self):
-        events,inputs,states,error,inventory=self.drive(reward_after=3.6,stationary_prompt=True)
+        events,inputs,states,error,inventory=self.drive(reward_after=2.85,stationary_prompt=True)
         self.assertIsNone(error)
         t_down=[at for kind,flags,at in inputs if kind=='T' and flags==0]
         self.assertEqual(len(t_down),1)
         t_up=next(at for kind,flags,at in inputs if kind=='T' and flags==2)
-        self.assertGreaterEqual(t_up-t_down[0],3.6)
+        self.assertGreaterEqual(t_up-t_down[0],2.85)
         self.assertEqual(sum(event['event']=='reward_observed' for event in events),1)
         self.assertFalse(states[-1]['held_t'])
 
@@ -395,10 +395,10 @@ class PendingPickupTests(unittest.TestCase):
             if flags==0:down=at
             elif down is not None:holds.append(at-down);down=None
         self.assertGreaterEqual(len(holds),2)
-        self.assertGreaterEqual(holds[0],3.75)
-        self.assertLess(holds[0],4.15)
-        self.assertGreaterEqual(holds[1],3.5)
-        self.assertLess(holds[1],3.9)
+        self.assertGreaterEqual(holds[0],3.0)
+        self.assertLess(holds[0],3.4)
+        self.assertGreaterEqual(holds[1],2.75)
+        self.assertLess(holds[1],3.15)
 
     def test_adopted_minigame_waits_for_markers_without_casting_over_visible_ui(self):
         events,inputs,states,error,inventory=self.drive('empty',active_minigame=True,current_position=True,
