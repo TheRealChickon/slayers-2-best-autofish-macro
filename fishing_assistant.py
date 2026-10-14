@@ -41,6 +41,8 @@ CAST_PRESS_SECONDS = .16
 PROMPT_REGION = (480,150,1630,1110)
 LANDING_WAIT_LIMIT_SECONDS = 1.8
 HELD_DISC_MOVE_PIXELS = 40
+# A held disc absent this long (several 30-60 Hz frames) means the prompt is gone.
+PROMPT_GONE_SECONDS = .15
 
 def move_pointer(x,y):
     # Both monitors are valid; coordinates are absolute virtual-desktop pixels.
@@ -650,6 +652,22 @@ def main():
                                 event('pickup_hold',cycle=cycles,attempt=pickup_tries,prompt_seen=True,text=last_prompt,
                                       reason='Prompt disc landed elsewhere',from_center=hold_anchor,center=position)
                                 hold_anchor=position;collect_motion.start(Pickup('collect',last_prompt,position,position),since)
+                            # Only trust absence when the disc stayed detectable mid-hold.
+                            if (hold_anchor is not None and disc_track.seen_at is not None and disc_track.seen_at-since>.2
+                                    and disc_track.missing_for(now)>=PROMPT_GONE_SECONDS):
+                                # The held prompt vanished: the claim is done. Read the
+                                # receipt briefly for the journal, then recast at once.
+                                gone_at=now;inp.grab(False);receipt=None
+                                while time.monotonic()-gone_at<.45:
+                                    first=pickup_toast()
+                                    if first.kind=='reward':
+                                        second=pickup_toast()
+                                        if same_reward(first,second):receipt=second;break
+                                event('pickup_prompt_gone',cycle=cycles,attempt=pickup_tries,hold_seconds=round(gone_at-since,3),
+                                      receipt=receipt.text if receipt else None,receipt_seconds=round(time.monotonic()-gone_at,3))
+                                if receipt is not None:record_reward(receipt.text)
+                                else:inventory.observe_unconfirmed(last_prompt,f'{session}:{cycles}:inventory')
+                                screenshot('collected',defer=True);start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS);continue
                         # The tiny toast is much faster than another scene OCR.
                         if now-since>.20 and now-last_toast_scan>.08:
                             last_toast_scan=time.monotonic()
