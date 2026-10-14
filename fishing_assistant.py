@@ -633,6 +633,9 @@ def main():
                                     event('drop_cast_claimed',cycle=cp['cycle'],text=receipt.text,
                                           drop_to_claim_seconds=round(now-cp['dropped'],3),holds=cp['holds'])
                                     claim_pending=None
+                                    # Completing the claim almost always cancels the line cast
+                                    # during it; recast now instead of waiting out the bite timer.
+                                    stage='casting';since=now;needs_scene_check=False;scene_check_started=None
                                 elif now-cp['hold_at']>collect_hold_timeout(cp['holds']):
                                     inp.grab(False)  # Rescan; a persisting prompt gets another hold.
                         if now-since>BITE_WAIT_TIMEOUT_SECONDS:
