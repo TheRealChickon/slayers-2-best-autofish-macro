@@ -136,10 +136,10 @@ class Reliability(unittest.TestCase):
         # 99.5% of logged prompts are readable within 1.36 s; later drops are
         # collected by the pre-cast and waiting-stage scene checks.
         self.assertEqual(waiting_decision(absent,True,1.4,True,100),'wait')
-        self.assertEqual(waiting_decision(absent,True,1.9,True,100),'wait')
+        self.assertEqual(waiting_decision(absent,True,1.55,True,100),'wait')
         self.assertEqual(waiting_decision(prompt,True,1.95,True,100),'collect')
-        self.assertEqual(waiting_decision(absent,True,2.1,True,100),'empty')
-        self.assertEqual(waiting_decision(absent,False,2.1,True,100),'wait')
+        self.assertEqual(waiting_decision(absent,True,1.7,True,100),'empty')
+        self.assertEqual(waiting_decision(absent,False,1.7,True,100),'wait')
         self.assertEqual(waiting_decision(absent,True,1.6,False,100),'empty')
         self.assertEqual(waiting_decision(absent,True,1.6,True,0),'empty')
         self.assertEqual(waiting_decision(prompt,False,1,True,100),'wait')
