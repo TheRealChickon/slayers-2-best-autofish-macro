@@ -637,7 +637,7 @@ def main():
                                     inp.grab(False)  # Rescan; a persisting prompt gets another hold.
                         if now-since>BITE_WAIT_TIMEOUT_SECONDS:
                             missing_casts+=1;event('no_minigame',count=missing_casts);screenshot('missing')
-                            if drop_cast_at_cast==casts and drop_cast_gap<1.2:
+                            if drop_cast_at_cast==casts and drop_cast_gap<.5:
                                 # The recast right after a drop did not take; wait longer next time.
                                 drop_cast_gap=round(drop_cast_gap+.2,2);event('drop_cast_gap',seconds=drop_cast_gap)
                             if first_person_active:
@@ -676,7 +676,11 @@ def main():
                                 drop_cast_at_cast=casts+1
                                 drop_eligible=False
                                 claim_pending={'cycle':cycles,'text':evidence.text,'dropped':time.monotonic(),'hold_at':None,'holds':0}
-                                event('drop_cast_drop',cycle=cycles,text=evidence.text,gap_seconds=round(drop_cast_gap,2))
+                                # Completing a claim after the line lands reels it in (22 of 23
+                                # trials). Start the 2 s claim hold now so it finishes while the
+                                # cast is still in the air.
+                                inp.grab(True);claim_pending['hold_at']=time.monotonic();claim_pending['holds']=1;last_toast_scan=0
+                                event('drop_cast_drop',cycle=cycles,text=evidence.text,gap_seconds=round(drop_cast_gap,2),hold_first=True)
                                 stage='casting';since=time.monotonic();needs_scene_check=False;scene_check_started=None
                             elif decision=='collect' and collect_is_ready:
                                 if landed(now):start_hold(evidence)
