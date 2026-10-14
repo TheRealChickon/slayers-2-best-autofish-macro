@@ -201,7 +201,7 @@ def main():
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_toast_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
     cooldown_delay=1.0;prompt_detected_at=None;reward_gate=RewardGate();collect_motion=CollectHoldMotion();collect_ready=CollectReadyGate()
     confirmed_recast=None;reward_confirmed_at=None
-    disc_track=DiscTrack();pending_collect=None;hold_anchor=None;landing_wait_logged=False;disc_gone_logged=None;disc_represses=0;disc_repress_cycle=None;claim_pending=None
+    disc_track=DiscTrack();pending_collect=None;hold_anchor=None;landing_wait_logged=False;disc_gone_logged=None;disc_represses=0;disc_repress_cycle=None;claim_pending=None;drop_cast_gap=.3;drop_cast_at_cast=None
     last_verified_rod=None
     needs_scene_check=True;scene_check_started=None;hooked_cycles=0;last_wait_pickup_check=0;startup_ui_wait_since=None
     last_reference_check=0;reference_matcher=None;paused_at=None
@@ -637,6 +637,9 @@ def main():
                                     inp.grab(False)  # Rescan; a persisting prompt gets another hold.
                         if now-since>BITE_WAIT_TIMEOUT_SECONDS:
                             missing_casts+=1;event('no_minigame',count=missing_casts);screenshot('missing')
+                            if drop_cast_at_cast==casts and drop_cast_gap<1.2:
+                                # The recast right after a drop did not take; wait longer next time.
+                                drop_cast_gap=round(drop_cast_gap+.2,2);event('drop_cast_gap',seconds=drop_cast_gap)
                             if first_person_active:
                                 # The game's camera can slowly pitch into a nearby
                                 # railing. Scrolling out and moving the pointer while
@@ -669,9 +672,10 @@ def main():
                                 # Drop-cast mode: one click drops the caught item, the next
                                 # press recasts, and T claims the drop while the line is out.
                                 last_prompt=evidence.text;inp.release()
-                                inp.hold(True);time.sleep(.05);inp.hold(False);time.sleep(.08)
+                                inp.hold(True);time.sleep(.05);inp.hold(False);time.sleep(drop_cast_gap)
+                                drop_cast_at_cast=casts+1
                                 claim_pending={'cycle':cycles,'text':evidence.text,'dropped':time.monotonic(),'hold_at':None,'holds':0}
-                                event('drop_cast_drop',cycle=cycles,text=evidence.text)
+                                event('drop_cast_drop',cycle=cycles,text=evidence.text,gap_seconds=round(drop_cast_gap,2))
                                 stage='casting';since=time.monotonic();needs_scene_check=False;scene_check_started=None
                             elif decision=='collect' and collect_is_ready:
                                 if landed(now):start_hold(evidence)
