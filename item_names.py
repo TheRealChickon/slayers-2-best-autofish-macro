@@ -1,7 +1,10 @@
 """Canonical names shared by inventory reconciliation and reward journals."""
 import re
 
-KNOWN={'coral':'Coral','silkthread':'Silk Thread','metalscraps':'Metal Scraps','seahorse':'Sea Horse','ouwfwesh':'OuwFwesh','ouwfish':'OuwFish','goldenfish':'Golden Fish','zebrafish':'Zebra Fish','clownfish':'Clown Fish','ore':'Ore'}
+KNOWN={'coral':'Coral','silkthread':'Silk Thread','metalscraps':'Metal Scraps','seahorse':'Sea Horse','ouwfwesh':'OuwFwesh','ouwfish':'OuwFish','goldenfish':'Golden Fish','zebrafish':'Zebra Fish','clownfish':'Clown Fish','ore':'Ore',
+       'krathulon':'Krathulon','crustadon':'Crustadon','squidbeanie':'Squid Beanie','refinementore':'Refinement Ore',
+       'mythicrefinementore':'Mythic Refinement Ore','shotgunschematic':'Shotgun Schematic','lostmask':'Lost Mask',
+       'lostoutfit':'Lost Outfit','lostlantern':'Lost Lantern','lostcape':'Lost Cape','lostshotgun':'Lost Shotgun'}
 
 
 def inventory_name(raw):
@@ -20,9 +23,11 @@ def item_name(raw,prompt=''):
     value=clean(raw);hint=clean(prompt)
     if value in known:return known[value]
     if hint in known:return known[hint]
-    for key,label in known.items():
-        if len(key)>=4 and value.endswith(key):return label
-    aliases={'wfwesh':'OuwFwesh','uwfwesh':'OuwFwesh','quwfwesh':'OuwFwesh','uwfish':'OuwFish','wfish':'OuwFish','etalscraps':'Metal Scraps','ilkthread':'Silk Thread'}
+    # Longest names first, so "Mythic Refinement Ore" wins over "Refinement Ore".
+    for source in (value,hint):
+        for key,label in sorted(known.items(),key=lambda pair:-len(pair[0])):
+            if len(key)>=4 and source.endswith(key):return label
+    aliases={'wfwesh':'OuwFwesh','uwfwesh':'OuwFwesh','quwfwesh':'OuwFwesh','uwfish':'OuwFish','wfish':'OuwFish','etalscraps':'Metal Scraps','ilkthread':'Silk Thread','mythicrefinemen':'Mythic Refinement Ore','livinglegendkrathulon':'Krathulon','livinglegendcrustadon':'Crustadon'}
     if value in aliases:return aliases[value]
     if not value:return 'Unidentified item'
     name=re.sub(r'\bx\s*\d+\b|\bnew!?\b','',raw,flags=re.I).strip(' !')

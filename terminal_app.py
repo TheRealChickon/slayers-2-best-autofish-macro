@@ -43,8 +43,18 @@ def clip(line, width):
     return ''.join(pieces) + RESET
 
 
+def pad(line, width):
+    """Clip or pad to a visible width, ignoring color escapes."""
+    visible = len(ANSI.sub('', line))
+    return clip(line, width) if visible > width else line + ' '*(width-visible)
+
+
+def seconds(value):
+    return '—' if value is None else f'{value:.1f}s'
+
+
 class Terminal:
-    pages = ('Run', 'Items', 'Logs', 'Settings', 'Predictions')
+    pages =('Run', 'Items', 'Logs', 'Settings', 'Predictions')
     categories = ('All', 'Catches', 'Recovery', 'Warnings')
     run_modes = ('assist', 'spot', 'full', 'here', 'rejoin')
     mode_details = {
@@ -118,6 +128,7 @@ class Terminal:
         self.notice_until = 0
         self.hours = 8.0
         self.prediction_hours=8.;self.prediction_at=0.;self.predictions={}
+        self.stats={};self.stats_at=-60.;self.width=100
         self.height = 30
         self.last_lines = []
         self.changed_at = time.monotonic()
@@ -140,6 +151,12 @@ class Terminal:
             from catch_predictions import load
             self.predictions=load(data_directory(),self.data.get('log_run') or {},self.prediction_hours)
             self.prediction_at=time.monotonic()
+        if self.page==0 and time.monotonic()-self.stats_at>=10:
+            self.stats_at=time.monotonic()
+            try:
+                import session_stats
+                self.stats=session_stats.compute(data_directory(),self.data.get('log_run') or {})
+            except Exception:self.stats={}
         self.effects.observe(self.journal.items, self.data['started'], time.time(), time.monotonic())
         from run_log import select
         log_run=select(data_directory(),self.log_run_id)
@@ -386,6 +403,33 @@ class Terminal:
                 count = len(self.run_modes)+4 if self.page == 0 else len(self.settings_keys) if self.page == 3 else len(self.item_rows())
                 self.selection = 0 if key == 'HOME' else max(0, count-1) if key == 'END' else max(0, min(count-1, self.selection+step))
 
+    def run_summary(self, d):
+        """Run card: what was caught, what it is worth, and where the seconds go."""
+        label=lambda text:tint(f'{text:<7}','dim')
+        s=self.stats or {}
+        gold=s.get('gold');per_hour=s.get('gold_per_hour')
+        rows=[label('CATCH')+tint(f"{d['items']:,}",'gold')+tint('   HOOK ','dim')+f"{d['hooks']:,}"
+              +tint('   TIME ','dim')+duration(d['active_seconds']),
+              label('GOLD')+tint('—' if gold is None else f'{gold:,}','gold')
+              +tint('   PER HOUR ','dim')+tint('—' if per_hour is None else f'~{per_hour:,.0f}','gold'),
+              label('LAST')+(d['last_item'] or '—')]
+        recent=d.get('recent')
+        if recent:
+            rows.append(label('PACE')+tint(f"{recent['hooks_per_minute']:.2f} hooks/min  ·  {recent['items_per_minute']:.2f} items/min",'cyan'))
+        t=s.get('timings') or {}
+        if t.get('sample'):
+            rows+=[label('SPEED')+tint(f"cycle {seconds(t['cycle'])}  ·  bite {seconds(t['cast_to_bite'])}  ·  hold {seconds(t['end_to_hold'])}",'cyan'),
+                   label('')+tint(f"collect {seconds(t['hold_to_reward'])}  ·  recast {seconds(t['reward_to_cast'])}  ·  empty {seconds(t['empty_to_cast'])}",'cyan')]
+        if s:
+            rows.append(label('ROUNDS')+tint(f"{s['rounds']:,} hooked  ·  {s['empty']} empty  ·  {s['failed']} failed"
+                                            +(f"  ·  {t['second_holds']} re-holds" if t.get('sample') else ''),'dim'))
+        amount=estimate(d, self.hours)
+        bait=(f"~{d['bait_remaining_estimate']:,} left" if d['bait_remaining_estimate'] is not None else 'unknown')
+        rows+=[label('BAIT')+tint(f"{bait}  ·  {self.hours:g}h needs "+(f'~{amount:,}' if amount is not None else 'a rate sample'),'dim'),'']
+        alert=bait_warning(d) if d.get('running') or d.get('starting') else None
+        if alert:rows+=[tint(alert,'red')]
+        return rows
+
     def prediction_rows(self):
         p=self.predictions
         if not p:return ['Reading current-run catch logs…']
@@ -394,21 +438,24 @@ class Terminal:
               f"Worker-active {duration(p['active_seconds'])}   ·   Elapsed {duration(p['elapsed_seconds'])}",
               f"{p['unique_catches']} unique catches / {p['quantity']} units   ·   Observed {rate}"]
         rows.extend(tint(w,'gold') for w in p['warnings'])
-        rows+=['',tint('ITEM                     CATCHES / UNITS    /HOUR    PROJECTED    WEN/EACH','dim')]
+        value='Unknown' if p['known_price_subtotal_wen'] is None else f"{p['known_price_subtotal_wen']:,} gold"
+        hourly=p.get('known_price_per_hour_wen')
+        projected_value='Unavailable' if p['projected_known_price_subtotal_wen'] is None else f"~{p['projected_known_price_subtotal_wen']:,.0f} gold"
+        rows+=['',tint('GOLD','dim')+'  '+tint(value,'gold')+tint('   PER HOUR','dim')+'  '+tint('—' if hourly is None else f'~{hourly:,.0f}','gold')
+               +tint(f"   IN {p['hours']:g}H",'dim')+'  '+tint(projected_value,'gold')]
+        rows+=['',tint('FISH                     CATCHES / UNITS    /HOUR    PROJECTED   GOLD/EACH     GOLD','dim')]
         for item in p['items']:
             rate='—' if item['items_per_hour'] is None else f"{item['items_per_hour']:.1f}"
             projected='insufficient' if item['projected_quantity'] is None else f"~{item['projected_quantity']:.1f}"
-            price='Unknown' if item['unit_price_wen'] is None else str(item['unit_price_wen'])
-            rows.append(f"{item['name'][:24]:<24} {item['catches']:>6} / {item['quantity']:<5} {rate:>8} {projected:>12} {price:>11}")
-        value='Unknown' if p['known_price_subtotal_wen'] is None else f"{p['known_price_subtotal_wen']:,} Wen"
-        projected_value='Unavailable' if p['projected_known_price_subtotal_wen'] is None else f"~{p['projected_known_price_subtotal_wen']:,.0f} Wen"
-        sold='No confirmed sales logged' if p['actual_sold_proceeds_wen'] is None else f"{p['actual_sold_proceeds_wen']:,} Wen"
-        rows+=['',f"Estimated NPC value: known-price subtotal {value}",
-               f"Projected known-price subtotal for {p['hours']:g}h: {projected_value}",
-               f"Unpriced units: {p['unknown_price_quantity']}  ·  Actual sold proceeds: {sold}",
-               tint('Worker-active time includes casting, pickup and inventory work.','dim'),
-               tint('Projections assume the observed pace continues. Prices are user-provided.','dim'),
-               tint('Crustadon/Krathulon 110 Wen is historical only; current price unknown.','dim')]
+            price='—' if item['unit_price_wen'] is None else str(item['unit_price_wen'])+('*' if item.get('price_inferred') else '')
+            earned='—' if item['estimated_npc_value_wen'] is None else f"{item['estimated_npc_value_wen']:,}"
+            rows.append(tint(f"{item['name'][:24]:<24} {item['catches']:>6} / {item['quantity']:<5} {rate:>8} {projected:>12} {price:>11} {earned:>8}",
+                             'text' if item['unit_price_wen'] is not None else 'dim'))
+        sold='No confirmed sales logged' if p['actual_sold_proceeds_wen'] is None else f"{p['actual_sold_proceeds_wen']:,} gold"
+        rows+=['',f"Unpriced units (materials, ores): {p['unknown_price_quantity']}  ·  Actual sold proceeds: {sold}",
+               tint('Gold = Ginzo NPC sell price × units; fish only. * estimated (rarity tier or older build).','dim'),
+               tint('Crustadon/Krathulon 110 gold* is the last published (older-build) price.','dim'),
+               tint('Projections assume the observed worker-active pace continues.','dim')]
         return rows
 
     def body(self, available):
@@ -436,19 +483,7 @@ class Terminal:
                 rows += [tint('› ' if self.selection == i else '  ', 'selected')+label
                          for i,label in enumerate(('Pause','Stop','Export log','Reset + start Full farmer'),start=len(self.run_modes))]
                 return rows[max(0,action_start+self.selection-available+1):][:available]
-            amount = estimate(d, self.hours)
-            rows = [tint('CATCH', 'dim') + '  ' + tint(f"{d['items']:,}", 'gold') +
-                    tint('     HOOK', 'dim') + f"  {d['hooks']:,}" +
-                    tint('     TIME', 'dim') + f"  {duration(d['active_seconds'])}",
-                    tint('LAST ', 'dim') + '  ' + (d['last_item'] or '—')]
-            recent=d.get('recent')
-            if recent:
-                rows.append(tint('PACE ', 'dim') + '  ' +
-                            tint(f"{recent['hooks_per_minute']:.2f} hooks/min   ·   {recent['items_per_minute']:.2f} items/min",'cyan'))
-            bait=(f"~{d['bait_remaining_estimate']:,} left" if d['bait_remaining_estimate'] is not None else 'unknown')
-            rows += [tint(f"BAIT   {bait}   /   {self.hours:g}h needs " + (f'~{amount:,}' if amount is not None else 'a rate sample'),'dim'), '']
-            alert=bait_warning(d) if d.get('running') or d.get('starting') else None
-            if alert:rows += [tint(alert,'red')]
+            rows = self.run_summary(d)
             if d.get('reason'):rows[0:0]=[tint(d['reason'], 'gold'), '']
             rows += [tint('CHOOSE THE HAND ON THE ROD', 'dim')]
             action_start=len(rows)
@@ -463,9 +498,16 @@ class Terminal:
             # Keep the chosen mode/control visible in a short terminal.
             start=max(0,action_start+self.selection-available+1)
             rows=rows[start:]
+            feed=lambda count:[tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+tint(r['text'],event_tone(r))
+                               for r in self.feed.rows[-count:]] if count>0 else []
+            left_width=62
+            if getattr(self,'width',0)-4>=left_width+40:
+                # Wide terminal: run card and controls on the left, live events beside them.
+                right=[tint('RECENT', 'dim')]+feed(available-1)
+                return [pad(rows[i] if i<len(rows) else '',left_width)+'  '+(right[i] if i<len(right) else '')
+                        for i in range(min(available,max(len(rows),len(right))))]
             if available > len(rows)+2:
-                rows += ['', tint('RECENT', 'dim')]
-                rows += [tint(time.strftime('%H:%M:%S', time.localtime(r['at']))+'  ', 'dim')+tint(r['text'],event_tone(r)) for r in self.feed.rows[-max(0, available-len(rows)):]]
+                rows += ['', tint('RECENT', 'dim')]+feed(available-len(rows)-2)
             return rows
         if self.page == 1:
             rows = self.item_rows()
@@ -532,7 +574,7 @@ class Terminal:
         return rows[self.scroll:self.scroll+visible]+['',tint(self.setting_help[self.settings_keys[self.selection]],'dim')]
 
     def render(self, width, height):
-        self.height = height
+        self.height = height;self.width = width
         d = self.data
         if width < 65 or height < 22:
             return ['Fishing  /  '+d.get('state', ''), '', 'Enlarge the terminal to at least 65 columns × 22 rows.', '', 'Q close   C continue   P pause   S stop']

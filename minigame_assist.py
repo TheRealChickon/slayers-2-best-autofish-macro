@@ -224,7 +224,7 @@ def main(argv=None):
     assist_paused=False
     ocr=None
     if spot:
-        from rapidocr_onnxruntime import RapidOCR
+        from ocr_engine import RapidOCR
         ocr=RapidOCR()
     gate=PickupGate();rod_gate=RodReady();rod_ready=False;evidence=Pickup('empty');stable=False;world=False;rod=None
     active_time=0.;last_tick=time.monotonic();last_scan=-10.;last_rod_scan=-10.;scan_ms=None;resuming=True

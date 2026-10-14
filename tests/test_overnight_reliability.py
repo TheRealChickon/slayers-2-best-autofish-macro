@@ -133,12 +133,15 @@ class Reliability(unittest.TestCase):
     def test_late_loot_after_success_is_not_recast_before_prompt_appears(self):
         from pickup_policy import Pickup,waiting_decision
         absent=Pickup('empty');prompt=Pickup('collect','Golden Fish T Collect')
-        self.assertEqual(waiting_decision(absent,True,3.7,True,100),'wait')
-        self.assertEqual(waiting_decision(absent,True,8,True,100),'wait')
-        self.assertEqual(waiting_decision(prompt,True,8.1,True,100),'collect')
-        self.assertEqual(waiting_decision(absent,True,10.1,True,100),'empty')
-        self.assertEqual(waiting_decision(absent,True,3.7,False,100),'empty')
-        self.assertEqual(waiting_decision(absent,True,3.7,True,0),'empty')
+        # 99.5% of logged prompts are readable within 1.36 s; later drops are
+        # collected by the pre-cast and waiting-stage scene checks.
+        self.assertEqual(waiting_decision(absent,True,1.4,True,100),'wait')
+        self.assertEqual(waiting_decision(absent,True,1.9,True,100),'wait')
+        self.assertEqual(waiting_decision(prompt,True,1.95,True,100),'collect')
+        self.assertEqual(waiting_decision(absent,True,2.1,True,100),'empty')
+        self.assertEqual(waiting_decision(absent,False,2.1,True,100),'wait')
+        self.assertEqual(waiting_decision(absent,True,1.6,False,100),'empty')
+        self.assertEqual(waiting_decision(absent,True,1.6,True,0),'empty')
         self.assertEqual(waiting_decision(prompt,False,1,True,100),'wait')
 
     def test_prompt_occlusion_does_not_abort_a_verified_hold_before_reward(self):

@@ -187,9 +187,14 @@ class InventoryScanner:
             d.key('M');d.sleep(.6)
         # Inventory is the first section in the observed game menu.
         frame=d.capture()
-        labels=' '.join(r[1] for r in d.text(frame[340:470,10:340])).lower()
-        if 'inventory' not in labels:raise RuntimeError('The inventory menu was not visible; recovery required')
-        d.click(155,395);frame=d.capture();d.click(*self.tab_target(frame,'All'))
+        # The side menu's vertical position changed in a game update (Inventory
+        # moved from y≈395 to y≈525 at 1440p). Read a taller strip and click the
+        # label where it actually is.
+        top=250
+        rows=[r for r in d.text(frame[top:820,10:400]) if 'inventory' in r[1].lower()]
+        if not rows:raise RuntimeError('The inventory menu was not visible; recovery required')
+        y=top+float(np.asarray(rows[0][0])[:,1].mean())
+        d.click(155,round(y));frame=d.capture();d.click(*self.tab_target(frame,'All'))
         # Never send movement or drop keys to clear a search. A missed textbox
         # click can let Roblox interpret Ctrl+A as movement underneath the menu.
         d.move(2060,1080);d.sleep(.3)
@@ -327,7 +332,7 @@ class InventoryScanner:
     def close(self):
         d=self.driver
         frame=d.capture()
-        labels=' '.join(r[1] for r in d.text(frame[340:470,10:340])).lower()
+        labels=' '.join(r[1] for r in d.text(frame[250:820,10:400])).lower()
         if self.inventory_count(frame) is not None or 'inventory' in labels:
             d.guard();d.key('M');d.sleep(.5);d.move(1650,800)
             if self.inventory_count(d.capture()) is not None:
