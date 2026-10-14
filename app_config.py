@@ -27,7 +27,9 @@ DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             # Drop the caught item with a click, recast at once, and claim it while the line is out.
             'drop_cast':False,
             # Seconds after the Collect prompt appears before holding T when its disc is not tracked.
-            'no_disc_hold_delay':.9,'overnight_defaults_version':OVERNIGHT_DEFAULTS_VERSION}
+            'no_disc_hold_delay':.9,
+            # Seconds between scene scans while T is held.
+            'hold_scan_interval':.15,'overnight_defaults_version':OVERNIGHT_DEFAULTS_VERSION}
 
 
 def validate_options(values):
@@ -38,6 +40,8 @@ def validate_options(values):
         if not isinstance(values[key],bool):raise ValueError(key+' must be on or off')
     if not 0<=float(values['no_disc_hold_delay'])<=2:raise ValueError('no_disc_hold_delay must be 0–2 seconds')
     values['no_disc_hold_delay']=float(values['no_disc_hold_delay'])
+    if not .05<=float(values['hold_scan_interval'])<=1:raise ValueError('hold_scan_interval must be 0.05–1 seconds')
+    values['hold_scan_interval']=float(values['hold_scan_interval'])
     for key,low,high in (('overnight_idle_minutes',1,120),('overnight_focus_grace_seconds',5,300)):
         values[key]=int(values[key])
         if not low<=values[key]<=high:raise ValueError(f'{key} must be {low}–{high}')

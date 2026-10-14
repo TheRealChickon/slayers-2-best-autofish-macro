@@ -741,7 +741,9 @@ def main():
                                 if same_reward(first,second):
                                     record_reward(second.text);screenshot('collected',defer=True);start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS);continue
                             now=time.monotonic()
-                        if now-since>.45 and now-last_pickup_scan>.35:
+                        # Scene scans during the hold spot a drop that moved after landing;
+                        # the earlier 0.35 s spacing found most of them near the hold deadline.
+                        if now-since>.45 and now-last_pickup_scan>live_setting('hold_scan_interval',.15):
                             evidence,stable=pickup_text();last_pickup_scan=time.monotonic()
                             now=time.monotonic()
                             moved_collect=collect_motion.observe(evidence,stable,now,pickup_tries)
