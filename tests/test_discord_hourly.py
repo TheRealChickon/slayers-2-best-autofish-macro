@@ -80,9 +80,10 @@ class DiscordHourlyTests(unittest.TestCase):
         result = report.summarize(self.run, 0, 3600, now=3600)
         self.assertEqual(result["ores"], 3)
         self.assertEqual(result["ores_per_day"], 72)
-        catches = next(field["value"] for field in report.embed(result)["embeds"][0]["fields"]
-                       if field["name"] == "🐟 CATCHES")
-        self.assertIn("3 Ore · ~72/day", catches)
+        pace = next(field["value"] for field in report.embed(result)["embeds"][0]["fields"]
+                    if field["name"] == "PACE")
+        self.assertIn("72 ores/day", pace)
+        self.assertIn("3 Ore confirmed", pace)
 
     def test_one_message_per_run_is_edited_after_the_interval(self):
         self.run.joinpath('current-run.json').write_text(json.dumps({'id':'run-1','started':0,'ended':None}))

@@ -319,17 +319,12 @@ def embed(summary, inventory_at=None, stats=None, recent=None, final=False):
         if stats.get("unpriced_units"):
             gold_text += f"\n{stats['unpriced_units']:,} unpriced materials/ore"
         fields.append({"name": "💰 GOLD", "value": gold_text, "inline": True})
-    catches = stats.get("catches") if stats else s["rewards"]
-    fields.append({"name": "🐟 CATCHES", "value": (f"**{catches:,}** confirmed · **{catches/hours:.0f}**/h\n"
-                                                   f"{s['casts']:,} casts · {s['casts']/hours:.0f}/h\n"
-                                                   f"{s['ores']} Ore · ~{s['ores_per_day']:,.0f}/day"), "inline": True})
-    if stats is not None:
-        t = stats["timings"]
-        fields.append({"name": "⚡ SPEED", "value": (
-            f"Cycle **{seconds_text(t['cycle'])}** · bite {seconds_text(t['cast_to_bite'])}\n"
-            f"End→hold {seconds_text(t['end_to_hold'])} · hold→item {seconds_text(t['hold_to_reward'])}\n"
-            f"Item→recast {seconds_text(t['reward_to_cast'])} · empty→recast {seconds_text(t['empty_to_cast'])}\n"
-            f"Median of last {t['sample']} rounds"), "inline": True})
+    minutes = max(s["seconds"], 1)/60
+    fields.append({"name": "PACE", "value": (f"**{s['casts']/minutes:.1f}** casts/min  ·  "
+                                             f"**{s['rewards']/minutes:.1f}** collected/min\n"
+                                             f"{s['casts']:,} casts · {s['rewards']:,} confirmed rewards\n"
+                                             f"**{s['ores_per_day']:,.0f} ores/day** projected · {s['ores']} Ore confirmed\n"
+                                             f"Wall-clock pace, including pauses"), "inline": False})
     fields += [
         {"name": "🎯 ROUNDS", "value": (f"{s['minigames']:,} hooked · {s['completed']:,} at 100%\n"
                                        f"{s['failed']} failed · {s['empty']} empty\n"
