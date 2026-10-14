@@ -110,10 +110,12 @@ class BaitPurchase(unittest.TestCase):
         for label in ('Purchase amount','169,000','Gold budget','Buy bait now','Reset + start Full farmer'):
             self.assertIn(label,rendered)
         app.job=lambda fn:fn()
-        with patch.object(bait,'launch',return_value='launched') as launch:
+        with patch.object(bait,'launch',return_value='launched') as launch,\
+                patch.object(terminal_app,'load_config',return_value=app.config),\
+                patch.object(control_actions,'alive',return_value=False),patch.object(control_actions,'starting',return_value=False):
             app.activate()
             launch.assert_called_once_with(then_full=True,budget=169000)
-        app.page=0;app.selection=len(app.run_modes)+3
+        app.page=0;app.selection=[row[0] for row in app.run_actions()].index('Reset + start Full farmer')
         with patch.object(control_actions,'restart_full',return_value='started') as restart:
             app.activate()
         restart.assert_called_once_with()
