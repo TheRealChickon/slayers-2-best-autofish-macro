@@ -8,11 +8,11 @@ from pickup_policy import Pickup,CollectHoldMotion,collect_hold_timeout,retain_c
 
 class FirstHoldGrace(unittest.TestCase):
     def test_first_attempt_keeps_a_short_grace_beyond_the_later_deadline(self):
-        self.assertEqual(collect_hold_timeout(1),3.75)
-        for attempt in (0,2,3):self.assertEqual(collect_hold_timeout(attempt),3.5)
-        self.assertTrue(retain_collect_hold(Pickup('empty'),3.6,attempt=1))
-        self.assertFalse(retain_collect_hold(Pickup('empty'),3.75,attempt=1))
-        self.assertFalse(retain_collect_hold(Pickup('empty'),3.5,attempt=2))
+        self.assertEqual(collect_hold_timeout(1),3.0)
+        for attempt in (0,2,3):self.assertEqual(collect_hold_timeout(attempt),2.75)
+        self.assertTrue(retain_collect_hold(Pickup('empty'),2.9,attempt=1))
+        self.assertFalse(retain_collect_hold(Pickup('empty'),3.0,attempt=1))
+        self.assertFalse(retain_collect_hold(Pickup('empty'),2.75,attempt=2))
 
     def test_reward_and_other_interactions_do_not_wait_for_extra_grace(self):
         self.assertFalse(retain_collect_hold(Pickup('reward'),.7,confirmed_reward=True,attempt=1))

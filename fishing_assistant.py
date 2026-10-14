@@ -43,6 +43,17 @@ LANDING_WAIT_LIMIT_SECONDS = 1.8
 HELD_DISC_MOVE_PIXELS = 40
 # A held disc absent this long (several 30-60 Hz frames) means the prompt is gone.
 PROMPT_GONE_SECONDS = .15
+_live_settings={'at':-10.,'values':{}}
+
+
+def live_setting(key,default):
+    """Config values the worker may re-read mid-run; refreshed at most every 2 s."""
+    now=time.monotonic()
+    if now-_live_settings['at']>2:
+        try:_live_settings['values']=load_config()
+        except (OSError,ValueError):pass
+        _live_settings['at']=now
+    return _live_settings['values'].get(key,default)
 
 def move_pointer(x,y):
     # Both monitors are valid; coordinates are absolute virtual-desktop pixels.
@@ -324,7 +335,12 @@ def main():
         # A fresh prompt often reads as text a frame before its moving disc is found;
         # give the disc 0.3 s to show up. Otherwise (occluded or off-crop) the OCR
         # gates stay in charge.
-        if disc_track.seen_at is None:return True
+        if disc_track.seen_at is None:
+            # No disc found yet. On 2026-10-14 61% of holds started this way
+            # (median 0.9 s after the end) hit the airborne drop and needed a
+            # second 2 s hold; give the drop time to land first.
+            delay=live_setting('no_disc_hold_delay',.9)
+            return prompt_detected_at is None or now-prompt_detected_at>=delay
         if now-disc_track.seen_at>.25:return True
         if disc_track.settled(now):return True
         return prompt_detected_at is not None and now-prompt_detected_at>LANDING_WAIT_LIMIT_SECONDS
@@ -725,7 +741,9 @@ def main():
                                 if same_reward(first,second):
                                     record_reward(second.text);screenshot('collected',defer=True);start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS);continue
                             now=time.monotonic()
-                        if now-since>.45 and now-last_pickup_scan>.35:
+                        # Scene scans during the hold spot a drop that moved after landing;
+                        # the earlier 0.35 s spacing found most of them near the hold deadline.
+                        if now-since>.45 and now-last_pickup_scan>live_setting('hold_scan_interval',.15):
                             evidence,stable=pickup_text();last_pickup_scan=time.monotonic()
                             now=time.monotonic()
                             moved_collect=collect_motion.observe(evidence,stable,now,pickup_tries)

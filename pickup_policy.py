@@ -7,8 +7,13 @@ from reward_evidence import reward_quantity
 FIRST_COLLECT_HOLD_GRACE_SECONDS = .25
 
 
+# All 404 successful holds on 2026-10-14 claimed within 2.72 s of T-down (2 s game hold
+# plus toast confirmation); a hold still unclaimed past ~3 s is on a replaced prompt.
+COLLECT_HOLD_SECONDS = 2.75
+
+
 def collect_hold_timeout(attempt):
-    return 3.5+(FIRST_COLLECT_HOLD_GRACE_SECONDS if attempt==1 else 0)
+    return COLLECT_HOLD_SECONDS+(FIRST_COLLECT_HOLD_GRACE_SECONDS if attempt==1 else 0)
 
 
 @dataclass(frozen=True)
@@ -108,8 +113,10 @@ class RewardGate:
 # Across 12,290 logged prompts the Collect label was readable 0.75 s (median)
 # and 1.36 s (99.5th percentile) after the minigame closed. Waiting 10 s on a
 # completed round without loot cost ~8 s per empty round. A rare later drop is
-# still collected by the scene check that runs before every cast.
-EMPTY_AFTER_COMPLETE_SECONDS = 2.0
+# still collected by the scene check that runs before every cast. On 2026-10-14
+# the latest of 85 prompts came 1.04 s after the end; 1.6 s keeps a margin over
+# the 1.36 s p99.5 and saves ~0.4 s per empty round over the earlier 2.0 s.
+EMPTY_AFTER_COMPLETE_SECONDS = 1.6
 EMPTY_AFTER_FAILED_SECONDS = 1.5
 
 
