@@ -635,7 +635,7 @@ def main():
                                     if not landing_wait_logged:
                                         landing_wait_logged=True;event('pickup_landing_wait',cycle=cycles,disc=disc_track.position)
                             elif decision=='empty':
-                                empty_round(.4 if evidence.kind=='empty' and stable else 1.0)
+                                empty_round(0. if evidence.kind=='empty' and stable else .6)
                             elif decision=='timeout':
                                 raise FishingFault('pickup_timeout','Pickup prompt remained ambiguous after wide scans',evidence=last_pickup_evidence)
                     elif stage=='pickup':
