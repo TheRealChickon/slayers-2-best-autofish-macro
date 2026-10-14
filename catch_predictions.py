@@ -9,12 +9,12 @@ from reward_evidence import reward_quantity
 # slayers2guide.wiki/fish lists Common 33 and Rare 66 on the current build
 # (OuwFish, OuwFwesh, Coral 33; Clown Fish, Golden Fish 66), matching the
 # user-provided values. Sea Horse (Common) and Zebra Fish (Rare) have no read
-# price there and are priced by tier. Crustadon/Krathulon 110 is from an
-# earlier build only, so it stays unknown. Materials and ores are not fish.
-PRICES={'ouwfish':33,'ouwfwesh':33,'coral':33,'seahorse':33,'clownfish':66,'goldenfish':66,'zebrafish':66}
-TIER_INFERRED={'seahorse','zebrafish'}
+# price there and are priced by tier. Crustadon/Krathulon use the 110 listed
+# for an earlier build as a marked estimate. Materials and ores are not fish.
+PRICES={'ouwfish':33,'ouwfwesh':33,'coral':33,'seahorse':33,'clownfish':66,'goldenfish':66,'zebrafish':66,'krathulon':110,'crustadon':110}
+TIER_INFERRED={'seahorse','zebrafish','krathulon','crustadon'}
 NAMES={'ouwfish':'OuwFish','ouwfwesh':'OuwFwesh','coral':'Coral','seahorse':'Sea Horse','clownfish':'Clown Fish',
-       'goldenfish':'Golden Fish','zebrafish':'Zebra Fish'}
+       'goldenfish':'Golden Fish','zebrafish':'Zebra Fish','krathulon':'Krathulon','crustadon':'Crustadon'}
 MIN_CATCHES=20
 MIN_ACTIVE_SECONDS=600
 

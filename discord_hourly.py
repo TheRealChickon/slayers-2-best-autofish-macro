@@ -317,7 +317,7 @@ def embed(summary, inventory_at=None, stats=None, recent=None, final=False):
                      f"**{gold:,} gold** earned" + (f"\n**~{per_hour:,.0f}** gold/hour · ~{per_hour*8:,.0f} per 8h"
                                                    if per_hour is not None else "\nRate after 2 active minutes"))
         if stats.get("unpriced_units"):
-            gold_text += f"\n{stats['unpriced_units']:,} unpriced (materials/ore/legendary)"
+            gold_text += f"\n{stats['unpriced_units']:,} unpriced materials/ore"
         fields.append({"name": "💰 GOLD", "value": gold_text, "inline": True})
     catches = stats.get("catches") if stats else s["rewards"]
     fields.append({"name": "🐟 CATCHES", "value": (f"**{catches:,}** confirmed · **{catches/hours:.0f}**/h\n"

@@ -42,9 +42,11 @@ class Predictions(unittest.TestCase):
             rows.append(self.row(i,'reward_observed',cycle=i,text=name+' X1'))
         rows.append(self.row(9,'sale_confirmed',confirmed=True,proceeds_wen=500))
         result=calculate(rows,{'started':0},now=700,live_source='events-20261009-010000.jsonl')
-        self.assertEqual(result['known_price_subtotal_wen'],231);self.assertEqual(result['unknown_price_quantity'],3)
+        # Legendaries carry the older-build 110 as a marked estimate; Ore stays unpriced.
+        self.assertEqual(result['known_price_subtotal_wen'],451);self.assertEqual(result['unknown_price_quantity'],1)
         self.assertEqual(result['actual_sold_proceeds_wen'],500)
-        self.assertTrue(all(i['unit_price_wen'] is None for i in result['items'] if i['name'] in ('Crustadon','Krathulon','Ore')))
+        self.assertTrue(all(i['price_inferred'] for i in result['items'] if i['name'] in ('Crustadon','Krathulon')))
+        self.assertTrue(all(i['unit_price_wen'] is None for i in result['items'] if i['name']=='Ore'))
 
     def test_projection_requires_sample_and_excludes_outside_run_events(self):
         rows=[self.row(0,'started'),self.row(-1,'reward_observed',cycle=99,text='Golden Fish X50')]

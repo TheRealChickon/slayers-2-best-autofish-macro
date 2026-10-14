@@ -452,9 +452,9 @@ class Terminal:
             rows.append(tint(f"{item['name'][:24]:<24} {item['catches']:>6} / {item['quantity']:<5} {rate:>8} {projected:>12} {price:>11} {earned:>8}",
                              'text' if item['unit_price_wen'] is not None else 'dim'))
         sold='No confirmed sales logged' if p['actual_sold_proceeds_wen'] is None else f"{p['actual_sold_proceeds_wen']:,} gold"
-        rows+=['',f"Unpriced units (materials, ores, legendaries): {p['unknown_price_quantity']}  ·  Actual sold proceeds: {sold}",
-               tint('Gold = Ginzo NPC sell price × units; fish only. * price inferred from rarity tier.','dim'),
-               tint('Crustadon/Krathulon 110 gold is from an earlier build; current price unknown.','dim'),
+        rows+=['',f"Unpriced units (materials, ores): {p['unknown_price_quantity']}  ·  Actual sold proceeds: {sold}",
+               tint('Gold = Ginzo NPC sell price × units; fish only. * estimated (rarity tier or older build).','dim'),
+               tint('Crustadon/Krathulon 110 gold* is the last published (older-build) price.','dim'),
                tint('Projections assume the observed worker-active pace continues.','dim')]
         return rows
 
