@@ -63,7 +63,7 @@ def classify(rows):
                   tuple(keys[0]['center']) if len(keys)==1 else None)
 
 
-def classify_toast(rows):
+def classify_toast(rows,require_x=False):
     """Read the small reward toast after T without authorizing any game input."""
     if any(re.search(r'collect|climb|wall|purchase', row['text'], re.I) for row in rows):
         return Pickup('empty')
@@ -74,7 +74,9 @@ def classify_toast(rows):
     amounts = []
     for row in rows:
         token = re.sub(r'\s+', '', row['text']).lower()
-        match = re.fullmatch(r'(?:x|\?)?(\d{1,3})', token)
+        # A dropped item shows a bare despawn countdown (20, 19, ...) beside its
+        # name; only the real receipt carries the X quantity prefix.
+        match =re.fullmatch(r'x(\d{1,3})' if require_x else r'(?:x|\?)?(\d{1,3})', token)
         threshold = .85 if token.isdigit() else .65 if token.startswith('?') else .60
         if match and row.get('score', 0) >= threshold:
             amounts.append((row, int(match.group(1))))
