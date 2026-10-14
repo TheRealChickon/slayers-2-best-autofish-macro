@@ -108,8 +108,10 @@ class RewardGate:
 # Across 12,290 logged prompts the Collect label was readable 0.75 s (median)
 # and 1.36 s (99.5th percentile) after the minigame closed. Waiting 10 s on a
 # completed round without loot cost ~8 s per empty round. A rare later drop is
-# still collected by the scene check that runs before every cast.
-EMPTY_AFTER_COMPLETE_SECONDS = 2.0
+# still collected by the scene check that runs before every cast. On 2026-10-14
+# the latest of 85 prompts came 1.04 s after the end; 1.6 s keeps a margin over
+# the 1.36 s p99.5 and saves ~0.4 s per empty round over the earlier 2.0 s.
+EMPTY_AFTER_COMPLETE_SECONDS = 1.6
 EMPTY_AFTER_FAILED_SECONDS = 1.5
 
 
