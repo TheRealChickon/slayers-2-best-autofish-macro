@@ -201,7 +201,7 @@ def main():
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_toast_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
     cooldown_delay=1.0;prompt_detected_at=None;reward_gate=RewardGate();collect_motion=CollectHoldMotion();collect_ready=CollectReadyGate()
     confirmed_recast=None;reward_confirmed_at=None
-    disc_track=DiscTrack();pending_collect=None;hold_anchor=None;landing_wait_logged=False;disc_gone_logged=None;disc_represses=0;disc_repress_cycle=None;claim_pending=None;drop_cast_gap=.3;drop_cast_at_cast=None
+    disc_track=DiscTrack();pending_collect=None;hold_anchor=None;landing_wait_logged=False;disc_gone_logged=None;disc_represses=0;disc_repress_cycle=None;claim_pending=None;drop_eligible=False;drop_cast_gap=.3;drop_cast_at_cast=None
     last_verified_rod=None
     needs_scene_check=True;scene_check_started=None;hooked_cycles=0;last_wait_pickup_check=0;startup_ui_wait_since=None
     last_reference_check=0;reference_matcher=None;paused_at=None
@@ -299,7 +299,7 @@ def main():
         event('empty_round',cycle=cycles,message=message,percent=end_percent,
               evidence=last_pickup_evidence,diagnostic_sequence=report['sequence'])
         start_cooldown(delay)
-    def pickup_toast():
+    def pickup_toast(require_x=False):
         # The toast sits beside the avatar's right shoulder. A narrow OCR pass
         # avoids the player title and waterfall that can hide its small X1 in
         # the wide prompt scan. This only confirms a reward after a held T.
@@ -312,7 +312,7 @@ def main():
         rows=[{'text':r[1],'score':float(r[2]),
                'center':(float(np.mean(np.array(r[0])[:,0])),float(np.mean(np.array(r[0])[:,1])))}
               for r in results or []]
-        return classify_toast(rows)
+        return classify_toast(rows,require_x)
     def disc_observe():
         x,y,w,h=PROMPT_REGION
         found=[(x+cx,y+cy) for cx,cy in find_discs(screen.capture(sct,(x,y,w,h)))]
@@ -563,7 +563,7 @@ def main():
                             else:unknown+=1
                             event('minigame_ended',cycle=cycles,seconds=round(now-since,2),percent=end_percent,
                                   percent_evidence=percent_evidence)
-                            stage='pickup_wait';since=time.monotonic();prev=None;last_pickup_scan=0;collect_ready=CollectReadyGate();reset_disc()
+                            stage='pickup_wait';since=time.monotonic();prev=None;last_pickup_scan=0;collect_ready=CollectReadyGate();reset_disc();drop_eligible=True
                             if consecutive_failed>=5:raise RuntimeError('Five consecutive failed rounds; stopped for review')
                         elif now-lastseen>12:
                             screenshot('missing-markers')
@@ -622,10 +622,10 @@ def main():
                                         event('drop_cast_unclaimed',cycle=cp['cycle'],text=cp['text']);claim_pending=None
                             elif now-cp['hold_at']>.2 and now-last_toast_scan>.08:
                                 last_toast_scan=time.monotonic()
-                                first=pickup_toast()
+                                first=pickup_toast(require_x=True)
                                 receipt=None
                                 if first.kind=='reward':
-                                    second=pickup_toast()
+                                    second=pickup_toast(require_x=True)
                                     if same_reward(first,second):receipt=second
                                 now=time.monotonic()
                                 if receipt is not None:
@@ -667,13 +667,14 @@ def main():
                             decision=waiting_decision(evidence,stable,now-since,last_tracking_cast==casts,end_percent)
                             if decision=='reward':
                                 record_reward(evidence.text);screenshot('collected',defer=True);start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS)
-                            elif (decision=='collect' and claim_pending is None and last_tracking_cast==casts
+                            elif (decision=='collect' and claim_pending is None and drop_eligible and last_tracking_cast==casts
                                     and cycles not in reward_gate.confirmed and load_config().get('drop_cast')):
                                 # Drop-cast mode: one click drops the caught item, the next
                                 # press recasts, and T claims the drop while the line is out.
                                 last_prompt=evidence.text;inp.release()
                                 inp.hold(True);time.sleep(.05);inp.hold(False);time.sleep(drop_cast_gap)
                                 drop_cast_at_cast=casts+1
+                                drop_eligible=False
                                 claim_pending={'cycle':cycles,'text':evidence.text,'dropped':time.monotonic(),'hold_at':None,'holds':0}
                                 event('drop_cast_drop',cycle=cycles,text=evidence.text,gap_seconds=round(drop_cast_gap,2))
                                 stage='casting';since=time.monotonic();needs_scene_check=False;scene_check_started=None
