@@ -191,7 +191,6 @@ def main():
     def emergency_key(key):
         if key in (Key.esc,Key.f9,Key.f12) and win32gui.GetForegroundWindow()==hwnd and not win32gui.IsIconic(hwnd):
             stop.write_text('Stopped by physical hotkey')
-            save_config({'overnight_enabled':False,'overnight_auto_enable_idle':False})
     emergency_listener=Listener(on_press=emergency_key,win32_event_filter=lambda message,data:not data.flags&0x10)
     emergency_listener.start()
     inp.physical_stop_owned=True

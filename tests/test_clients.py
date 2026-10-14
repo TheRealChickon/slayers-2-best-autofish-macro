@@ -90,6 +90,13 @@ class IsolatedState(unittest.TestCase):
         self.assertFalse(app_config.load_config()['overnight_enabled'])
         self.assertFalse(app_config.load_config()['overnight_auto_enable_idle'])
 
+    def test_overnight_switches_back_on_once_for_an_older_saved_off(self):
+        app_config.CONFIG.write_text(json.dumps({'overnight_enabled':False,'overnight_auto_enable_idle':False}))
+        config=app_config.load_config()
+        self.assertTrue(config['overnight_enabled']);self.assertTrue(config['overnight_auto_enable_idle'])
+        app_config.save_config({'overnight_enabled':False})
+        self.assertFalse(app_config.load_config()['overnight_enabled'])
+
     def test_log_navigation_reaches_last_row_without_enabling_follow(self):
         app=terminal_app.Terminal();app.page=2;app.height=22;app.follow=False
         app.feed.rows=[{'text':f'entry-{i}','at':i,'level':'normal','group':'fishing'} for i in range(100)]

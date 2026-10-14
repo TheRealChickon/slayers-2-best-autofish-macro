@@ -20,7 +20,7 @@ class BaitBotSettings(unittest.TestCase):
         self.root=Path(temporary.name)
         self.config=self.root/'config.local.json'
         self.config.write_text(json.dumps({'account_username':'Player','data_dir':str(self.root/'data'),
-                                         'cast_point':[1332,508],'overnight_enabled':False}))
+                                         'cast_point':[1332,508],'overnight_enabled':False,'overnight_defaults_version':2}))
         patcher=patch.object(app_config,'CONFIG',self.config);patcher.start();self.addCleanup(patcher.stop)
         self.route=self.root/'route';self.route.mkdir()
         self.script=self.root/'bait_bot.py';self.script.write_text('# Simulated installed bot')
