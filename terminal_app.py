@@ -64,7 +64,7 @@ class Terminal:
         'here': ('gold','current server / current location'),
         'rejoin': ('green', 'connection guard only'),
     }
-    settings_groups=(('Account',('Username',)),('Fishing',('Mode','Rod slot','Auto rod','Fishing titles')),
+    settings_groups=(('Account',('Username',)),('Fishing',('Mode','Rod slot','Auto rod','Drop-cast','Fishing titles')),
                      ('Overnight',('Overnight enabled','Auto focus','Focus grace seconds','Auto-enable after idle','Idle minutes')),
                      ('Location and camera',('Cast point','Capture pointer','Camera','Heading','Position correction','Save reference','Disable reference')),
                      ('Bait restock',('Fish Head reserve','Refill buffer','Run bait restock','Check bait route','Stop bait restock','BaitBot status','Record bait route','Open bait recordings')),
@@ -76,6 +76,7 @@ class Terminal:
         'Mode':'Full fishes and rejoins; Rejoin only restores the connection; other modes work as labeled.',
         'Rod slot':'Hotbar number of your fishing rod (1–9).',
         'Auto rod':'Full farmer checks the hotbar and equips an unselected rod.',
+        'Drop-cast':'Click to drop the catch, recast at once, and hold T to claim it while the line is out.',
         'Camera':'Keep your view, or zoom fully in. At rails, the avatar may block first person.',
         'Heading':'Compass direction to restore after rejoining. Off disables it.',
         'Fishing titles':'Auto best checks completed Fishing titles once at startup; unreadable sets stay put.',
@@ -338,8 +339,8 @@ class Terminal:
                 return
             if key in ('Focus grace seconds','Idle minutes'):
                 self.edit(key,self.config[{'Focus grace seconds':'overnight_focus_grace_seconds','Idle minutes':'overnight_idle_minutes'}[key]]);return
-            if key in ('Auto rod', 'Motion', 'Fishing titles'):
-                option = {'Auto rod':'auto_rod','Motion':'reduced_motion','Fishing titles':'auto_fishing_titles'}[key]
+            if key in ('Auto rod', 'Motion', 'Fishing titles', 'Drop-cast'):
+                option = {'Auto rod':'auto_rod','Motion':'reduced_motion','Fishing titles':'auto_fishing_titles','Drop-cast':'drop_cast'}[key]
                 save_config({option: not self.config[option]}); self.config = load_config()
             elif key=='Camera':
                 save_config({'camera_mode':'first_person' if self.config['camera_mode']=='keep' else 'keep'})
@@ -544,7 +545,8 @@ class Terminal:
                     ('Save fishing reference','Enter while paused'),('Disable reference','Enter while paused'),
                     ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On')]
         values={key:value for key,(_,value) in zip(('Username','Mode','Rod slot','Auto rod','Camera','Heading','Fishing titles','Cast point','Capture pointer','Position correction','Save reference','Disable reference','Motion'),settings)}
-        values.update({'Overnight enabled':'On' if self.config['overnight_enabled'] else 'Off',
+        values.update({'Drop-cast':'On · drop, recast, claim' if self.config.get('drop_cast') else 'Off · claim, then recast',
+            'Overnight enabled':'On' if self.config['overnight_enabled'] else 'Off',
             'Fish Head reserve':f"{self.config['bait_reserve']:,}",'Refill buffer':f"{self.config['bait_refill_buffer']:,}",
             'Run bait restock':'Reset / shrine / Nori / return','Check bait route':'Enter for readiness',
             'Stop bait restock':'Enter to release bot input',

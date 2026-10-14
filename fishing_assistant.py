@@ -40,7 +40,7 @@ CAST_PRESS_SECONDS = .16
 # to stop (bounded), and re-press as soon as a held disc lands elsewhere.
 PROMPT_REGION = (480,150,1630,1110)
 LANDING_WAIT_LIMIT_SECONDS = 1.8
-HELD_DISC_MOVE_PIXELS = 25
+HELD_DISC_MOVE_PIXELS = 40
 # A held disc absent this long (several 30-60 Hz frames) means the prompt is gone.
 PROMPT_GONE_SECONDS = .15
 
@@ -201,7 +201,7 @@ def main():
     completed=0;failed=0;unknown=0;pickup_confirmed=0;prompt_seen=False;pickup_tries=0;last_pickup_scan=0;last_toast_scan=0;last_reason='';last_reward='';last_prompt='';end_percent=None;consecutive_failed=0;cast_press_started=None;cast_needs_settle=True
     cooldown_delay=1.0;prompt_detected_at=None;reward_gate=RewardGate();collect_motion=CollectHoldMotion();collect_ready=CollectReadyGate()
     confirmed_recast=None;reward_confirmed_at=None
-    disc_track=DiscTrack(settle_seconds=.06);pending_collect=None;hold_anchor=None;landing_wait_logged=False;disc_gone_logged=None;disc_represses=0;disc_repress_cycle=None
+    disc_track=DiscTrack();pending_collect=None;hold_anchor=None;landing_wait_logged=False;disc_gone_logged=None;disc_represses=0;disc_repress_cycle=None;claim_pending=None
     last_verified_rod=None
     needs_scene_check=True;scene_check_started=None;hooked_cycles=0;last_wait_pickup_check=0;startup_ui_wait_since=None
     last_reference_check=0;reference_matcher=None;paused_at=None
@@ -325,8 +325,7 @@ def main():
         # A fresh prompt often reads as text a frame before its moving disc is found;
         # give the disc 0.3 s to show up. Otherwise (occluded or off-crop) the OCR
         # gates stay in charge.
-        if disc_track.seen_at is None:
-            return prompt_detected_at is None or now-prompt_detected_at>.3
+        if disc_track.seen_at is None:return True
         if now-disc_track.seen_at>.25:return True
         if disc_track.settled(now):return True
         return prompt_detected_at is not None and now-prompt_detected_at>LANDING_WAIT_LIMIT_SECONDS
@@ -379,7 +378,7 @@ def main():
                     confirmed_recast=None
                     last_verified_rod=None
                     startup_ui_wait_since=None
-                    paused_at=time.monotonic();inp.release();motion.suspend();prev=None
+                    paused_at=time.monotonic();inp.release();motion.suspend();prev=None;claim_pending=None
                     event('input_paused',stage=stage,reason=inp.gate.reason() or 'paused_focus')
                     while True:
                         if stop.exists():raise RuntimeError('Stopped by stop file')
@@ -479,7 +478,7 @@ def main():
                     combined_scene=confirmed_recast is not None and (stage=='cooldown' or stage=='casting' and needs_scene_check)
                     if d is None and stage in ('casting','waiting','cooldown') and now-last_gui_scan>8 and not combined_scene:
                         scan_gui()
-                    if d is None and stage=='waiting' and not needs_scene_check and now-last_wait_pickup_check>.75:
+                    if d is None and stage=='waiting' and not needs_scene_check and now-last_wait_pickup_check>.75 and claim_pending is None:
                         # A cast can be ignored while an existing drop owns the
                         # interaction. Do not wait for the bite timeout to find it.
                         needs_scene_check=True;scene_check_started=None;pickup_gate=PickupGate()
@@ -524,6 +523,9 @@ def main():
                         last_game_activity=time.time()
                         if stage!='tracking':
                             inventory.begin_round()
+                            if claim_pending is not None:
+                                # The bite beat the claim; the drop stays for the next pickup.
+                                event('drop_cast_interrupted',cycle=claim_pending['cycle'],text=claim_pending['text'],holds=claim_pending['holds']);claim_pending=None
                             inp.grab(False);stage='tracking';since=now;prev=None;velocity=0;target_velocity=0;missing_casts=0
                             motion.suspend()
                             fresh_hook=casts!=last_tracking_cast
@@ -605,6 +607,34 @@ def main():
                             inp.guard_press(True);move_pointer(*screen.point(*load_config()['cast_point']));stage='casting';since=now
                             needs_scene_check=True;scene_check_started=None;pickup_gate=PickupGate()
                     elif stage=='waiting':
+                        if claim_pending is not None:
+                            cp=claim_pending
+                            if not inp.t:
+                                if now-last_pickup_scan>.08:
+                                    evidence,stable=pickup_text();now=time.monotonic();last_pickup_scan=now
+                                    if evidence.kind=='collect' and (stable or evidence.key_center is not None):
+                                        inp.grab(True);cp['hold_at']=now;cp['holds']+=1;last_toast_scan=0
+                                        event('drop_cast_hold',cycle=cp['cycle'],attempt=cp['holds'],text=evidence.text,
+                                              drop_to_hold_seconds=round(now-cp['dropped'],3))
+                                    elif evidence.kind=='reward' and stable:
+                                        record_reward(evidence.text);confirmed_recast=None;claim_pending=None
+                                    elif now-cp['dropped']>4.5 or cp['holds']>=3:
+                                        event('drop_cast_unclaimed',cycle=cp['cycle'],text=cp['text']);claim_pending=None
+                            elif now-cp['hold_at']>.2 and now-last_toast_scan>.08:
+                                last_toast_scan=time.monotonic()
+                                first=pickup_toast()
+                                receipt=None
+                                if first.kind=='reward':
+                                    second=pickup_toast()
+                                    if same_reward(first,second):receipt=second
+                                now=time.monotonic()
+                                if receipt is not None:
+                                    inp.grab(False);record_reward(receipt.text);confirmed_recast=None
+                                    event('drop_cast_claimed',cycle=cp['cycle'],text=receipt.text,
+                                          drop_to_claim_seconds=round(now-cp['dropped'],3),holds=cp['holds'])
+                                    claim_pending=None
+                                elif now-cp['hold_at']>collect_hold_timeout(cp['holds']):
+                                    inp.grab(False)  # Rescan; a persisting prompt gets another hold.
                         if now-since>BITE_WAIT_TIMEOUT_SECONDS:
                             missing_casts+=1;event('no_minigame',count=missing_casts);screenshot('missing')
                             if first_person_active:
@@ -618,7 +648,7 @@ def main():
                             if missing_casts>=MISSED_CASTS_BEFORE_REJOIN:
                                 raise FishingFault('no_minigame','Three casts without a recognized minigame',
                                     missed_casts=missing_casts,wait_seconds=BITE_WAIT_TIMEOUT_SECONDS)
-                            stage='pickup_wait';since=now;reset_disc()
+                            inp.grab(False);claim_pending=None;stage='pickup_wait';since=now;reset_disc()
                     elif stage=='pickup_wait':
                         if prompt_detected_at is not None:
                             disc_observe();now=time.monotonic()
@@ -634,6 +664,15 @@ def main():
                             decision=waiting_decision(evidence,stable,now-since,last_tracking_cast==casts,end_percent)
                             if decision=='reward':
                                 record_reward(evidence.text);screenshot('collected',defer=True);start_cooldown(CONFIRMED_REWARD_COOLDOWN_SECONDS)
+                            elif (decision=='collect' and claim_pending is None and last_tracking_cast==casts
+                                    and cycles not in reward_gate.confirmed and load_config().get('drop_cast')):
+                                # Drop-cast mode: one click drops the caught item, the next
+                                # press recasts, and T claims the drop while the line is out.
+                                last_prompt=evidence.text;inp.release()
+                                inp.hold(True);time.sleep(.05);inp.hold(False);time.sleep(.08)
+                                claim_pending={'cycle':cycles,'text':evidence.text,'dropped':time.monotonic(),'hold_at':None,'holds':0}
+                                event('drop_cast_drop',cycle=cycles,text=evidence.text)
+                                stage='casting';since=time.monotonic();needs_scene_check=False;scene_check_started=None
                             elif decision=='collect' and collect_is_ready:
                                 if landed(now):start_hold(evidence)
                                 else:
