@@ -182,7 +182,9 @@ def currency(d, frame):
 
 
 def read_gold(d, frame=None):
-    until=time.monotonic()+6
+    # The gold counter can show a transient value for a few seconds after a
+    # debit (2026-10-14: 489,830 for 242,276); keep reading until it settles.
+    until=time.monotonic()+15
     while time.monotonic()<until:
         try: return currency(d,frame if frame is not None else d.capture())
         except ValueError:
