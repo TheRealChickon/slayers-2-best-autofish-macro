@@ -52,8 +52,37 @@ def owned_check(frame, requirement_y):
     return max((int(white[y:y+34].sum()) for y in range(0,87,4)),default=0)>130
 
 
-def desired_titles(owned):
-    return tuple(name for name in PRIORITY if name in owned)[:3]
+BUFF_KEYS = {'fishingluckfactor': 'fishing_luck', 'fishluck': 'fishing_luck', 'bitespeedfactor': 'bite_speed',
+             'bitespeedmultiplier': 'bite_speed'}
+CATALOG_FILE = 'fishing-titles.json'
+
+
+def parse_buffs(rows):
+    """'1.07x (Fishing Luck Factor)' lines from the detail panel, in reading order."""
+    text = ' '.join(r['text'] for r in sorted(rows, key=lambda r: (round(r['center'][1]/14), r['center'][0])))
+    buffs = {}
+    for value, name in re.findall(r'(\d+(?:\.\d+)?)\s*[x×]\s*\(([^)]*)\)?', text, re.I):
+        key = BUFF_KEYS.get(normalized(name))
+        if key and key not in buffs: buffs[key] = float(value)
+    return buffs
+
+
+def known_buffs(catalog=None):
+    """Built-in buffs merged with every title the farmer has read in game."""
+    merged = {name: dict(b) for name, b in TITLE_BUFFS.items()}
+    for name, row in (catalog or {}).items():
+        merged[name] = dict(row.get('buffs') or {})
+    return merged
+
+
+def desired_titles(owned, priority='luck', buffs=None):
+    """Best three owned titles for the rod's priority: 'luck' or 'bite'. Ties keep PRIORITY order."""
+    table = buffs or TITLE_BUFFS
+    key = 'bite_speed' if priority == 'bite' else 'fishing_luck'
+    other = 'fishing_luck' if key == 'bite_speed' else 'bite_speed'
+    order = {name: i for i, name in enumerate(PRIORITY)}
+    ranked = sorted(owned, key=lambda n: (-(table.get(n, {}).get(key, 1)), -(table.get(n, {}).get(other, 1)), order.get(n, 99), n))
+    return tuple(ranked[:3])
 
 
 class TitleManager:
@@ -69,6 +98,23 @@ class TitleManager:
         if len(found)!=1:raise ValueError(f'Fishing title screen did not show one {name}; read {[r["text"] for r in rows][:24]}')
         return found[0]
 
+    def update_catalog(self,names,owned,details):
+        """Remember every fishing title's buffs; log titles seen for the first time."""
+        import json,time
+        from app_config import data_directory
+        path=data_directory()/CATALOG_FILE
+        try:catalog=json.loads(path.read_text(encoding='utf-8'))
+        except (OSError,ValueError):catalog={}
+        for name in names:
+            buffs=details.get(name) or (catalog.get(name) or {}).get('buffs') or TITLE_BUFFS.get(name,{})
+            if name not in catalog and name not in TITLE_BUFFS:
+                self.driver.event('fishing_title_new',title=name,buffs=buffs,
+                                  message=f"New fishing title: {name} "+', '.join(f"{v}x {k.replace('_',' ')}" for k,v in buffs.items()))
+            catalog[name]={'buffs':buffs,'owned':name in owned,'seen':time.time()}
+        from discord_hourly import atomic_json
+        atomic_json(path,catalog)
+        return catalog
+
     def slots(self):
         rows=self.rows((1120,1070,1050,170))
         slots=slot_titles(rows)
@@ -79,7 +125,7 @@ class TitleManager:
         header=' '.join(r['text'] for r in rows if r['center'][1]<450)
         return normalized(title) in normalized(header) or matching_title(header)==title
 
-    def inspect(self,title):
+    def inspect(self,title,details=None):
         d=self.driver
         frame=d.capture()
         rows=d.text(frame,(1980,320,560,700))
@@ -92,6 +138,7 @@ class TitleManager:
         if not self.shows(rows,title):
             raise ValueError(f'Fishing title detail changed for {title}')
         requirement=self.named(rows,'Requirements')
+        if details is not None:details[title]=parse_buffs(rows)
         return owned_check(frame,requirement['center'][1])
 
     def run(self):
@@ -114,11 +161,20 @@ class TitleManager:
             d.click(*self.named(categories,'Fishing',r'Fishing\s*[\(\[]?\s*\d*\s*[\)\]]?')['center'])
             d.sleep(.55)
             frame=d.capture()
-            listing=d.text(frame,(600,340,1500,300))
-            if any(sum(normalized(t)==normalized(r['text']) for r in listing) != 1 for t in PRIORITY):
+            # Title pills only: left of the detail panel, not the One/Two/Three check labels.
+            listing=d.text(frame,(720,340,1300,300))
+            names=[r['text'].strip() for r in listing if r['center'][0]<2000
+                   and not any(word.startswith(normalized(r['text'])) for word in ('one','two','three','vanity'))
+                   and re.fullmatch(r"[A-Za-z' ]{5,40}",r['text'].strip())]
+            if any(sum(normalized(t)==normalized(n) for n in names) != 1 for t in PRIORITY):
                 raise ValueError('Fishing title list changed; read '+str([r['text'] for r in listing]))
-            owned={title for title in PRIORITY if self.inspect(title)}
-            chosen=desired_titles(owned)
+            details={}
+            owned={title for title in names if self.inspect(title,details)}
+            catalog=self.update_catalog(names,owned,details)
+            from app_config import load_config
+            rod=str(load_config().get('active_rod') or '')
+            priority=(load_config().get('title_priority') or {}).get(rod,'luck')
+            chosen=desired_titles(owned,priority,known_buffs(catalog))
             slots=self.slots()
             current={name for name,_ in slots.values() if name}
             d.event('fishing_titles_checked',owned=list(owned),equipped=list(current),best=list(chosen))
