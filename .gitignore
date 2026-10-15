@@ -14,3 +14,4 @@
 *.tmp
 __pycache__/
 *.pyc
+/share/
