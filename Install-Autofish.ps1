@@ -9,7 +9,8 @@ Write-Host "Autofish $version -> $Target" -ForegroundColor Cyan
 
 function Find-Python {
     # A missing runtime makes py.exe write to stderr; that must not stop the installer.
-    $check = 'import sys,struct;assert sys.version_info>=(3,11) and struct.calcsize("P")==8;print(sys.executable)'
+    # No double quotes: Windows PowerShell 5.1 strips them from native arguments.
+    $check = 'import sys,struct;assert sys.version_info>=(3,11) and struct.calcsize(chr(80))==8;print(sys.executable)'
     foreach ($candidate in @(@('py', '-3.12'), @('py', '-3.11'), @('py', '-3'), @('python'))) {
         if (-not (Get-Command $candidate[0] -ErrorAction SilentlyContinue)) { continue }
         try {
