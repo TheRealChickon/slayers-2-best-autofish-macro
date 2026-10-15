@@ -23,7 +23,8 @@ RARITY = {'ouwfish': 'Common', 'ouwfwesh': 'Common', 'coral': 'Common', 'seahors
           'crustadon': 'Legendary', 'krathulon': 'Legendary'}
 # Angler crate trades confirmed by the user on 2026-10-15. Base gold per crate; the
 # 1,580 / 2,070 the user saw included a temporary 2x money boost, which applies to
-# the crate quest only (never to direct merchant sales). 1 Ore = 1 minute of 2x.
+# the crate quest only (never to direct merchant sales). The boost burns Mythic
+# Refinement Ore, 1 ore = 1 minute of 2x; Mythic is also the refine cost from +5 up.
 CRATES = {
     'B': {'gold': 790, 'needs': {'ouwfish': 2, 'seahorse': 2, 'coral': 2, 'ouwfwesh': 2}},
     'A': {'gold': 1035, 'needs': {'ouwfish': 3, 'seahorse': 3, 'coral': 3, 'ouwfwesh': 3, 'clownfish': 1, 'zebrafish': 1}},
@@ -40,9 +41,9 @@ def crate_multiplier():
 DEFAULT_BUFFS = {'Legendary': {'enchant': 10, 'fish_luck': 1.5, 'fishing_luck_factor': 1.2, 'bite_speed': 3.0, 'catch_tier': 'Items'},
                  'Rare': {'enchant': 0, 'fish_luck': .25, 'bite_speed': 1.5, 'catch_tier': 'Rare'},
                  'Common': {'enchant': 0, 'catch_tier': 'Common'}}
-# Rod enchant level -> luck multiplier (user, 2026-10-15: +9 = 2x, +10 = 3x; lower
-# levels step up gradually, exact values pending). Override in config: enchant_luck.
-ENCHANT_LUCK = {0: 1.0, 9: 2.0, 10: 3.0}
+# Rod enchant (refine) level -> luck multiplier, from the in-game refine screen
+# (user, 2026-10-15). One refine step costs 125 Wen + 2 Refinement Ore.
+ENCHANT_LUCK = {0: 1.0, 1: 1.05, 2: 1.1, 3: 1.2, 4: 1.3, 5: 1.4, 6: 1.55, 7: 1.7, 8: 1.9, 9: 2.0, 10: 3.0}
 
 
 def enchant_luck(level):
@@ -70,7 +71,8 @@ def set_rod(rod, at=None, root=None):
         if rows[-1]['rod'] == rod:
             save_config({'active_rod': rod}); return rows[-1]
         rows[-1]['ended'] = at
-    row = {'rod': rod, 'started': at, 'ended': None}
+    import os, sys
+    row = {'rod': rod, 'started': at, 'ended': None, 'by': f"{os.getpid()} {Path(sys.argv[0]).name if sys.argv and sys.argv[0] else '?'}"}
     rows.append(row)
     atomic_json(root/SESSIONS_FILE, {'sessions': rows})
     save_config({'active_rod': rod})

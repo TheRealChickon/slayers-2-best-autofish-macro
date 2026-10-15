@@ -1,8 +1,9 @@
 """Build a versioned zip of the committed app for someone without GitHub access.
 
 Only files tracked in Git go in, so local settings, logs, stats, recordings and
-the webhook never do. The friend unzips it and runs Install.cmd, which installs
-or updates and keeps their own settings and data.
+the webhook never do. The zip holds Autofish.exe and an app folder: the friend
+unzips it and double-clicks Autofish.exe, which installs or updates (keeping their
+own settings and data) and opens the dashboard.
 """
 import io
 import subprocess
@@ -12,7 +13,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-LEFT_OUT = ('tests/', 'private/', 'docs/images/', '.github/', 'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md', '.gitignore')
+LEFT_OUT = ('tests/', 'private/', 'docs/images/', '.github/', 'launcher/', 'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md', '.gitignore')
 
 
 def build(ref='HEAD', out=None):
@@ -26,8 +27,9 @@ def build(ref='HEAD', out=None):
             name = info.filename
             if info.is_dir() or name.startswith(LEFT_OUT) or name.lower().endswith(('.mp4', '.avi')):
                 continue
-            target.writestr('Autofish/'+name, source.read(info))
-        target.writestr('Autofish/VERSION', version+'\n')
+            target.writestr('Autofish/app/'+name, source.read(info))
+        target.writestr('Autofish/app/VERSION', version+'\n')
+        target.writestr('Autofish/Autofish.exe', source.read('launcher/Autofish.exe'))
     return path
 
 
