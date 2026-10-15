@@ -70,10 +70,10 @@ class RejoinControls(unittest.TestCase):
     def test_status_only_shows_connection_counters(self):
         data = {'state': 'Watching connection', 'running': True, 'stop_requested': False,
                 'mode': 'rejoin', 'reason': '', 'presence': 'In game',
-                'rejoin': {'account': 'Grofheyse3729', 'detail': 'Roblox world connected',
+                'rejoin': {'account': 'ExamplePlayer', 'detail': 'Roblox world connected',
                            'rejoins': 2, 'attempts': 3, 'launches': 1}}
         result = '\n'.join(fishing_cli.status_lines(data))
-        self.assertIn('Grofheyse3729', result)
+        self.assertIn('ExamplePlayer', result)
         self.assertIn('Rejoins', result)
         self.assertNotIn('Bait', result)
 

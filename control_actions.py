@@ -14,7 +14,7 @@ import psutil
 import win32gui
 from metrics import RUN
 from fishing_assistant import ROOT, find_window
-from app_config import load_config, save_config, MODES
+from app_config import load_config, save_config, MODES, FULL_NEEDS_GAMEPASS, full_farmer_available
 
 _mutex = threading.RLock()
 _starting = None
@@ -113,6 +113,7 @@ def resume(mode=None,until=None,automatic=False):
     global _starting
     mode = mode or load_config().get('mode','full')
     if mode not in MODES:raise ValueError('Unknown controller mode')
+    if mode=='full' and not full_farmer_available(load_config()):raise ValueError(FULL_NEEDS_GAMEPASS)
     if until and mode not in ('full','here'):raise ValueError('--until is available for Full farmer only (or Farm here)')
     seconds=seconds_until_local_clock(until) if until else 0
     with guard():
@@ -196,6 +197,7 @@ def refuse_peer_controller():
 
 def restart_full(overnight=False):
     """Explicit restart: retain the run, release input, then use Full's rejoin."""
+    if not full_farmer_available(load_config()):raise ValueError(FULL_NEEDS_GAMEPASS)
     with guard():
         refuse_peer_controller()
         if any(alive(name) for name in ('bait-driver-pid.json','route-recorder-pid.json','calibration-pid.json')):

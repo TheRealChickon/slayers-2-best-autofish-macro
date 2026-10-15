@@ -1,0 +1,53 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please **don't** include your Discord webhook URL, Roblox cookie or password.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options: [Full farmer, Fish here, Minigame only, Auto rejoin, Bait buyer, Other]
+    validations:
+      required: true
+  - type: input
+    id: screen
+    attributes:
+      label: Screen
+      description: Resolution and Windows display scaling, e.g. "1920x1080, 125%"
+      placeholder: 1920x1080, 100%
+    validations:
+      required: true
+  - type: dropdown
+    id: window
+    attributes:
+      label: Roblox window
+      options: [Fullscreen (F11), Maximized, Normal window]
+    validations:
+      required: true
+  - type: dropdown
+    id: gpu
+    attributes:
+      label: Graphics card
+      options: [Nvidia, AMD, Intel / laptop graphics, Not sure]
+  - type: input
+    id: version
+    attributes:
+      label: Autofish version
+      description: The contents of the VERSION file, or the release you downloaded
+  - type: textarea
+    id: logs
+    attributes:
+      label: Last log lines
+      description: Output of `autofish logs --activity` (remove your username first)
+      render: text

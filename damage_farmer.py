@@ -23,6 +23,7 @@ from fishing_assistant import ROOT, USER, find_window, rectangle, move_pointer
 from metrics import RUN, read, write
 from minigame_assist import ForegroundInput, foreground, navigation_keys_down, request_hotkey_stop, stop_reason, watch_focus
 from screen_space import ScreenSpace
+from window_fit import fitted
 
 
 def press(inp, key, hold=.045):
@@ -288,7 +289,7 @@ def main(argv=None):
                     rect = rectangle(selected)
                     if selected != hwnd or screen is None or screen.rect != rect:
                         hwnd = selected
-                        screen = ScreenSpace(rect)
+                        screen = ScreenSpace(fitted(selected, rect))
                         needs_setup = True
                         hit_guard.cancel()
                         cycle.resync(tick)

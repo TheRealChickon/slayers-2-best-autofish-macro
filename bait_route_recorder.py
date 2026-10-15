@@ -25,6 +25,7 @@ from pynput import keyboard, mouse
 from app_config import ROOT, data_directory
 from capture_session import CaptureSession
 from discord_hourly import atomic_json
+from dpi import dpi_aware
 from route_recording import RouteSession
 
 LEASE = 'route-recorder-pid.json'
@@ -33,7 +34,7 @@ HOTKEYS = {117: 'checkpoint', 118: 'toggle', 119: 'pause', 121: 'finish',
            120: 'abort', 123: 'abort'}  # F6, F7, F8, F10, F9, F12
 SYSTEM_KEYS = {18, 91, 92, 164, 165}
 USER = ctypes.WinDLL('user32', use_last_error=True)
-USER.SetProcessDPIAware()
+dpi_aware(USER)
 
 
 def client_rect(hwnd):
