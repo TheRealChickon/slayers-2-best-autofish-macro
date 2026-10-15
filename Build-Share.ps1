@@ -16,7 +16,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'git archive failed' }
     $app = Join-Path $staging 'Autofish'
     New-Item -ItemType Directory -Path $app | Out-Null
-    tar -xf $tar -C $app
+    & (Join-Path $env:SystemRoot "System32	ar.exe") -xf $tar -C $app
+    if ($LASTEXITCODE -ne 0) { throw "tar extraction failed" }
     Remove-Item -LiteralPath $tar
     foreach ($name in @('CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md', 'tests', '.gitignore')) {
         $path = Join-Path $app $name

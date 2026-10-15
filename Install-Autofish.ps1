@@ -1,4 +1,4 @@
-param([string]$Target = (Join-Path $env:LOCALAPPDATA 'Autofish\app'))
+param([string]$Target = (Join-Path $env:LOCALAPPDATA 'Autofishpp'), [switch]$NoDesktop, [switch]$NoCLI)
 # Install or update Autofish from this unzipped folder. Settings (config.local.json),
 # run data and stats (data\), the webhook and the Python environment are kept.
 $ErrorActionPreference = 'Stop'
