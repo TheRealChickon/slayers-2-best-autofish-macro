@@ -20,7 +20,9 @@ class Journal:
         for path in paths:
             if not path.exists():continue
             key=str(path);offset=self.offsets.get(key,0)
-            if path.stat().st_size<offset:offset=0
+            size=path.stat().st_size
+            if size==offset:continue
+            if size<offset:offset=0
             with path.open('rb') as f:
                 f.seek(offset)
                 while True:

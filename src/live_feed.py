@@ -76,7 +76,9 @@ class LiveFeed:
         for path in paths:
             if not path.exists():continue
             offset = self.offsets.get(path, 0)
-            if path.stat().st_size < offset:offset = 0
+            size = path.stat().st_size
+            if size == offset:continue
+            if size < offset:offset = 0
             with path.open('rb') as stream:
                 stream.seek(offset)
                 while True:
