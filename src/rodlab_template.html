@@ -93,25 +93,22 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .legend i.imp,.seg-fill.imp{background:linear-gradient(90deg,var(--impossible),#ff9a3c)!important}
 .seg-fill{transition:flex-grow .8s var(--spring)}
 /* the 2x pill and the crate quest switch */
-.x2{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px 0 11px;border-radius:99px;border:1px solid var(--border);background:var(--raised);color:var(--text-3);font:700 14px var(--sans);cursor:pointer;
-  transition:transform .45s var(--spring),background-color .3s,color .3s,border-color .3s,box-shadow .3s,opacity .3s}
-.x2 svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round;transition:transform .5s var(--spring)}
-.x2 small{font:500 12px var(--sans);opacity:.8}
-.x2:hover{transform:translateY(-2px)} .x2:active{transform:scale(.92)}
-.x2[aria-pressed="true"]{background:linear-gradient(135deg,#f5b52e,#e8890c);border-color:transparent;color:#1c1203;box-shadow:0 6px 20px rgba(237,161,0,.35)}
-.x2[aria-pressed="true"] svg{fill:currentColor;transform:rotate(-12deg) scale(1.15)}
-.x2[aria-pressed="true"].pop{animation:x2pop .6s var(--spring)}
-@keyframes x2pop{0%{transform:scale(.85)}60%{transform:scale(1.08)}100%{transform:none}}
+.x2,.qt{position:relative;isolation:isolate;overflow:hidden;display:inline-flex;align-items:center;gap:9px;flex:none;height:38px;padding:0 13px 0 10px;border-radius:12px;border:1px solid var(--border);background:var(--raised);color:var(--text-2);
+  font:600 13px var(--sans);cursor:pointer;transition:border-color .25s,color .25s,transform .4s var(--spring),opacity .3s}
+.x2::before,.qt::before{content:'';position:absolute;inset:0;z-index:-1;background:var(--sw-bg);transform:scaleX(0);transform-origin:left;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+.x2{--sw:var(--legendary);--sw-bg:color-mix(in srgb,var(--legendary) 18%,transparent)}
+.qt{--sw:var(--crate);--sw-bg:color-mix(in srgb,var(--crate) 18%,transparent)}
+.x2 .bx,.qt .bx{width:20px;height:20px;flex:none;border-radius:7px;border:1.5px solid var(--border-strong);background:var(--surface);display:grid;place-items:center;transition:transform .45s var(--spring),background-color .25s,border-color .25s}
+.x2 .bx svg,.qt .bx svg{width:13px;height:13px;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:22;stroke-dashoffset:22;transition:stroke-dashoffset .35s .12s}
+.x2 .ico,.qt .ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.x2[aria-pressed="true"],.qt[aria-checked="true"]{color:var(--text-1);border-color:color-mix(in srgb,var(--sw) 50%,transparent)}
+.x2[aria-pressed="true"]::before,.qt[aria-checked="true"]::before{transform:none}
+.x2[aria-pressed="true"] .bx,.qt[aria-checked="true"] .bx{background:var(--sw);border-color:var(--sw);transform:rotate(-8deg) scale(1.08)}
+.x2[aria-pressed="true"] .bx svg,.qt[aria-checked="true"] .bx svg{stroke-dashoffset:0}
+.x2[aria-pressed="true"] .ico{color:var(--sw);fill:currentColor}
+.x2:active,.qt:active{transform:scale(.95)}
+.x2:hover .bx,.qt:hover .bx{border-color:var(--text-3)}
 .x2:disabled{opacity:.35;cursor:not-allowed;transform:none}
-.qt{display:inline-flex;align-items:center;gap:10px;flex:none;cursor:pointer;border:1px solid var(--border);background:var(--raised);border-radius:99px;padding:4px 4px 4px 12px;font:600 12.5px var(--sans);color:var(--text-2);transition:border-color .3s,color .3s}
-.qt svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.qt .trk{width:48px;height:28px;border-radius:99px;background:var(--border-strong);position:relative;transition:background-color .35s}
-.qt .trk::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:99px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.3);transition:transform .55s var(--spring),width .25s var(--spring)}
-.qt:active .trk::after{width:28px}
-.qt[aria-checked="true"]{color:var(--text-1);border-color:color-mix(in srgb,var(--crate) 50%,transparent)}
-.qt[aria-checked="true"] .trk{background:var(--crate)}
-.qt[aria-checked="true"] .trk::after{transform:translateX(20px)}
-.qt[aria-checked="true"]:active .trk::after{transform:translateX(14px)}
 .hide{display:none!important}
 #pTable.simple th:nth-child(3),#pTable.simple td:nth-child(3){display:none}
 .legend b{font:500 11.5px var(--mono);color:var(--text-3);margin-left:2px}
@@ -224,7 +221,7 @@ footer{color:var(--text-3);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 18
     </div>
     <div class="topctl">
       <div class="seg" id="boostSeg" role="group" aria-label="2x money boost"></div>
-      <button class="x2 hide" id="x2" type="button" aria-pressed="false" data-tip="2× cash boost: crates pay double"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>2×<small>cash</small></button>
+      <button class="x2 hide" id="x2" type="button" aria-pressed="false" data-tip="2× cash boost: crates pay double"><span class="bx"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><svg class="ico" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>2× cash</button>
       <div class="seg" id="rodSeg" role="group" aria-label="Show rod"></div>
     </div>
   </div>
@@ -248,7 +245,7 @@ footer{color:var(--text-3);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 18
     </article>
     <article class="card">
       <header><div><h2>Fish per hour</h2><p class="cap" id="fishCap"></p></div>
-        <button class="qt" id="qt" type="button" role="switch" aria-checked="true" data-tip="Angler crate quest: turn commons into crates, sell the rest"><svg viewBox="0 0 24 24"><path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>Crate quest<span class="trk"></span></button></header>
+        <button class="qt" id="qt" type="button" role="switch" aria-checked="true" data-tip="Angler crate quest: turn commons into crates, sell the rest"><span class="bx"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><svg class="ico" viewBox="0 0 24 24"><path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>Crate quest</button></header>
       <div class="body"><div class="tbl"><table id="species"></table></div></div>
     </article>
   </section>
@@ -387,7 +384,7 @@ function drawSeg(){
 }
 
 $('x2').onclick=()=>{boostMode=boostMode==='on'?'off':'on';keep('rodlab-2x',boostMode==='on');rerod();drawSeg();render();predict();
-  const b=$('x2');b.classList.remove('pop');void b.offsetWidth;b.classList.add('pop')};
+  };
 $('qt').onclick=()=>{crateQuest=!crateQuest;keep('rodlab-crates',crateQuest);rerod();drawSeg();render();predict()};
 
 /* count-up for KPI values */
