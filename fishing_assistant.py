@@ -213,6 +213,7 @@ def main():
     confirmed_recast=None;reward_confirmed_at=None
     disc_track=DiscTrack();pending_collect=None;hold_anchor=None;landing_wait_logged=False;disc_gone_logged=None;disc_represses=0;disc_repress_cycle=None;claim_pending=None;drop_eligible=False;drop_cast_gap=.3;drop_cast_at_cast=None
     last_verified_rod=None
+    tracked_rod=None
     needs_scene_check=True;scene_check_started=None;hooked_cycles=0;last_wait_pickup_check=0;startup_ui_wait_since=None
     last_reference_check=0;reference_matcher=None;paused_at=None
     session=time.strftime('%Y%m%d-%H%M%S'); log=open(RUN/f'events-{session}.jsonl','a',buffering=1)
@@ -331,6 +332,20 @@ def main():
     def reset_disc(near=None):
         nonlocal pending_collect,hold_anchor,landing_wait_logged
         disc_track.reset(near);pending_collect=None;hold_anchor=None;landing_wait_logged=False
+    def note_rod(name):
+        """Attribute catches to the rod the hotbar shows equipped (rod stats sessions)."""
+        nonlocal tracked_rod
+        if name==tracked_rod:return
+        tracked_rod=name
+        if not live_setting('rod_auto_detect',True):return
+        label=name.title()
+        if str(live_setting('active_rod','')).lower()!=name:
+            try:
+                import rod_stats
+                rod_stats.set_rod(label);_live_settings['at']=-10.
+                event('rod_detected',rod=label,message=f'{label} rod equipped; stats now count for it')
+            except (OSError,ValueError) as error:
+                event('rod_detect_failed',rod=label,message=str(error))
     def landed(now):
         # A fresh prompt often reads as text a frame before its moving disc is found;
         # give the disc 0.3 s to show up. Otherwise (occluded or off-crop) the OCR
@@ -592,6 +607,7 @@ def main():
                             rod=recheck_selected_rod(frame,last_verified_rod)
                             if rod is None:rod=locate_rod(frame)
                             last_verified_rod=rod if selected_rod(rod) else None
+                            if selected_rod(rod):note_rod(rod['name'])
                             last_rod_check=now
                             if unselected_rod(rod):
                                 inp.release();inp.aim(*screen.point(rod['x'],rod['y']))
