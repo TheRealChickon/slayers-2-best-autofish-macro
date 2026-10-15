@@ -56,3 +56,10 @@ class RodSessions(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class MoneyBoost(unittest.TestCase):
+    def test_boost_doubles_crates_only(self):
+        counts = {'ouwfish': 2, 'seahorse': 2, 'coral': 2, 'ouwfwesh': 2, 'crustadon': 1}
+        self.assertEqual(rod_stats.best_crates(counts, 2)['gold'], 1580+165)
+        self.assertEqual(rod_stats.best_crates(counts, 1)['gold'], 790+165)
