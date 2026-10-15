@@ -17,7 +17,7 @@ from urllib.parse import urlsplit, parse_qs
 
 from PIL import Image, ImageDraw, ImageFont
 
-WIDTH, HEIGHT = 284, 436
+WIDTH, HEIGHT = 284, 432
 RADIUS = 18
 SURFACE_ALPHA = 174
 TEXT = (241, 245, 249, 255)
@@ -75,85 +75,10 @@ def compact(value):
 
 
 def render(state, gear=None, scale=1.0):
-    """Render the actual overlay surface; also used for deterministic visual QA."""
-    gear = gear or {}
-    density = max(2., scale*2)
-    size = (round(WIDTH*density), round(HEIGHT*density))
-    image = Image.new('RGBA', size)
-    draw = ImageDraw.Draw(image)
-    def box(rect, fill, radius=0, outline=None):
-        layer = Image.new('RGBA', image.size)
-        ImageDraw.Draw(layer).rounded_rectangle(tuple(round(v*density) for v in rect), round(radius*density), fill, outline)
-        image.alpha_composite(layer)
-    def text(x, y, value, color=TEXT, size=12, bold=False, max_width=None):
-        value = str(value)
-        face = font(round(size*density), bold)
-        if max_width:
-            while value and draw.textlength(value, font=face) > max_width*density:
-                value = value[:-2]+'…' if not value.endswith('…') else value[:-2]+'…'
-        draw.text((round(x*density), round(y*density)), value, font=face, fill=color)
-    # A fixed alpha surface leaves the game visible while all primary text stays solid.
-    box((0, 0, WIDTH-1, HEIGHT-1), (28, 34, 47, SURFACE_ALPHA), RADIUS, (212, 228, 244, 45))
-    box((13, 13, 55, 55), (235, 243, 255, 24), 12)
-    # A quiet bobber, used instead of a filled crown badge.
-    draw.ellipse((28*density, 25*density, 40*density, 37*density), outline=TEXT, width=round(1.5*density))
-    draw.line([(34*density, 20*density), (34*density, 26*density)], fill=TEXT, width=round(1.5*density))
-    draw.line([(24*density, 42*density), (29*density, 40*density), (34*density, 42*density),
-               (39*density, 40*density), (44*density, 42*density)], fill=TEXT, width=round(1.4*density))
-    label = state.get('state') or 'Not farming'
-    text(66, 14, label, size=15, bold=True, max_width=205)
-    seconds = max(0, int(state.get('active_seconds') or 0))
-    text(67, 37, f'{seconds//3600}:{seconds//60%60:02}:{seconds%60:02}', DIM, 11)
-    box((13, 66, 271, 68), (245, 249, 255, 24), 1)
-    if state.get('activity_running'): box((13, 66, 170, 68), (233, 243, 255, 210), 1)
-    pace = state.get('pace')
-    if pace is None and state.get('hooks_per_hour'): pace = state['hooks_per_hour']/60
-    gold = state.get('gold_per_hour')
-    total = gold*seconds/3600 if gold is not None and seconds else None
-    stats = [('Pace', f'{pace:.1f}' if pace is not None else '—', '/min', GREEN),
-             ('Gold / h', compact(gold), '', GOLD), ('Session', compact(total), '', GOLD)]
-    for n, (name, value, unit, color) in enumerate(stats):
-        x = 13+n*87
-        box((x, 80, x+80, 134), (228, 238, 255, 17), 12)
-        text(x+10, 87, name, DIM, 10)
-        text(x+10, 104, value, color, 17, True)
-        if unit: text(x+45, 112, unit, MUTED, 9)
-    box((13, 146, 271, 147), (240, 245, 255, 25))
-    rod = gear.get('rod') or state.get('rod')
-    text(16, 158, (rod+' Fishing Rod') if rod else 'No rod picked', GOLD if rod else MUTED, 13, True, 216)
-    enchant = gear.get('enchant')
-    if enchant:
-        box((235, 159, 269, 177), (255, 198, 75, 35), 7)
-        text(241, 159, f'+{enchant}', GOLD, 11, True)
-    titles = gear.get('titles') or []
-    for n, title in enumerate(titles[:3]):
-        y = 185+n*19
-        text(16, y, title.get('name', ''), MUTED, 11, max_width=170)
-        factors = []
-        for k in ('luck', 'bite'):
-            if title.get(k) is not None: factors.append(f"{title[k]:g}×")
-        text(188, y, ' '.join(factors), TEXT, 10, True, 80)
-    if not titles: text(16, 186, 'No fishing titles recorded', DIM, 11)
-    box((13, 246, 137, 272), (235, 243, 255, 22), 13)
-    bait = state.get('bait_remaining_estimate')
-    text(24, 250, f'{bait:,}' if bait is not None else 'Bait unknown', TEXT, 12, True)
-    hours = state.get('bait_hours_remaining_estimate')
-    if hours: text(83, 253, f'≈{hours:.0f}h', DIM, 10)
-    box((144, 246, 271, 272), (235, 243, 255, 22), 13)
-    text(156, 250, MODE.get(state.get('mode'), 'Stopped'), TEXT, 12, True, 104)
-    box((13, 284, 271, 285), (240, 245, 255, 25))
-    text(15, 296, 'RECENT', DIM, 10)
-    rows = [e for e in state.get('events', []) if e.get('group') == 'catches'][-5:][::-1]
-    if not rows: text(15, 322, 'Catches show up here', MUTED, 12)
+    """Overlay design A (see overlay_card); also used for deterministic visual QA."""
+    import overlay_card
     from rod_stats import item_rarity
-    for n, row in enumerate(rows):
-        y = 323+n*20
-        name = row.get('text', '')
-        rarity = item_rarity(name)
-        if rarity == 'Impossible': box((7, y-1, 277, y+20), (255, 100, 133, 35), 8)
-        text(14, y, time.strftime('%H:%M', time.localtime(row.get('at', 0))), DIM, 10)
-        text(59, y-1, name, RARITY.get(rarity, MUTED), 12, rarity != 'Common', 211)
-    return image.resize((round(WIDTH*scale), round(HEIGHT*scale)), Image.Resampling.LANCZOS)
+    return overlay_card.render(state, gear, scale, rarity_of=item_rarity)
 
 
 def paint(hwnd, surface, position):

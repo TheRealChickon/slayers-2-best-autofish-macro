@@ -178,7 +178,7 @@ class RecoveryPacing(unittest.TestCase):
         driver.equip_rod.assert_called_once()
         self.assertEqual(sum(event=='hold_private_join' for event,_ in events),1)
         self.assertLess(clock[0],25)
-        self.assertGreaterEqual(clock[0]-state['since'],3)
+        self.assertGreaterEqual(clock[0]-state['since'],1.5)
         self.assertFalse(state['holding'])
 
 

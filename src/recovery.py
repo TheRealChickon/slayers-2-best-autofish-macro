@@ -66,6 +66,10 @@ def confirm_menu_target(im):
 def confirm_menu_button_visible(im):
     return confirm_menu_target(im) is not None
 
+# Rejoin timing. Fast PCs are paced by what is on screen, not by these limits;
+# slow PCs/connections keep earning time while screens progress.
+LAUNCH_SECONDS=240
+REJOIN_HARD_SECONDS=600
 class UserStop(Exception):pass
 class RecoveryError(Exception):pass
 
@@ -152,7 +156,9 @@ class Recovery:
             if reason_code(str(error))!='focus':raise
             self.inp.gate.interrupted.set();raise InputPaused('paused_focus') from error
     def click(self,x,y,hold=.18):
-        self.move(x,y);self.sleep(.30);self.move(x+1,y);self.sleep(.15);self.move(x,y);self.sleep(.30)
+        # Hover settle: Roblox needs a real pointer move over a button before it
+        # accepts the press. 0.4 s total (was 0.75 s) is still two hover frames.
+        self.move(x,y);self.sleep(.16);self.move(x+1,y);self.sleep(.08);self.move(x,y);self.sleep(.16)
         # Menu transitions can warp the OS pointer back to screen centre
         # during the hover delay. Reposition immediately before pressing.
         self.move(x,y)
@@ -229,13 +235,13 @@ class Recovery:
             try:proc.wait(8)
             except psutil.TimeoutExpired:raise RecoveryError('Roblox did not close for restart')
         self.restarts+=1;self.event('launching_game',attempt=self.restarts)
-        launch_game(LAUNCH_URL,known_exe);deadline=time.monotonic()+100
+        launch_game(LAUNCH_URL,known_exe);deadline=time.monotonic()+LAUNCH_SECONDS
         while time.monotonic()<deadline:
             self.progress(detail='launching_wait')
             self.sleep(1,focus=False)
             try:self.select(focus=True);return
             except (RuntimeError,RecoveryError):continue
-        raise RecoveryError('Roblox did not open within 100 seconds')
+        raise RecoveryError(f'Roblox did not open within {LAUNCH_SECONDS} seconds')
     def equip_rod(self):
         config=load_config()
         cast_x, cast_y = config['cast_point']
@@ -317,6 +323,7 @@ class Recovery:
             if getattr(error,'code',reason_code(str(error))) not in ('client_lost','disconnect'):raise
             self.launch()
         deadline=time.monotonic()+180;pacer=MenuPacer();join_attempts=0;last_class='';joined_world=False
+        hard_deadline=time.monotonic()+REJOIN_HARD_SECONDS
         while time.monotonic()<deadline:
             self.guard();self.progress(detail=last_class or 'inspecting');im=self.capture()
             rows=self.text(im);text=' '.join(r['text'].lower() for r in rows)
@@ -357,7 +364,11 @@ class Recovery:
                 # Once a real join is needed, prepare the loaded world normally.
                 prefer_current=False;joined_world=True
             pacer.observe(kind,target,now)
-            if kind!=last_class:self.event('screen',kind=kind);last_class=kind
+            if kind!=last_class:
+                self.event('screen',kind=kind);last_class=kind
+                # A new screen is progress: slow PCs or connections can sit 30-60 s on
+                # one loading screen, so each step earns another 2 minutes (capped).
+                deadline=min(hard_deadline,max(deadline,now+120))
             if kind=='minigame' and prefer_current:
                 self.restarts=0;self.event('startup_current_minigame')
                 return 'current_minigame'
@@ -379,13 +390,13 @@ class Recovery:
                 raise FishingFault('user_required','Farm here needs an existing game world; startup does not join a server')
             elif kind=='world':
                 if prefer_current:
-                    if pacer.ready('world_ready',now,stable_seconds=3):
+                    if pacer.ready('world_ready',now,stable_seconds=1.5):
                         self.restarts=0;self.event('startup_current_world')
                         return 'current_world'
                 elif force_menu:
                     if pacer.ready('open_menu',now):
                         self.capture('before-menu');self.key('M');pacer.acted('open_menu',time.monotonic(),2);self.event('open_menu')
-                elif pacer.ready('world_ready',now,stable_seconds=3):
+                elif pacer.ready('world_ready',now,stable_seconds=1.5):
                     if equip_rod:
                         self.backstep_after_join(join_attempts>0)
                         self.equip_rod();self.capture('equipped');self.event('equipped_rod')
@@ -411,7 +422,7 @@ class Recovery:
                 if kind=='vendor_dialog':force_menu=not prefer_current
                 elif kind in ('confirm_menu','main_menu'):force_menu=False
             self.sleep(.25)
-        self.capture('timeout');raise RecoveryError('Rejoin did not reach the game within three minutes')
+        self.capture('timeout');raise RecoveryError('Rejoin did not reach the game in time')
 
 def prepare_worker(driver,force,allow_rejoin,prefer_current,current_position,here,titles_checked):
     """Adopt a live position without menu, camera or saved-reference work."""

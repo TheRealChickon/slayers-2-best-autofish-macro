@@ -22,15 +22,17 @@ GEAR = {'rod':'Legendary','enchant':10,'titles':[
 
 
 class OverlayRender(unittest.TestCase):
-    def test_native_surface_keeps_translucency_and_opaque_colored_text(self):
+    def test_native_surface_is_design_a_card(self):
+        # Overlay A (Sami's pick): a lightly see-through dark card so the blur shows,
+        # transparent rounded corners, solid white text and the amber Legendary rod line.
         image=overlay.render(SAMPLE,GEAR)
-        self.assertEqual(image.size,(284,436))
+        self.assertEqual(image.size,(284,432))
         self.assertEqual(image.getpixel((0,0))[3],0)
-        self.assertTrue(165 <= image.getpixel((5,200))[3] <= 185)
+        self.assertTrue(220 <= image.getpixel((5,200))[3] <= 245)
         pixels=list(image.get_flattened_data())
-        self.assertTrue(any(a>245 and g>170 and g>r*1.4 for r,g,b,a in pixels))
-        self.assertTrue(any(a>245 and r>220 and g>155 and b<120 for r,g,b,a in pixels))
-        self.assertEqual(overlay.render(SAMPLE,GEAR,1.5).size,(426,654))
+        self.assertTrue(any(a>245 and r>235 and g>235 and b>235 for r,g,b,a in pixels))
+        self.assertTrue(any(a>245 and r>200 and 140<g<190 and b<90 for r,g,b,a in pixels))
+        self.assertEqual(overlay.render(SAMPLE,GEAR,1.5).size,(426,648))
 
     @unittest.skipUnless(os.name=='nt','Native Windows window')
     def test_real_hidden_window_is_click_through_and_never_activates(self):
