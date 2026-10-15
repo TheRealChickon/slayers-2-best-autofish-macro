@@ -342,6 +342,9 @@ def main():
             delay=live_setting('no_disc_hold_delay',.9)
             return prompt_detected_at is None or now-prompt_detected_at>=delay
         if now-disc_track.seen_at>.25:return True
+        # A bouncing drop can pause for 0.1 s before its final landing (2026-10-15:
+        # settled discs at y 727-755 were replaced by the real prompt ~80 px away).
+        disc_track.settle_seconds=live_setting('disc_settle_seconds',.10)
         if disc_track.settled(now):return True
         return prompt_detected_at is not None and now-prompt_detected_at>LANDING_WAIT_LIMIT_SECONDS
     def start_hold(evidence):
