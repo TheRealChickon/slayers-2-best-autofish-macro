@@ -69,7 +69,7 @@ You now have three icons on your desktop: **Fishing CLI** (the dashboard), **Fis
 
 Open **Fishing CLI**. The first time, it asks one question:
 
-> **Do you own the "Set Spawn Anywhere" gamepass?**
+<img src="docs/images/cli-gamepass.png" alt="First-time question about the Set Spawn Anywhere gamepass" width="640">
 
 Answer **Y** or **N**. This decides your main mode:
 

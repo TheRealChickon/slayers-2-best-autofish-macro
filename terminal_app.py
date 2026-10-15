@@ -420,8 +420,8 @@ class Terminal:
                 tint('  It lets you set your spawn at your fishing spot. If Roblox disconnects or','dim'),
                 tint('  something gets stuck, Autofish can then rejoin and land right back there.','dim'),'',
                 tint('  Y  Yes, I own it','gold')+tint('   Full farmer: fishes and fixes itself by rejoining','text'),
-                tint('  N  No','gold')+tint('               Farm here: fishes and claims where you stand;','text'),
-                tint('                      if Roblox disconnects it stops instead of rejoining elsewhere','dim'),'',
+                tint('  N  No','gold')+tint('              Farm here: fishes and claims where you stand;','text'),
+                tint('                     if Roblox disconnects it stops instead of rejoining elsewhere','dim'),'',
                 tint('  You can change this any time in Settings › Spawn gamepass.','dim'),'',
                 tint('  Y yes   N no   Q close','dim')]
 
