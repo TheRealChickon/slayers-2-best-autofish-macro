@@ -194,67 +194,140 @@ tbody tr:hover td{background:color-mix(in srgb,var(--text-1) 2.5%,transparent)}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 footer{color:var(--text-3);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:space-between}
 footer a{color:inherit}
+
+/* icons */
+.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px}
+.i.big{width:34px;height:34px;stroke-width:1.4;color:var(--border-strong)}
+.mark .i{width:18px;height:18px;stroke-width:2}
+.tabs button{padding:6px 11px}
+.tabs button[aria-label]{padding:6px 9px}
+.card>header h3{display:flex;align-items:center;gap:8px}
+.card>header h3 .i{color:var(--text-3)}
+.count{font:500 12px var(--mono);color:var(--text-3);background:var(--raised);border:1px solid var(--border);border-radius:999px;padding:0 8px}
+.hint{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--good)}
+.hint .i{width:14px;height:14px;stroke-width:2.2}
+.state p span{display:inline-flex;align-items:center;gap:6px}
+.state p .i{width:14px;height:14px;color:var(--text-3)}
+.reason .i{width:14px;height:14px;margin-right:6px}
+.hero .checks{grid-column:1/-1;border-top:1px solid var(--border);padding-top:14px;margin-top:2px}
+.pill .i{width:14px;height:14px;color:var(--text-3)}
+.pill.ok .i{color:var(--good)} .pill.warn .i{color:var(--warn)} .pill.bad .i{color:var(--bad)}
+.pill.ok,.pill.warn,.pill.bad{color:var(--text-1)}
+.kpi .l{display:flex;align-items:center;gap:7px}
+.kpi .l .i{color:var(--text-3)}
+.ev{grid-template-columns:44px 16px minmax(0,1fr)}
+.ev .i{width:14px;height:14px;color:var(--idle);align-self:center}
+.ev.catch .i{color:var(--common)} .ev.item .i{color:var(--legendary);fill:color-mix(in srgb,var(--legendary) 25%,transparent)} .ev.warn .i{color:var(--warn)}
+.ev.error .i{color:var(--bad)} .ev.state .i{color:var(--accent);fill:currentColor} .ev.rec .i{color:var(--accent)}
+.empty .i{display:block;margin:6px auto}
+.set{grid-template-columns:34px minmax(0,1fr) auto;gap:12px;cursor:default}
+.set .ic{width:34px;height:34px;border-radius:9px;background:var(--raised);border:1px solid var(--border);display:grid;place-items:center;color:var(--text-2)}
+.set .t small{display:block;font-size:11.5px;color:var(--text-3);font-weight:400}
+.btn.sm{padding:7px 12px;font-size:13px}
+.share{display:inline-flex;align-items:center;gap:8px;justify-content:flex-end;width:100%}
+.share b{display:block;height:6px;border-radius:3px;background:var(--accent);opacity:.8;max-width:120px;min-width:2px}
+.share em{font-style:normal;min-width:44px;text-align:right;font-size:12.5px}
+.sheet{text-align:center;padding:28px}
+.sheet .badge{width:52px;height:52px;margin:14px auto 0;border-radius:14px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center}
+.sheet .badge .i{width:26px;height:26px;stroke-width:1.7}
+.sheet p{display:inline-flex;align-items:center;gap:6px;color:var(--good);font-size:12.5px}
+.sheet p .i{width:14px;height:14px;stroke-width:2.2}
+.dots{display:flex;gap:6px;justify-content:center}
+.dots i{width:22px;height:4px;border-radius:2px;background:var(--border-strong)}
+.dots i.on{background:var(--accent)}
+.choice{justify-items:center;text-align:center;padding:18px 14px}
+.choice .i{width:24px;height:24px;color:var(--accent);margin-bottom:4px}
+.sheet .btns{justify-content:center}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-rod" viewBox="0 0 24 24"><path d="M4 20 18 4"/><path d="M18 4v9a3 3 0 0 1-6 0"/><circle cx="12" cy="17" r="1.6"/></symbol>
+    <symbol id="i-lab" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5.6 9.6A1.6 1.6 0 0 0 5.8 21h12.4a1.6 1.6 0 0 0 1.4-2.4L14 9V3"/><path d="M7.5 15h9"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5M12 12v9"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01" stroke-width="3"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4"/><path d="M3.3 18a9 9 0 1 1 17.4 0"/></symbol>
+    <symbol id="i-fish" viewBox="0 0 24 24"><path d="M6.5 12c3.2-5.3 9.5-6 14 0-4.5 6-10.8 5.3-14 0Z"/><path d="M6.5 12 3 8.5v7z"/><path d="M16.5 11h.01" stroke-width="2.6"/></symbol>
+    <symbol id="i-coins" viewBox="0 0 24 24"><ellipse cx="9" cy="7" rx="6" ry="3"/><path d="M3 7v5c0 1.7 2.7 3 6 3s6-1.3 6-3V7"/><path d="M15 11c3.3 0 6 1.3 6 3v3c0 1.7-2.7 3-6 3-2.1 0-3.9-.5-5-1.3"/></symbol>
+    <symbol id="i-hook" viewBox="0 0 24 24"><path d="M15 3v10a5 5 0 0 1-10 0v-1.5"/><path d="m3 13.5 2-2 2 2"/><circle cx="15" cy="3.5" r=".5"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-ticket" viewBox="0 0 24 24"><path d="M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z"/><path d="M14 7v2M14 11v2M14 15v2"/></symbol>
+    <symbol id="i-keys" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7.5 14h9"/></symbol>
+    <symbol id="i-pointer" viewBox="0 0 24 24"><path d="m5 3 6.5 17 2.4-7.1L21 10.5z"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+    <symbol id="i-mouse" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 7v4"/></symbol>
+    <symbol id="i-crown" viewBox="0 0 24 24"><path d="m3 7 4.5 5L12 5l4.5 7L21 7l-2 12H5z"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-pad" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="11" rx="4"/><path d="M7 11v3M5.5 12.5h3M15 12h.01M18 13.5h.01" /></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.6-4.4L3 9"/><path d="M3 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.4L21 15"/><path d="M21 20v-5h-5"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></symbol>
+    <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/></symbol>
+    <symbol id="i-loop" viewBox="0 0 24 24"><path d="M6.5 16C4 16 2 14.2 2 12s2-4 4.5-4c4.5 0 6.5 8 11 8 2.5 0 4.5-1.8 4.5-4s-2-4-4.5-4c-4.5 0-6.5 8-11 8z"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  </defs>
+</svg>
 <div class="page">
   <div class="top">
     <div class="brand">
-      <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="var(--bg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 18 4"/><path d="M18 4v9a3 3 0 0 1-6 0"/><circle cx="12" cy="17" r="1.6"/></svg></div>
+      <div class="mark" aria-hidden="true"><svg class="i" style="color:var(--bg)"><use href="#i-rod"/></svg></div>
       <div><h1>Autofish</h1><p id="sub">Project Slayers 2</p></div>
     </div>
-    <nav class="seg" id="tabs" role="tablist" aria-label="Sections">
-      <button data-view="farm" aria-pressed="true">Farm</button>
-      <button data-view="lab" aria-pressed="false">Rod Lab</button>
-      <button data-view="items" aria-pressed="false">Items</button>
-      <button data-view="log" aria-pressed="false">Log</button>
-      <button data-view="settings" aria-pressed="false">Settings</button>
+    <nav class="seg tabs" id="tabs" role="tablist" aria-label="Sections">
+      <button data-view="farm" aria-pressed="true"><svg class="i"><use href="#i-rod"/></svg>Farm</button>
+      <button data-view="lab" aria-pressed="false"><svg class="i"><use href="#i-lab"/></svg>Rod Lab</button>
+      <button data-view="items" aria-pressed="false"><svg class="i"><use href="#i-box"/></svg>Items</button>
+      <button data-view="log" aria-pressed="false"><svg class="i"><use href="#i-list"/></svg>Log</button>
+      <button data-view="settings" aria-pressed="false" aria-label="Settings" title="Settings"><svg class="i"><use href="#i-sliders"/></svg></button>
     </nav>
   </div>
 
   <!-- Farm -->
   <section class="view on" id="v-farm">
     <article class="card hero" id="hero">
-      <div>
-        <div class="state">
-          <div class="orb" aria-hidden="true"><i></i></div>
-          <div style="min-width:0">
-            <h2 id="state">Loading</h2>
-            <p id="meta"></p>
-          </div>
+      <div class="state">
+        <div class="orb" aria-hidden="true"><i></i></div>
+        <div style="min-width:0">
+          <h2 id="state">Loading</h2>
+          <p id="meta"></p>
+          <div class="reason" id="reason"></div>
         </div>
-        <div class="reason" id="reason"></div>
       </div>
       <div class="ctl">
         <div class="seg" id="modes" role="group" aria-label="Mode"></div>
         <div class="btns">
-          <button class="btn primary" id="bStart"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>Start</button>
-          <button class="btn" id="bPause"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>Pause</button>
-          <button class="btn primary" id="bResume"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>Continue</button>
-          <button class="btn danger" id="bStop"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Stop</button>
+          <button class="btn primary" id="bStart"><svg class="i"><use href="#i-play"/></svg>Start</button>
+          <button class="btn primary" id="bResume"><svg class="i"><use href="#i-play"/></svg>Continue</button>
+          <button class="btn" id="bPause"><svg class="i"><use href="#i-pause"/></svg>Pause</button>
+          <button class="btn danger" id="bStop" aria-label="Stop" title="Stop"><svg class="i"><use href="#i-stop"/></svg></button>
         </div>
       </div>
+      <div class="checks" id="checks"></div>
     </article>
 
     <section class="kpis" id="kpis"></section>
 
     <section class="grid">
       <article class="card">
-        <header><div><h3>Catch this run</h3><p class="cap" id="catchCap">Fish by species</p></div>
-          <div class="legend"><span><i style="background:var(--common)"></i>Common</span><span><i style="background:var(--uncommon)"></i>Uncommon</span><span><i style="background:var(--legendary)"></i>Legendary</span></div></header>
+        <header><h3><svg class="i"><use href="#i-fish"/></svg>Catch</h3>
+          <div class="legend"><span title="Common"><i style="background:var(--common)"></i>Common</span><span title="Uncommon"><i style="background:var(--uncommon)"></i>Uncommon</span><span title="Legendary"><i style="background:var(--legendary)"></i>Legendary</span></div></header>
         <div class="body"><div class="rows" id="catch"></div></div>
       </article>
       <article class="card">
-        <header><div><h3>Activity</h3><p class="cap">What the farmer is doing, newest first</p></div></header>
+        <header><h3><svg class="i"><use href="#i-list"/></svg>Activity</h3></header>
         <div class="body"><div class="feed" id="feed"></div></div>
       </article>
     </section>
-
-    <article class="card">
-      <header><div><h3>Checks</h3><p class="cap">Everything the farmer needs to keep going on its own</p></div></header>
-      <div class="body"><div class="checks" id="checks"></div></div>
-    </article>
   </section>
 
   <!-- Rod Lab -->
@@ -263,7 +336,7 @@ footer a{color:inherit}
   <!-- Items -->
   <section class="view" id="v-items">
     <article class="card">
-      <header><div><h3>Items this run</h3><p class="cap" id="itemsCap"></p></div></header>
+      <header><h3><svg class="i"><use href="#i-box"/></svg>Items <span class="count" id="itemsCount"></span></h3></header>
       <div class="body"><div class="tbl"><table id="items"></table></div></div>
     </article>
   </section>
@@ -271,7 +344,7 @@ footer a{color:inherit}
   <!-- Log -->
   <section class="view" id="v-log">
     <article class="card">
-      <header><div><h3>Log</h3><p class="cap">Every event from this run</p></div>
+      <header><h3><svg class="i"><use href="#i-list"/></svg>Log</h3>
         <div class="seg" id="logFilter" role="group" aria-label="Filter"></div></header>
       <div class="body"><div class="feed tall" id="log"></div></div>
     </article>
@@ -281,40 +354,39 @@ footer a{color:inherit}
   <section class="view" id="v-settings">
     <section class="grid">
       <article class="card">
-        <header><div><h3>Account</h3><p class="cap">Saved only on this PC</p></div></header>
+        <header><h3><svg class="i"><use href="#i-user"/></svg>Account</h3><span class="hint" title="Saved only on this PC"><svg class="i"><use href="#i-check"/></svg>Local only</span></header>
         <div class="body form">
-          <div class="set"><div><div class="t">Roblox username</div><div class="h">Used to rejoin your own server</div></div>
-            <input class="input" id="sUser" autocomplete="off" spellcheck="false" placeholder="Your username"></div>
-          <div class="set"><div><div class="t">Set Spawn Anywhere gamepass</div><div class="h">Lets Full farmer rejoin and walk back by itself</div></div>
-            <button class="switch" role="switch" data-key="spawn_gamepass" aria-checked="false" aria-label="Gamepass owned"></button></div>
-          <div class="set"><div><div class="t">Rod hotbar slot</div><div class="h">The number key your rod is on</div></div>
+          <label class="set" title="Your Roblox username, not your display name"><span class="ic"><svg class="i"><use href="#i-user"/></svg></span><span class="t">Username</span>
+            <input class="input" id="sUser" autocomplete="off" spellcheck="false" placeholder="Roblox username"></label>
+          <div class="set" title="Set Spawn Anywhere: Full farmer can rejoin and walk back by itself"><span class="ic"><svg class="i"><use href="#i-ticket"/></svg></span><span class="t">Spawn gamepass</span>
+            <button class="switch" role="switch" data-key="spawn_gamepass" aria-checked="false" aria-label="Spawn gamepass"></button></div>
+          <div class="set" title="The number key your rod is on"><span class="ic"><svg class="i"><use href="#i-keys"/></svg></span><span class="t">Rod slot</span>
             <div class="stepper"><button data-step="-1" aria-label="Lower">−</button><output id="sSlot" class="num">5</output><button data-step="1" aria-label="Higher">+</button></div></div>
-          <div class="set"><div><div class="t">Cast point</div><div class="h">Where Full farmer casts. Press Capture, then hover over the water within 4 seconds</div></div>
-            <div class="btns" style="align-items:center"><span class="mono num" id="sCast" style="color:var(--text-2);font-size:12.5px"></span><button class="btn" id="bCast">Capture</button></div></div>
+          <div class="set" title="Press Capture, then hover over the water within 4 seconds"><span class="ic"><svg class="i"><use href="#i-pointer"/></svg></span><span class="t">Cast point <small class="mono num" id="sCast"></small></span>
+            <button class="btn sm" id="bCast"><svg class="i"><use href="#i-target"/></svg>Capture</button></div>
         </div>
       </article>
       <article class="card">
-        <header><div><h3>Farming</h3><p class="cap">Applied on the next start</p></div></header>
+        <header><h3><svg class="i"><use href="#i-fish"/></svg>Farming</h3></header>
         <div class="body form">
-          <div class="set"><div><div class="t">Overnight mode</div><div class="h">Never stops for small problems, restarts on failure</div></div>
-            <button class="switch" role="switch" data-key="overnight" aria-checked="false" aria-label="Overnight mode"></button></div>
-          <div class="set"><div><div class="t">Start when idle</div><div class="h">Starts farming after you leave the PC alone</div></div>
+          <div class="set" title="Keeps farming through small problems and restarts on failure"><span class="ic"><svg class="i"><use href="#i-moon"/></svg></span><span class="t">Overnight</span>
+            <button class="switch" role="switch" data-key="overnight" aria-checked="false" aria-label="Overnight"></button></div>
+          <div class="set" title="Starts farming after you leave the PC alone"><span class="ic"><svg class="i"><use href="#i-mouse"/></svg></span><span class="t">Start when idle</span>
             <button class="switch" role="switch" data-key="auto_idle" aria-checked="false" aria-label="Start when idle"></button></div>
-          <div class="set"><div><div class="t">Equip best fishing titles</div><div class="h">Checks your titles and wears the three that catch the most</div></div>
-            <button class="switch" role="switch" data-key="auto_titles" aria-checked="false" aria-label="Equip best fishing titles"></button></div>
-          <div class="set"><div><div class="t">2x money boost</div><div class="h">Count crates at double value in stats</div></div>
+          <div class="set" title="Wears the three fishing titles that catch the most"><span class="ic"><svg class="i"><use href="#i-crown"/></svg></span><span class="t">Best titles</span>
+            <button class="switch" role="switch" data-key="auto_titles" aria-checked="false" aria-label="Best titles"></button></div>
+          <div class="set" title="Count crates at double value in stats"><span class="ic"><svg class="i"><use href="#i-zap"/></svg></span><span class="t">2× money boost</span>
             <button class="switch" role="switch" data-key="money_boost" aria-checked="false" aria-label="2x money boost"></button></div>
         </div>
       </article>
     </section>
-    <article class="card">
-      <header><div><h3>More</h3><p class="cap">Discord, titles, hotkeys and every other setting live in the terminal dashboard</p></div></header>
-      <div class="body"><div class="btns"><button class="btn" id="bTerm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 4 4-4 4"/><path d="M12 17h7"/></svg>Open terminal dashboard</button>
-        <button class="btn" id="bData"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Open data folder</button></div></div>
-    </article>
+    <div class="btns">
+      <button class="btn" id="bTerm" title="Discord, hotkeys and every other setting"><svg class="i"><use href="#i-term"/></svg>Terminal</button>
+      <button class="btn" id="bData" title="Logs, stats and screenshots"><svg class="i"><use href="#i-folder"/></svg>Data folder</button>
+    </div>
   </section>
 
-  <footer><span id="foot"></span><span>Fan-made, not affiliated with Roblox. Use at your own risk.</span></footer>
+  <footer><span id="foot"></span><span>Fan-made · not affiliated with Roblox</span></footer>
 </div>
 
 <div class="veil" id="veil" role="dialog" aria-modal="true" aria-labelledby="obTitle">
@@ -329,7 +401,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const fmt = (v, d=0) => v == null || !isFinite(v) ? '—' : Number(v).toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d});
 const dur = s => { s = Math.max(0, s|0); const h = s/3600|0, m = (s%3600)/60|0; return h ? `${h}h ${String(m).padStart(2,'0')}m` : `${m}m`; };
 const clock = t => new Date(t*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hourCycle:'h23'});
-const MODES = [['full','Full farmer'],['here','Farm here'],['assist','Minigame only'],['spot','Fish here']];
+const ico = (name, cls='') => `<svg class="i ${cls}"><use href="#i-${name}"/></svg>`;
+const MODES = [['full','Full farmer','loop'],['here','Farm here','pin'],['assist','Minigame','pad'],['spot','Fish here','target']];
 const RVAR = {Common:'var(--common)', Uncommon:'var(--uncommon)', Legendary:'var(--legendary)'};
 let S = null, view = 'farm', pickMode = null, logKind = 'all', seen = new Set(), busy = false;
 
@@ -368,13 +441,14 @@ function drawHero(s){
   const hero = $('hero'), live = s.running || s.starting;
   hero.style.setProperty('--tone', tone(s)); hero.classList.toggle('on', live && !s.paused);
   $('state').textContent = s.state;
-  const parts = [MODES.find(m => m[0] === s.mode)?.[1] || s.mode];
-  if (s.active_seconds) parts.push(dur(s.active_seconds) + ' farmed');
-  if (s.rod) parts.push(s.rod + ' rod');
-  $('meta').innerHTML = parts.map(p => `<span>${esc(p)}</span>`).join('');
-  const r = $('reason'); r.textContent = s.reason || ''; r.classList.toggle('show', !!s.reason && !s.running);
+  const mode = MODES.find(m => m[0] === s.mode);
+  const parts = [mode ? ico(mode[2]) + mode[1] : esc(s.mode)];
+  if (s.active_seconds) parts.push(ico('gauge') + dur(s.active_seconds));
+  if (s.rod) parts.push(ico('rod') + esc(s.rod));
+  $('meta').innerHTML = parts.map(p => `<span>${p}</span>`).join('');
+  const r = $('reason'); r.innerHTML = s.reason && !s.running ? ico('alert') + esc(s.reason) : ''; r.classList.toggle('show', !!s.reason && !s.running);
   if (pickMode == null || live) pickMode = s.mode;
-  $('modes').innerHTML = MODES.map(([k, l]) => `<button data-m="${k}" aria-pressed="${k === pickMode}" ${live ? 'disabled' : ''}>${l}</button>`).join('');
+  $('modes').innerHTML = MODES.map(([k, l, i]) => `<button data-m="${k}" aria-pressed="${k === pickMode}" ${live ? 'disabled' : ''}>${ico(i)}${l}</button>`).join('');
   $('bStart').hidden = live || s.paused; $('bResume').hidden = !s.paused || s.running;
   $('bPause').hidden = !live; $('bStop').hidden = !live && !s.paused;
 }
@@ -383,52 +457,69 @@ function drawKpis(s){
   const bait = s.bait_remaining_estimate, hrs = s.bait_hours_remaining_estimate;
   const baitPct = bait != null && s.bait_start ? Math.max(2, Math.min(100, 100*bait/s.bait_start)) : null;
   const cards = [
-    ['pace', 'Pace', pace, v => `${fmt(v,1)}<small>hooks/min</small>`, `${fmt(s.hooks)} hooks this run`],
-    ['fish', 'Fish caught', s.fish, v => fmt(v), s.last_item ? `Last: ${esc(s.last_item)}` : 'No catches yet'],
-    ['gold', 'Gold per hour', s.gold_per_hour, v => `${fmt(v/1000,1)}<small>k</small>`, s.gold_per_hour ? 'Crates first, rest sold' : 'Needs a few minutes of fishing'],
-    ['bait', 'Bait left', bait, v => fmt(v), hrs ? `About ${dur(hrs*3600)} at this pace` : 'Read from your inventory'],
+    ['pace', 'gauge', 'Pace', pace, v => `${fmt(v,1)}<small>/min</small>`, s.hooks ? `${fmt(s.hooks)} hooks` : ''],
+    ['fish', 'fish', 'Fish', s.fish, v => fmt(v), s.last_item ? esc(s.last_item) : ''],
+    ['gold', 'coins', 'Gold / h', s.gold_per_hour, v => `${fmt(v/1000,1)}<small>k</small>`, ''],
+    ['bait', 'hook', 'Bait', bait, v => fmt(v), hrs ? `≈ ${dur(hrs*3600)}` : ''],
   ];
   const box = $('kpis');
-  if (!box.children.length) box.innerHTML = cards.map(([id, l]) => `<div class="kpi"><div class="l">${l}</div><div class="v num" id="k-${id}">—</div><div class="d" id="d-${id}"></div>${id === 'bait' ? '<div class="meter"><b id="baitBar" style="width:0"></b></div>' : ''}</div>`).join('');
-  for (const [id, , v, render, d] of cards) { const el = $('k-'+id); v == null ? (el.textContent = '—', el.dataset.v = 0) : tween(el, v, render); $('d-'+id).innerHTML = d; }
+  if (!box.children.length) box.innerHTML = cards.map(([id, i, l]) => `<div class="kpi"><div class="l">${ico(i)}${l}</div><div class="v num" id="k-${id}">—</div><div class="d" id="d-${id}"></div>${id === 'bait' ? '<div class="meter"><b id="baitBar" style="width:0"></b></div>' : ''}</div>`).join('');
+  for (const [id, , , v, render, d] of cards) { const el = $('k-'+id); v == null ? (el.textContent = '—', el.dataset.v = 0) : tween(el, v, render); $('d-'+id).innerHTML = d || '&nbsp;'; }
   const bar = $('baitBar'); bar.style.width = (baitPct ?? 0) + '%'; bar.classList.toggle('low', baitPct != null && baitPct < 15);
 }
 function drawCatch(s){
   const rows = (s.catch || []).filter(r => r.count > 0), top = Math.max(1, ...rows.map(r => r.count)), total = rows.reduce((a, r) => a + r.count, 0);
-  $('catchCap').textContent = total ? `${fmt(total)} fish by species` : 'Fish by species';
   $('catch').innerHTML = rows.length ? rows.map(r => `<div class="row"><div class="name">${esc(r.name)}</div>
     <div class="track"><div class="fill" style="width:${(100*r.count/top).toFixed(1)}%;background:${RVAR[r.rarity] || 'var(--accent)'}"></div></div>
     <div class="val num">${fmt(r.count)} <small>${fmt(100*r.count/total)}%</small></div></div>`).join('')
-    : '<div class="empty">Catches show up here as soon as the first fish lands.</div>';
+    : `<div class="empty">${ico('fish', 'big')}</div>`;
 }
 const RARE = /Krathulon|Crustadon|Mythic/i;
-function evClass(e){ return e.level === 'error' ? 'error' : e.level === 'warn' ? 'warn' : e.group === 'state' ? 'state' : e.group === 'catches' ? (RARE.test(e.text) ? 'item' : 'catch') : ''; }
+function evIcon(e){
+  if (e.level === 'error' || e.level === 'warn') return ['warn', 'alert'];
+  if (e.group === 'catches') return RARE.test(e.text) ? ['item', 'star'] : ['catch', 'fish'];
+  if (e.group === 'recovery') return ['rec', 'refresh'];
+  if (e.group === 'state') return ['state', 'dot'];
+  return ['', 'dot'];
+}
 function feedHtml(list){
   return list.map(e => { const key = e.id ?? (e.at + e.text), fresh = seen.size && !seen.has(key); seen.add(key);
-    return `<div class="ev ${evClass(e)}${fresh ? ' fresh' : ''}"><time>${clock(e.at)}</time><i></i><span title="${esc(e.text)}">${esc(e.text)}</span></div>`; }).join('');
+    const [cls, icon] = evIcon(e);
+    return `<div class="ev ${cls}${fresh ? ' fresh' : ''}"><time>${clock(e.at)}</time>${ico(icon)}<span title="${esc(e.text)}">${esc(e.text)}</span></div>`; }).join('');
 }
 function drawFeed(s){
   const ev = (s.events || []).slice().reverse();
-  $('feed').innerHTML = ev.length ? feedHtml(ev.slice(0, 40)) : '<div class="empty">Nothing yet. Press Start to begin.</div>';
+  $('feed').innerHTML = ev.length ? feedHtml(ev.slice(0, 40)) : `<div class="empty">${ico('list', 'big')}</div>`;
 }
+/* Status chips: an icon and a word or two; the full meaning is in the tooltip. */
+const CHECKS = {
+  'Roblox': ['pad', v => /^Not polled|^Checking|^Unknown/.test(v) ? 'Roblox' : v],
+  'Account': ['user', v => v === 'Not set' ? 'No username' : v],
+  'Spawn gamepass': ['ticket', v => v === 'Yes' ? 'Gamepass' : v === 'No' ? 'No gamepass' : 'Gamepass?'],
+  'Rod slot': ['keys', v => 'Slot ' + v],
+  'Overnight': ['moon', v => v === 'On' ? 'Overnight' : 'Overnight off'],
+  'Bait': ['hook', v => v.replace(' left', '')],
+  'Unread items': ['alert', v => v + ' unread'],
+};
 function drawChecks(s){
-  $('checks').innerHTML = (s.checks || []).map(c => `<span class="pill ${c.ok === true ? 'ok' : c.ok === false ? 'bad' : c.ok === 'warn' ? 'warn' : ''}"><i></i>${esc(c.label)} <b>${esc(c.value)}</b></span>`).join('');
+  $('checks').innerHTML = (s.checks || []).map(c => { const [i, short] = CHECKS[c.label] || ['dot', v => v];
+    return `<span class="pill ${c.ok === true ? 'ok' : c.ok === false ? 'bad' : c.ok === 'warn' ? 'warn' : ''}" title="${esc(c.label)}: ${esc(c.value)}">${ico(i)}${esc(short(String(c.value)))}</span>`; }).join('');
 }
 
 /* --- other views --- */
 function drawItems(s){
   const items = s.items || [], total = items.reduce((a, r) => a + r.quantity, 0);
-  $('itemsCap').textContent = `${fmt(total)} items from ${fmt(s.collections)} pickups`;
-  $('items').innerHTML = items.length ? `<thead><tr><th>Item</th><th>Rarity</th><th>Quantity</th><th>Share</th></tr></thead><tbody>${items.map(r =>
-    `<tr><td><span class="chip"><i style="background:${RVAR[r.rarity] || 'var(--idle)'}"></i>${esc(r.item)}</span></td><td>${esc(r.rarity || '—')}</td><td class="num mono">${fmt(r.quantity)}</td><td class="num mono">${fmt(100*r.quantity/total,1)}%</td></tr>`).join('')}</tbody>`
-    : '<tbody><tr><td class="empty">No items yet.</td></tr></tbody>';
+  $('itemsCount').textContent = total ? fmt(total) : '';
+  $('items').innerHTML = items.length ? `<thead><tr><th>Item</th><th>Qty</th><th>Share</th></tr></thead><tbody>${items.map(r =>
+    `<tr><td><span class="chip"><i style="background:${RVAR[r.rarity] || 'var(--idle)'}"></i>${esc(r.item)}</span></td><td class="num mono">${fmt(r.quantity)}</td><td><span class="share"><b style="width:${(100*r.quantity/items[0].quantity).toFixed(1)}%"></b><em class="mono num">${fmt(100*r.quantity/total,1)}%</em></span></td></tr>`).join('')}</tbody>`
+    : `<tbody><tr><td class="empty">${ico('box', 'big')}</td></tr></tbody>`;
 }
-const KINDS = [['all','All'],['catch','Catches'],['recovery','Recovery'],['problem','Problems']];
+const KINDS = [['all','All','list'],['catch','Catches','fish'],['recovery','Fixes','refresh'],['problem','Problems','alert']];
 function drawLog(s){
-  $('logFilter').innerHTML = KINDS.map(([k, l]) => `<button data-k="${k}" aria-pressed="${k === logKind}">${l}</button>`).join('');
+  $('logFilter').innerHTML = KINDS.map(([k, l, i]) => `<button data-k="${k}" aria-pressed="${k === logKind}">${ico(i)}${l}</button>`).join('');
   const ev = (s.events || []).slice().reverse().filter(e => logKind === 'all' || (logKind === 'catch' ? e.group === 'catches'
     : logKind === 'problem' ? ['warn','error'].includes(e.level) : e.group === 'recovery'));
-  $('log').innerHTML = ev.length ? feedHtml(ev) : '<div class="empty">No events of this kind.</div>';
+  $('log').innerHTML = ev.length ? feedHtml(ev) : `<div class="empty">${ico('list', 'big')}</div>`;
 }
 function drawSettings(s){
   const c = s.config || {};
@@ -443,14 +534,14 @@ function drawOnboarding(s){
   if (!step) { veil.classList.remove('on'); return; }
   if (veil.dataset.step == step && veil.classList.contains('on')) return;
   veil.dataset.step = step; veil.classList.add('on');
-  sheet.innerHTML = step === 1 ? `<div class="step">Setup · 1 of 2</div><h2 id="obTitle">Do you own the Set Spawn Anywhere gamepass?</h2>
-    <p>It decides how Autofish recovers when something goes wrong. You can change this later in Settings.</p>
-    <div class="choices"><button class="choice" data-gp="1"><b>Yes, I own it</b><span>Full farmer: rejoins, walks back to your spot and keeps fishing all night.</span></button>
-    <button class="choice" data-gp="0"><b>No</b><span>Farm here: fishes and claims where you stand. If the game kicks you, it waits for you.</span></button></div>`
-  : `<div class="step">Setup · 2 of 2</div><h2 id="obTitle">What is your Roblox username?</h2>
-    <p>Full farmer uses it to rejoin your own server. It is saved only on this PC.</p>
-    <input class="input" id="obUser" autocomplete="off" spellcheck="false" placeholder="Roblox username">
-    <div class="btns"><button class="btn" id="obSkip">Later</button><button class="btn primary" id="obSave">Save</button></div>`;
+  sheet.innerHTML = step === 1 ? `<div class="dots"><i class="on"></i><i></i></div><div class="badge">${ico('ticket')}</div>
+    <h2 id="obTitle">Own the Set Spawn Anywhere gamepass?</h2>
+    <div class="choices"><button class="choice" data-gp="1">${ico('loop')}<b>Yes</b><span>Full farmer · rejoins by itself</span></button>
+    <button class="choice" data-gp="0">${ico('pin')}<b>No</b><span>Farm here · fishes where you stand</span></button></div>`
+  : `<div class="dots"><i></i><i class="on"></i></div><div class="badge">${ico('user')}</div>
+    <h2 id="obTitle">Your Roblox username</h2><p>${ico('check')}Saved only on this PC</p>
+    <input class="input" id="obUser" autocomplete="off" spellcheck="false" placeholder="Username, not display name">
+    <div class="btns"><button class="btn" id="obSkip">Later</button><button class="btn primary" id="obSave">${ico('check')}Save</button></div>`;
   if (step === 2) setTimeout(() => $('obUser')?.focus(), 50);
 }
 
@@ -459,7 +550,7 @@ function draw(s){
   if (view === 'items') drawItems(s); if (view === 'log') drawLog(s); if (view === 'settings') drawSettings(s);
   drawOnboarding(s);
   $('sub').textContent = s.game || 'Project Slayers 2';
-  $('foot').textContent = `Autofish ${s.version || ''} · updated ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23'})}`;
+  $('foot').textContent = `v${s.version || ''} · ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23'})}`;
 }
 
 /* --- events --- */
@@ -485,12 +576,12 @@ $('sUser').addEventListener('change', e => setting('account_username', e.target.
 document.querySelectorAll('.stepper button').forEach(b => b.onclick = () => { const v = Math.min(9, Math.max(1, (+$('sSlot').value || 5) + +b.dataset.step)); $('sSlot').value = v; setting('rod_slot', v); });
 $('sheet').addEventListener('click', async e => {
   const gp = e.target.closest('[data-gp]'); if (gp) return setting('spawn_gamepass', gp.dataset.gp === '1');
-  if (e.target.closest('#obSkip')) { drawOnboarding.skipped = true; toast('Add your username later in Settings'); return drawOnboarding(S); }
+  if (e.target.closest('#obSkip')) { drawOnboarding.skipped = true; toast('Add it later in Settings'); return drawOnboarding(S); }
   if (e.target.closest('#obSave')) { const v = $('obUser').value.trim(); if (v) setting('account_username', v); }
 });
 $('sheet').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'obUser') $('obSave').click(); });
 
-async function poll(){ try { draw(await api('/api/state')); } catch (e) { $('foot').textContent = 'Reconnecting to Autofish…'; } }
+async function poll(){ try { draw(await api('/api/state')); } catch (e) { $('foot').textContent = 'Reconnecting…'; } }
 if (BOOT.view) show(BOOT.view);
 poll(); if (!BOOT.sample) setInterval(poll, 2000);
 </script>

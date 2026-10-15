@@ -105,7 +105,7 @@ Then open the **Settings** tab and check these:
 | **Minigame only** | Cast and collect yourself | Only plays the reel minigame |
 | **Auto rejoin** | Play normally | Watches for disconnects and rejoins; no fishing |
 
-**Fish here** and **Minigame only** sit next to Start in the app; **Auto rejoin** is in the terminal dashboard (`autofish rejoin`). Full farmer needs the **Set Spawn Anywhere** gamepass, because rejoining only fixes things when it brings you back to your spot.
+**Fish here** and **Minigame** (Minigame only) sit next to Start in the app; **Auto rejoin** is in the terminal dashboard (`autofish rejoin`). Full farmer needs the **Set Spawn Anywhere** gamepass, because rejoining only fixes things when it brings you back to your spot.
 
 ## Discord reports (optional)
 
