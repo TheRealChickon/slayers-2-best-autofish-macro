@@ -78,3 +78,17 @@ class NewTitles(unittest.TestCase):
         table=title_manager.known_buffs({'Master Angler':{'buffs':{'fishing_luck':1.1}}})
         best=title_manager.desired_titles(set(names),'luck',table)
         self.assertEqual(best,('Master Angler','Salvager','Legendary Fisherman'))
+
+
+class FaintTitle(unittest.TestCase):
+    def test_faint_pill_is_named_from_the_equipped_bar(self):
+        import numpy as np
+        import title_manager
+        class Driver:
+            def text(self,image,box):
+                if box[1]==1100:return [row('Living Legend',841,1144),row('Vanity',845,1182),row('Salvager',1422,1144),row('One',1423,1182)]
+                return [row('Liwng Legend',1281,613),row('Sea Horse',1345,682),row('Collect',1317,707)]
+        manager=title_manager.TitleManager(Driver())
+        frame=np.zeros((1440,2560,3),np.uint8)
+        self.assertEqual(manager.faint_titles(frame,['Angler','Salvager']),['Living Legend'])
+        self.assertEqual(manager.positions['Living Legend'],(1281,613))
