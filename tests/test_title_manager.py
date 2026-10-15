@@ -54,3 +54,27 @@ class TitleCatalog(unittest.TestCase):
         self.assertEqual(desired_titles(owned,'bite'),('Legendary Fisherman','Deep Water Angler','Angler'))
         new={**{n:{} for n in owned},'Salvager':{'fishing_luck':1.08},'Sea Sage':{'fishing_luck':1.2}}
         self.assertEqual(desired_titles(owned|{'Sea Sage'},'luck',new)[0],'Sea Sage')
+
+
+class NewTitles(unittest.TestCase):
+    def test_unknown_title_is_listed_kept_and_not_merged_into_a_known_one(self):
+        from title_manager import listed_titles,canonical_title,category_count
+        rows=[row('Angler',800,400),row('Deep Water Angler',1100,400),row('Leviathan H',1450,400),
+              row('Legendary Fisherman',800,520),row('Salvager',1100,520),row('Master Angler',1450,520),
+              row('One',1405,700),row('Buffs',2100,640),row('OuwFish',1290,720),row('Collect',1280,745)]
+        names=[canonical_title(n) for n in listed_titles(rows)]
+        self.assertEqual(names,['Angler','Deep Water Angler','Leviathan Hunter','Legendary Fisherman','Salvager','Master Angler'])
+        self.assertEqual(category_count('Fishing (6)'),6)
+        self.assertIsNone(category_count('Fishing'))
+
+    def test_new_title_is_matched_in_a_slot_and_ranked(self):
+        import title_manager
+        names=title_manager.PRIORITY+('Master Angler',)
+        rows=[row('Master Angler',1405,1145),row('One',1405,1180),
+              row('Salvager',1659,1145),row('Two',1659,1181),
+              row('Angler',1954,1145),row('Three',1954,1181)]
+        slots=title_manager.slot_titles(rows,names)
+        self.assertEqual([slots[s][0] for s in ('One','Two','Three')],['Master Angler','Salvager','Angler'])
+        table=title_manager.known_buffs({'Master Angler':{'buffs':{'fishing_luck':1.1}}})
+        best=title_manager.desired_titles(set(names),'luck',table)
+        self.assertEqual(best,('Master Angler','Salvager','Legendary Fisherman'))

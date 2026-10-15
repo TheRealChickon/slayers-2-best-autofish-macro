@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import numpy as np
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 import fishing_assistant as fishing
 import full_pause
 from faults import FishingFault
@@ -136,6 +136,9 @@ class PendingPickupTests(unittest.TestCase):
                 (fishing,'load_config',Mock(return_value={'camera_mode':'keep','auto_rod':auto_rod,'cast_point':(1600,800)}))]:
                 stack.enter_context(patch.object(target,name,value))
             stack.enter_context(patch.object(full_pause.InputGate,'start'))
+            # Fake rods must never reach the real rod-sessions.json (they relabelled
+            # live Common catches as Rare on 2026-10-15).
+            stack.enter_context(patch('rod_stats.set_rod'))
             stack.enter_context(patch.object(fishing.time,'monotonic',side_effect=lambda:clock[0]))
             stack.enter_context(patch.object(fishing.time,'sleep',side_effect=sleep))
             stack.enter_context(patch.object(fishing.cv2,'imread',return_value=None))
