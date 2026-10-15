@@ -312,7 +312,7 @@ class Terminal:
             if key=='Rod stats page':
                 import rod_stats
                 def open_page():
-                    path=rod_stats.page();os.startfile(str(path));return 'Opened '+str(path)
+                    path=rod_stats.page();rod_stats.ensure_watch();os.startfile(str(path));return 'Opened '+str(path)
                 self.job(open_page);return
             if key=='Purchase amount':self.edit(key,self.config.get('bait_buy_amount',169000));return
             if key=='Amount type':

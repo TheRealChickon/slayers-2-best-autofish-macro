@@ -15,7 +15,7 @@ from discord_hourly import atomic_json, read_json
 import run_log
 
 SESSIONS_FILE = 'rod-sessions.json'
-PAGE_FILE = 'rod-stats.html'
+PAGE_FILE = 'rod-lab.html'
 RODS = ('Legendary', 'Rare', 'Uncommon', 'Common')
 # Rarity of each fish; anything else (ores, materials, gear) is not a fish.
 RARITY = {'ouwfish': 'Common', 'ouwfwesh': 'Common', 'coral': 'Common', 'seahorse': 'Common',
@@ -150,66 +150,74 @@ def by_rod(root=None, now=None):
     return sorted(rows.values(), key=lambda r: -(r['crate_gold_per_hour'] or 0))
 
 
-def page(root=None, now=None):
-    """Write the comparison page next to the run data and return its path."""
+TEMPLATE = Path(__file__).resolve().parent/'rodlab_template.html'
+LOCAL_REFRESH_SECONDS = 60
+
+
+def export_data(root=None, now=None):
+    """Everything the Rod Lab dashboard draws, as plain JSON-ready data."""
     root = Path(root or data_directory())
     rods = by_rod(root, now)
-    runs = [session_stats(root, session, now) for session in sessions(root)]
-    fish_keys = [k for k in RARITY if any(k in r['counts'] for r in rods)]
-    esc = html.escape
-    def cell(v, suffix=''):
-        return '—' if v is None else (f'{v:,}' if isinstance(v, int) else str(v))+suffix
-    head = ''.join(f'<th>{esc(NAMES.get(k, k))}<br><small>{RARITY[k]}</small></th>' for k in fish_keys)
-    body = []; money = []
-    def money_row(label, hours, direct, c):
-        per_hour = lambda v: f'{round(v/hours):,}' if hours >= .05 else '—'
-        mix = f"{c['crate_b']} B" + (f" + {c['crate_a']} A" if c['crate_a'] else '')
-        return (f"<tr><th>{label}</th><td>{hours:.1f}h</td><td>{direct:,}<br><small>{per_hour(direct)}/h</small></td>"
-                f"<td>{mix}<br><small>{c['crate_gold']:,} gold · short on {esc(NAMES.get(c['limit'], c['limit']))}</small></td>"
-                f"<td>{c['direct_gold']:,}</td><td><b>{c['gold']:,}</b></td><td><b>{per_hour(c['gold'])}</b></td></tr>")
-    for r in rods:
-        buffs = ', '.join(f'{k.replace("_", " ")} {v}'+('×' if isinstance(v, (int, float)) else '') for k, v in r['buffs'].items()) or 'not recorded'
-        drops = ''.join(f"<td>{r['drop_percent'].get(k, 0)}%<br><small>{r['counts'].get(k, 0):,}</small></td>" for k in fish_keys)
-        rarity = ' · '.join(f"{k} {v}%" for k, v in sorted(r['rarity_percent'].items()))
-        c = r['crate']
-        body.append(f"<tr><th>{esc(r['rod'])}<br><small>{esc(buffs)}</small></th><td>{r['active_hours']:.1f}h<br><small>{r['hooks']:,} hooks</small></td>"
-                    f"<td>{cell(r['hooks_per_minute'])}</td>{drops}<td>{esc(rarity)}<br><small>n = {r['fish']:,} fish</small></td>"
-                    f"<td>{cell(r['direct_gold_per_hour'])}</td></tr>")
-        money.append(money_row(esc(r['rod']), r['active_hours'], r['direct_gold'], c))
-    crates = ''.join(f"<li>Crate {name}: {', '.join(f'{n}× {NAMES.get(k, k)}' for k, n in c['needs'].items())} → {c['gold']:,} gold</li>"
-                     for name, c in CRATES.items())
-    prices = ' · '.join(f'{NAMES.get(k, k)} {v}' for k, v in PRICES.items())
-    document = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Rod Comparison</title><style>
-:root{{--bg:#101614;--fg:#dfe4d4;--dim:#7e9792;--gold:#dcb167;--line:#25302d}}
-@media (prefers-color-scheme: light){{:root:not([data-theme="dark"]){{--bg:#f6f4ee;--fg:#1e2622;--dim:#5f6f6b;--gold:#8a5d12;--line:#d8d4c8}}}}
-body{{background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,sans-serif;margin:0;padding:24px 16px}}
-h1{{color:var(--gold);font-size:22px;margin:0 0 4px}} p,li{{color:var(--dim)}}
-.wrap{{overflow-x:auto}} table{{border-collapse:collapse;min-width:100%}}
-th,td{{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top;white-space:nowrap}}
-thead th{{color:var(--dim);font-weight:500}} small{{color:var(--dim)}}
-</style></head><body>
-<h1>Rod comparison</h1><p>Generated {time.strftime('%Y-%m-%d %H:%M')} from the farmer's own catch logs. Drop % = share of fish caught (ores and materials excluded); n is the sample size.</p>
-<div class="wrap"><table><thead><tr><th>Rod</th><th>Fished</th><th>Hooks/min</th>{head}<th>By rarity</th><th>Gold/h all sold</th></tr></thead>
-<tbody>{''.join(body) or '<tr><td colspan="9">No rod sessions yet.</td></tr>'}</tbody></table></div>
-<h2>Gold: crates plus leftovers</h2><p>As many crates as the catch allows, then everything left over sold directly; the two together are the combined total.</p>
-<div class="wrap"><table><thead><tr><th>Rod</th><th>Fished</th><th>All sold directly</th><th>Crates</th><th>Leftovers sold</th><th>Combined total</th><th>Combined gold/h</th></tr></thead>
-<tbody>{''.join(money)}</tbody></table></div>
-<h2>Per run</h2>
-<div class="wrap"><table><thead><tr><th>Run</th><th>Fished</th><th>All sold directly</th><th>Crates</th><th>Leftovers sold</th><th>Combined total</th><th>Combined gold/h</th></tr></thead>
-<tbody>{''.join(money_row(esc(r['rod'])+'<br><small>'+time.strftime('%d %b %H:%M', time.localtime(r['started']))+'</small>', r['active_hours'], r['direct_gold'], r['crate']) for r in runs)}</tbody></table></div>
-<h2>Angler crates</h2><ul>{crates}</ul>
-<p>Sell prices (gold): {esc(prices)}. Crate gold/h uses the best mix of crates and direct sales for that rod's catches.</p>
-<p>Predicted drop % from luck values needs at least two rods with known luck and a few hundred fish each; until then only observed rates are shown.</p>
-</body></html>"""
+    bait = bait_hours = None
+    try:
+        import status_view
+        snap = status_view.snapshot()
+        bait, bait_hours = snap.get('bait_remaining_estimate'), snap.get('bait_hours_remaining_estimate')
+    except Exception:
+        pass
+    saved = load_config().get('rod_buffs') or {}
+    return {'generated': time.strftime('%d %b %H:%M', time.localtime(now)), 'prices': PRICES, 'names': NAMES, 'rarity': RARITY,
+            'crates': {k: {'gold': v['gold'], 'needs': v['needs']} for k, v in CRATES.items()},
+            'enchant_luck': {str(k): v for k, v in {**ENCHANT_LUCK, **{int(a): b for a, b in (load_config().get('enchant_luck') or {}).items()}}.items()},
+            'bait_left': bait, 'bait_hours': bait_hours,
+            'rods': [{'rod': r['rod'], 'active_hours': r['active_hours'], 'hooks': r['hooks'], 'fish': r['fish'], 'counts': r['counts'],
+                      'enchant_level': {**DEFAULT_BUFFS.get(r['rod'], {}), **saved.get(r['rod'], {})}.get('enchant', 0)} for r in rods],
+            'runs': [{k: s[k] for k in ('rod', 'started', 'active_hours', 'hooks', 'fish', 'counts')}
+                     for s in (session_stats(root, x, now) for x in sessions(root))]}
+
+
+def dashboard(data, local=True):
+    """Rod Lab HTML from the shared template. local=True adds a page wrapper and auto-refresh."""
+    body = TEMPLATE.read_text(encoding='utf-8').replace('/*DATA*/', json.dumps(data))
+    if not local:
+        return body  # the published artifact supplies its own document wrapper
+    return ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            f'<meta http-equiv="refresh" content="{LOCAL_REFRESH_SECONDS}"></head><body>{body}</body></html>')
+
+
+def page(root=None, now=None):
+    """Write the local Rod Lab next to the run data and return its path."""
+    root = Path(root or data_directory())
     path = root/PAGE_FILE
-    path.write_text(document, encoding='utf-8')
+    tmp = path.with_suffix('.tmp')
+    tmp.write_text(dashboard(export_data(root, now)), encoding='utf-8')
+    tmp.replace(path)
     return path
+
+
+def watch(seconds=LOCAL_REFRESH_SECONDS, hours=12):
+    """Keep the local page current while it is open; the page reloads itself."""
+    until = time.time()+hours*3600
+    while time.time() < until:
+        try: page()
+        except Exception: pass
+        time.sleep(seconds)
+
+
+def ensure_watch():
+    import subprocess, sys
+    import control_actions as actions
+    if actions.alive('rodlab-watch-pid.json'): return
+    proc = subprocess.Popen([sys.executable, str(Path(__file__).resolve().parent/'autofish.py'), 'rods', 'watch'],
+                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    import psutil
+    atomic_json(data_directory()/'rodlab-watch-pid.json', {'pid': proc.pid, 'created': psutil.Process(proc.pid).create_time()})
 
 
 def add_parser(sub):
     rods = sub.add_parser('rods', help='Per-rod catch stats, Angler crates and the comparison page')
-    rods.add_argument('operation', nargs='?', choices=('status', 'set', 'page'), default='status')
+    rods.add_argument('operation', nargs='?', choices=('status', 'set', 'page', 'watch'), default='status')
     rods.add_argument('rod', nargs='?', help='Rod name for set, e.g. Rare')
 
 
@@ -221,5 +229,7 @@ def command(args):
         return 0
     if args.operation == 'page':
         import os
-        path = page(); print(path); os.startfile(str(path)); return 0
+        path = page(); ensure_watch(); print(path); os.startfile(str(path)); return 0
+    if args.operation == 'watch':
+        watch(); return 0
     print(json.dumps(by_rod(), indent=2)); return 0
