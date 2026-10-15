@@ -423,7 +423,7 @@ class Terminal:
                 tint('  N  No','gold')+tint('              Farm here: fishes and claims where you stand;','text'),
                 tint('                     if Roblox disconnects it stops instead of rejoining elsewhere','dim'),'',
                 tint('  You can change this any time in Settings › Spawn gamepass.','dim'),'',
-                tint('  Y yes   N no   Q close','dim')]
+                tint('  Y yes   N no   S stop farming   Q close','dim')]
 
     def key(self, key):
         if self.config.get('spawn_gamepass') is None and not self.editing:
@@ -431,6 +431,9 @@ class Terminal:
                 self.config=set_spawn_gamepass(key.lower()=='y')
                 self.toast('Full farmer is your main mode' if self.config['spawn_gamepass'] else 'Farm here is your main mode')
             elif key.lower()=='q':self.alive=False
+            elif key.lower()=='s':
+                try: self.toast(actions.stop())
+                except Exception as error: self.toast(error, False)
             return
         if self.editing:
             self.effects.secret = ''

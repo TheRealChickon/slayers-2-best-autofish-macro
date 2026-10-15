@@ -99,10 +99,14 @@ def ui_visible(crop, template):
     return cv2.minMaxLoc(cv2.matchTemplate(edge(crop), edge(template), cv2.TM_CCOEFF_NORMED))[1] > .72
 
 
-def balanced(roi, gain):
-    """White-balance and brighten a tinted minigame box (red sky, night)."""
+def balanced(roi, gain, gentle=True):
+    """White-balance and brighten a tinted minigame box (red sky, night).
+
+    Gentle brightening keeps the white marker at full scale; the strong pass
+    stretches the whole box and rescues scenes where even the marker is dim.
+    """
     out = roi.astype(np.float32)*np.asarray(gain, np.float32)
-    top = float(np.percentile(out, 99.5))
+    top = float(np.percentile(out.max(axis=2) if gentle else out, 99.5))
     out *= min(3., 255./max(top, 1.))
     return np.clip(out, 0, 255).astype(np.uint8)
 
@@ -129,7 +133,7 @@ class SceneColors:
         sides = np.concatenate([roi[::4, :20].reshape(-1, 3), roi[::4, 120:].reshape(-1, 3)]).astype(np.float32)
         median = np.median(sides, axis=0)
         self.median = median if self.median is None else self.median+(median-self.median)*self.smoothing
-        tint = float(self.median.max()/max(self.median.min(), 1.))
+        tint = float(self.median.max()/max(self.median.min(), 20.))  # floor: dark noise is not a tint
         light = float(self.median.mean())
         if self.adjusted:
             adjusted = tint > self.TINT_OFF or light < self.DARK_OFF
@@ -146,12 +150,25 @@ class SceneColors:
 
     @property
     def gain(self):
-        return self.median.mean()/np.maximum(self.median, 1.)
+        # In a near-black scene the channel ratios are mostly noise, and
+        # balancing them invents colour; fade towards plain brightening there.
+        weight = float(np.clip((self.median.min()-8)/30, 0, 1))
+        return 1+(self.median.mean()/np.maximum(self.median, 1.)-1)*weight
 
     def detect(self, roi):
         if not isinstance(roi, np.ndarray) or roi.shape[:2] != (600, 140):
             return self.detector(roi)
-        if self.observe(roi):
-            found = self.detector(balanced(roi, self.gain))
-            return found if found is not None else self.detector(roi)
-        return self.detector(roi)
+        if not self.observe(roi):
+            return self.detector(roi)
+        # Two reads that agree beat a lone one: one pass can catch half a bar.
+        reads = []
+        for frame in (lambda: balanced(roi, self.gain, True),
+                      lambda: balanced(roi, self.gain, False), lambda: roi):
+            read = self.detector(frame())
+            if read is None:
+                continue
+            for earlier in reads:
+                if abs(read['target']-earlier['target']) <= 8:
+                    return earlier
+            reads.append(read)
+        return reads[0] if reads else None

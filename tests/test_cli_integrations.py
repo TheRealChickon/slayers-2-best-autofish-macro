@@ -178,7 +178,7 @@ class IsolatedClients(unittest.TestCase):
         app = terminal_app.Terminal(); app.refresh()
         rendered = '\n'.join(terminal_app.ANSI.sub('', line) for line in app.render(120, 35))
         self.assertIn('Set Spawn Anywhere', rendered)
-        app.key('s')  # other keys wait for the answer
+        app.key('x')  # other keys wait for the answer
         self.assertIsNone(app_config.load_config()['spawn_gamepass'])
         app.key('n')
         config = app_config.load_config()

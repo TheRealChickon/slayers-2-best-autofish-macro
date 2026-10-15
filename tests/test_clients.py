@@ -167,6 +167,9 @@ class IsolatedState(unittest.TestCase):
         patcher.start();self.addCleanup(patcher.stop)
         patcher = patch.object(app_config, 'CONFIG', self.root/'config.local.json')
         patcher.start(); self.addCleanup(patcher.stop)
+        # Answer the first-run gamepass question so Terminal() opens on its pages.
+        patcher = patch.dict(app_config.DEFAULTS, {'spawn_gamepass': True})
+        patcher.start(); self.addCleanup(patcher.stop)
         self.addCleanup(self.temporary.cleanup)
 
     def append(self, name, rows, newline=True):
@@ -331,6 +334,16 @@ class IsolatedState(unittest.TestCase):
         app=terminal_app.Terminal(); app.busy=True
         with patch.object(control_actions,'stop',return_value='Stopped') as stop:
             app.key('s'); stop.assert_called_once()
+
+    def test_first_run_gamepass_prompt_answers_and_still_allows_stop(self):
+        with patch.dict(app_config.DEFAULTS, {'spawn_gamepass': None}):
+            app=terminal_app.Terminal()
+            self.assertIn('FIRST-TIME SETUP', '\n'.join(app.gamepass_question()))
+            with patch.object(control_actions,'stop',return_value='Stopped') as stop:
+                app.key('s'); stop.assert_called_once()
+            app.key('x'); self.assertIsNone(app.config['spawn_gamepass'])
+            app.key('n'); self.assertFalse(app.config['spawn_gamepass'])
+            self.assertEqual(app_config.load_config()['mode'], 'here')
 
     def test_run_page_leads_with_full_farmer_and_keeps_other_modes_one_level_down(self):
         app=terminal_app.Terminal()

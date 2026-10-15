@@ -57,7 +57,7 @@ Right-click the zip and choose **Extract All…**, then open the extracted **Aut
 
 ### 3. Double-click `Install.cmd`
 
-A blue window opens and installs everything (a few minutes the first time). When it says **Autofish … is installed**, you can close it.
+A window opens and installs everything (a few minutes the first time). When it says **Autofish … is installed**, you can close it.
 
 <img src="docs/images/install-done.png" alt="Install.cmd finished successfully" width="640">
 

@@ -30,6 +30,11 @@ TINTS = {
 SIZES = [(960, 540), (1225, 689), (1920, 1080), (2560, 1440)]
 
 
+def daylight():
+    """Minigame fixtures filmed in daylight (the native capture is at night)."""
+    return [(name, image) for name, image in fixtures('minigame') if name != 'minigame-1440']
+
+
 def box(image, size):
     screen, desktop = as_client(image, size)
     return screen.capture(desktop, MINIGAME_BOX)
@@ -56,7 +61,7 @@ class TintedMinigame(unittest.TestCase):
                         self.assertEqual(events, ['colors_adjusted'])
 
     def test_daylight_is_left_unchanged(self):
-        for name, image in fixtures('minigame'):
+        for name, image in daylight():
             roi = box(image, (2560, 1440))
             events = []
             colors = SceneColors(lambda kind, **kw: events.append(kind))
@@ -64,8 +69,22 @@ class TintedMinigame(unittest.TestCase):
             self.assertFalse(colors.adjusted)
             self.assertEqual(events, [])
 
+    def test_native_night_scene_is_brightened_and_still_reads_right(self):
+        # A real 2560 x 1440 capture at night: scenery is nearly black.
+        image = dict(fixtures('minigame'))['minigame-1440']
+        roi = box(image, (2560, 1440))
+        expected = detect(roi)
+        events = []
+        colors = SceneColors(lambda kind, **kw: events.append(kind))
+        for _ in range(3):
+            found = colors.detect(roi)
+        self.assertEqual(events, ['colors_adjusted'])
+        self.assertAlmostEqual(found['target'], expected['target'], delta=8)
+        self.assertAlmostEqual(found['ball'], expected['ball'], delta=8)
+        self.assertEqual(found['inside'], expected['inside'])
+
     def test_adjustment_switches_back_when_the_scene_clears(self):
-        name, image = fixtures('minigame')[0]
+        name, image = daylight()[0]
         roi = box(image, (1920, 1080))
         events = []
         colors = SceneColors(lambda kind, **kw: events.append((kind, kw)))
