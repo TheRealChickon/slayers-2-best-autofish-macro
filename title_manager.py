@@ -55,7 +55,7 @@ def listed_titles(rows):
     for r in sorted(rows,key=lambda r:(round(r['center'][1]/20),r['center'][0])):
         text=re.sub(r'\s+',' ',r['text']).strip()
         if r['center'][0]>=2000 or not TITLE_NAME.fullmatch(text):continue
-        if normalized(text) in ('one','two','three','vanity','equip','equipped','unequip','requirements','buffs'):continue
+        if normalized(text) in ('one','two','three','vanity','equip','equipped','unequip','requirements','buffs','collect'):continue
         if normalized(text) not in {normalized(n) for n in names}:names.append(text)
     return names
 
@@ -167,15 +167,21 @@ class TitleManager:
         frame=d.capture()
         self.save_frame(frame)
         names=listed_titles(d.text(frame,(720,340,1300,700)))
-        for _ in range(4):
+        # Pills fade in one by one: the last one is still nearly black at 0.55 s
+        # (Living Legend, 2026-10-15). Re-read while the count is short, then scroll.
+        for attempt in range(6):
             if expected is None or len(names)>=expected:break
-            scroll=getattr(d,'scroll',None)
-            if scroll is None:break
-            scroll(1370,690,-3);d.sleep(.45)
-            more=listed_titles(d.text(d.capture(),(720,340,1300,700)))
+            if attempt>=2:
+                scroll=getattr(d,'scroll',None)
+                if scroll is None:break
+                scroll(1370,690,-3)
+            d.sleep(.6)
+            frame=d.capture()
+            more=listed_titles(d.text(frame,(720,340,1300,700)))
             added=[n for n in more if normalized(n) not in {normalized(x) for x in names}]
-            if not added:break
             names+=added
+            if added:self.save_frame(frame)
+            elif attempt>=2:break
         if expected is not None and len(names)<expected:
             d.event('fishing_titles_partial',expected=expected,read=names)
         return names
