@@ -19,12 +19,13 @@ You don't need to know anything about coding. Download, double-click, done.
 ## Features
 
 - 🎣 **Fully hands-free.** Casts, plays the reel minigame, holds T to collect drops and recasts.
-- 🔁 **Recovers by itself.** Re-equips your rod, fixes a stuck screen, and rejoins after a disconnect.
+- 🔁 **Recovers by itself.** Re-equips your rod and fixes a stuck screen. With the Set Spawn Anywhere gamepass it also rejoins after a disconnect and gets straight back to fishing.
 - 🌙 **Overnight mode.** Waits until you've stepped away, then takes over. Moving your mouse hands control back.
 - 📊 **Live dashboard.** Catches, hooks per minute, gold per hour, bait left and a running log.
 - 🧪 **Rod Lab.** Compares your rods side by side: drop rates, gold per hour and Angler crate value.
 - 💬 **Discord reports (optional).** One message per session that updates itself with your latest numbers.
 - 🖥️ **Any screen.** Works fullscreen or windowed, on laptops and big monitors, at 100 – 150 % Windows scaling.
+- 🌅 **Any light.** Red skies, night and other tinted scenes are balanced automatically, so the minigame is still read correctly.
 - 🔒 **Private.** No Roblox password or cookie is ever used. Your settings and logs stay on your PC.
 
 ## Screenshots
@@ -66,7 +67,20 @@ You now have three icons on your desktop: **Fishing CLI** (the dashboard), **Fis
 
 ### 4. First-time settings
 
-Open **Fishing CLI**, go to **Settings** with the arrow keys, and set these three things:
+Open **Fishing CLI**. The first time, it asks one question:
+
+> **Do you own the "Set Spawn Anywhere" gamepass?**
+
+Answer **Y** or **N**. This decides your main mode:
+
+| Your answer | Main mode | What it means |
+| --- | --- | --- |
+| **Yes** | **Full farmer** | Your spawn is at your fishing spot, so when Roblox disconnects or something gets stuck, Autofish rejoins and lands right back there. It can run all night on its own. |
+| **No** | **Farm here** | Autofish fishes, wins the minigame and claims every catch where you stand, and fixes small problems on the spot. Without the gamepass a rejoin would drop you somewhere else, so after a disconnect it stops and waits for you instead. |
+
+You can change the answer any time in **Settings → Spawn gamepass**.
+
+Then go to **Settings** with the arrow keys and set these three things:
 
 | Setting | What to enter |
 | --- | --- |
@@ -78,8 +92,8 @@ Open **Fishing CLI**, go to **Settings** with the arrow keys, and set these thre
 
 ### 5. Start fishing
 
-1. In Roblox, walk to your fishing spot facing the water and **set your spawn there** (so a rejoin brings you back).
-2. In the dashboard, open **Run** and choose **Full farmer**.
+1. In Roblox, walk to your fishing spot and face the water. With the gamepass, **set your spawn there** too, so a rejoin brings you back.
+2. In the dashboard, open **Run** and choose **Start Full farmer** (or **Start Farm here** without the gamepass).
 3. Leave Roblox in front. That's it. 🎣
 
 **Controls while it runs** (with Roblox in front):
@@ -94,13 +108,13 @@ Open **Fishing CLI**, go to **Settings** with the arrow keys, and set these thre
 
 | Mode | You do | Autofish does |
 | --- | --- | --- |
-| **Full farmer** *(main mode)* | Set your spawn at the fishing spot once | Everything: rod, casting, minigame, pickup, recovery and rejoining |
-| **Farm here** | Stand anywhere you can fish | Same as Full farmer, but stays where you are and doesn't use your spawn |
+| **Full farmer** *(main mode with the gamepass)* | Set your spawn at the fishing spot once | Everything: rod, casting, minigame, pickup, local fixes, and rejoining back to your spot |
+| **Farm here** *(main mode without the gamepass)* | Stand anywhere you can fish | Rod, casting, minigame, pickup and local fixes where you are; stops after a disconnect instead of rejoining |
 | **Fish here** | Aim with the mouse, press F8 | Click, reel, collect, repeat |
 | **Minigame only** | Cast and collect yourself | Only plays the reel minigame |
 | **Auto rejoin** | Play normally | Watches for disconnects and rejoins; no fishing |
 
-All modes except Full farmer live under **Run → Other modes**.
+The other modes live under **Run → Other modes**. Full farmer needs the **Set Spawn Anywhere** gamepass, because rejoining only fixes things when it brings you back to your spot.
 
 ## Discord reports (optional)
 
@@ -116,6 +130,12 @@ The webhook is stored encrypted for your Windows account and never shown again o
 Yes. Autofish reads the game as a 16:9 picture. If your Roblox window has a different shape (for example maximized on a 1366 × 768 laptop, or a 16:10 or ultrawide monitor), Autofish resizes the window to the biggest 16:9 size that fits your screen. If Roblox is fullscreen on a screen that isn't 16:9, it presses **F11** once to leave fullscreen first.
 
 Everything from about 960 × 540 up to 4K works, at 100 %, 125 % or 150 % Windows scaling. If your screen is smaller than that, you'll see a message saying so; use F11 fullscreen on a 16:9 screen or lower Windows display scaling.
+</details>
+
+<details>
+<summary><b>Do I need the Set Spawn Anywhere gamepass?</b></summary>
+
+No. Without it Autofish uses **Farm here**: it fishes and claims catches where you stand and fixes small problems itself. The gamepass only adds automatic rejoining after a disconnect, which needs your spawn to be at the fishing spot to be useful.
 </details>
 
 <details>

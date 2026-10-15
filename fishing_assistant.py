@@ -8,7 +8,7 @@ from pynput.keyboard import Listener,Key
 from metrics import Ledger, read as read_metrics, write as write_metrics, RUN
 from app_config import load_config,save_config
 from rod_detector import locate_rod, unselected_rod, selected_rod, recheck_selected_rod
-from fishing_vision import detect, ui_visible
+from fishing_vision import detect, ui_visible, SceneColors
 from tracking_control import ReelMotion
 from tracking_watchdog import TrackingWatchdog
 from screen_space import ScreenSpace
@@ -206,6 +206,8 @@ def main():
     screen=ScreenSpace(rect)
     ocr=RapidOCR()
     exit_template=cv2.imread(str(ROOT/'assets'/'exit.png'))
+    # Late-bound so tests can patch detect and event is defined below.
+    colors=SceneColors(lambda kind,**kw:event(kind,**kw),detector=lambda roi:detect(roi))
     inp=Input(hwnd);started=time.monotonic();now=started;stage='casting';since=now;lastseen=now;ledger=Ledger();last_gui_scan=0;last_tracking_cast=None;last_game_activity=time.time()
     # Roblox captures and recenters the cursor in first person. The foreground
     # window remains the reliable guard there; a pointer hit test can flicker
@@ -501,7 +503,7 @@ def main():
                     if not win32gui.IsWindow(hwnd):raise RuntimeError('Roblox window closed; rejoin required')
                     if rectangle(hwnd)!=rect:raise RuntimeError('Roblox moved or resized; reacquiring the client area')
                     roi=screen.capture(sct,(1850,400,140,600))
-                    d=detect(roi)
+                    d=colors.detect(roi)
                     if d is not None and not ui_active():d=None
                     if a.current_position and casts==0 and stage=='casting' and d is None and ui_active():
                         # A visible startup minigame owns input even while its
@@ -516,7 +518,7 @@ def main():
                     if d is None and stage=='cooldown' and now-since>cooldown_delay:
                         finish_cooldown()
                         if confirmed_recast is None:
-                            d=detect(screen.capture(sct,(1850,400,140,600)))
+                            d=colors.detect(screen.capture(sct,(1850,400,140,600)))
                             if d is not None and not ui_active():d=None
                         # A confirmed recast gets its fresh minigame read after
                         # the scene OCR below, immediately before casting.
@@ -553,7 +555,7 @@ def main():
                             if needs_inventory_start and stage=='casting':continue
                             if full_scene:
                                 # A minigame that appeared during OCR owns input.
-                                d=detect(screen.capture(sct,(1850,400,140,600)))
+                                d=colors.detect(screen.capture(sct,(1850,400,140,600)))
                                 if d is not None and not ui_active():d=None
                         elif decision=='timeout':
                             raise FishingFault('pickup_timeout','Cannot confirm a clear scene before casting; pending loot retained',evidence=last_pickup_evidence)

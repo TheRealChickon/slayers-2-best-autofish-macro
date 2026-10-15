@@ -31,7 +31,34 @@ DEFAULTS = {'data_dir': 'data', 'account_username': '', 'user_id': None,
             # Seconds between scene scans while T is held.
             'hold_scan_interval':.15,
             # How long the tracked key disc must stay still before it counts as landed.
-            'disc_settle_seconds':.10,'overnight_defaults_version':OVERNIGHT_DEFAULTS_VERSION}
+            'disc_settle_seconds':.10,'overnight_defaults_version':OVERNIGHT_DEFAULTS_VERSION,
+            # Owns the "Set Spawn Anywhere" gamepass: None until the first-run question is answered.
+            'spawn_gamepass':None}
+
+FULL_NEEDS_GAMEPASS = ('Full farmer needs the Set Spawn Anywhere gamepass: it rejoins to fix problems, and only '
+                       'that gamepass brings you back to your fishing spot. Use Farm here, or turn on '
+                       'Settings > Spawn gamepass if you own it.')
+
+
+def full_farmer_available(config):
+    """Full farmer recovers by rejoining at the saved spawn; that needs the gamepass."""
+    return config.get('spawn_gamepass') is not False
+
+
+def main_mode(config):
+    return 'full' if full_farmer_available(config) else 'here'
+
+
+def set_spawn_gamepass(owned):
+    """Record the answer and switch the main mode to match it."""
+    owned = bool(owned)
+    changes = {'spawn_gamepass': owned}
+    mode = load_config()['mode']
+    if owned and mode == 'here':
+        changes['mode'] = 'full'
+    elif not owned and mode == 'full':
+        changes['mode'] = 'here'
+    return save_config(changes)
 
 
 def validate_options(values):
@@ -40,6 +67,7 @@ def validate_options(values):
             raise ValueError(f'{key} must be a whole number from {low} to {high}')
     for key in ('overnight_enabled','overnight_autofocus','overnight_auto_enable_idle','drop_cast'):
         if not isinstance(values[key],bool):raise ValueError(key+' must be on or off')
+    if values.get('spawn_gamepass') not in (None,True,False):raise ValueError('spawn_gamepass must be yes, no or unanswered')
     if not 0<=float(values['no_disc_hold_delay'])<=2:raise ValueError('no_disc_hold_delay must be 0–2 seconds')
     values['no_disc_hold_delay']=float(values['no_disc_hold_delay'])
     if not .05<=float(values['hold_scan_interval'])<=1:raise ValueError('hold_scan_interval must be 0.05–1 seconds')

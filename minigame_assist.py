@@ -13,6 +13,7 @@ import win32gui
 import numpy as np
 
 from fishing_assistant import ROOT, USER, Input, detect, find_window, rectangle
+from fishing_vision import SceneColors
 from metrics import RUN, Ledger, read, write
 from screen_space import ScreenSpace
 from window_fit import fitted
@@ -215,6 +216,7 @@ def main(argv=None):
         write('supervisor-pid.json',record);write('pid.json',record)
     started = time.time();monotonic_started=time.monotonic();session=time.strftime('%Y%m%d-%H%M%S')+'-'+str(os.getpid())
     ledger=Ledger();tracker=TrackingAssist();inp=ForegroundInput();next_state=0;hwnd=None;screen=None;last_activity=0
+    colors=SceneColors(lambda kind,**kw:event(kind,**kw),detector=lambda roi:detect(roi))
     reason='session_limit';stage='assist_waiting';last_count=0;wait_reason=''
     log=(RUN/f'events-{session}.jsonl').open('a',buffering=1)
     def event(kind,**kw):
@@ -306,7 +308,7 @@ def main(argv=None):
                     else:active_time+=delta
                     wait_reason=''
                     roi=screen.capture(sct,(1850,400,140,600))
-                    detection=detect(roi)
+                    detection=colors.detect(roi)
                     ui=screen.capture(sct,(1190,1360,180,70))
                     visible=ui_visible(ui,template)
                     was_active=tracker.active

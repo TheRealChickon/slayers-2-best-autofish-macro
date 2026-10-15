@@ -497,7 +497,7 @@ def main():
             except (win32gui.error,RuntimeError,ValueError):
                 driver.inp.release();driver.event('unattended_focus_wait',message='Focus or client changed; input remains paused')
     driver.event('run_started',run_id=log_run['id'],resumed=resume_log_run)
-    policy=RecoveryPolicy();here_policy=HereRecovery();here_disconnect=False;here_retries=0;rod_policy=RodRecovery();display_repair=DisplayRepair()
+    policy=RecoveryPolicy();here_policy=HereRecovery(rejoin=load_config().get('spawn_gamepass') is not False);here_disconnect=False;here_retries=0;rod_policy=RodRecovery();display_repair=DisplayRepair()
     performance=PerformanceRecorder(read_metrics('totals.json').get('started'))
     titles_checked=False
     camera_unlock_attempts=0
@@ -644,6 +644,10 @@ def main():
             if action=='stop_unstable_position':
                 raise FishingFault('unstable_fishing_position',
                     'Fishing position failed after three separate rejoins within 90 minutes; check that the saved spawn is safely back from the water edge')
+            if action=='stop_disconnected':
+                raise FishingFault('user_required',
+                    'Roblox disconnected. Without the Set Spawn Anywhere gamepass a rejoin would not bring you back to '
+                    'your fishing spot, so Farm here stopped. Rejoin, walk back to your spot and press Continue.')
             if action in ('stop','attention'):
                 raise FishingFault('user_required','Local recovery needs user attention; automatic restart suspended')
             if a.here:

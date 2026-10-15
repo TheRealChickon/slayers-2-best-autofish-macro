@@ -10,7 +10,7 @@ import threading
 import time
 
 import control_actions as actions
-from app_config import data_directory, load_config, resolve_account, save_config, MODES
+from app_config import data_directory, load_config, resolve_account, save_config, MODES, full_farmer_available, set_spawn_gamepass, FULL_NEEDS_GAMEPASS
 from cast_point import capture_pointer, validate as validate_cast_point
 from cli_effects import CatchEffects
 from cli_scene import scene_frame
@@ -65,7 +65,7 @@ class Terminal:
         'here': ('gold','current server / current location'),
         'rejoin': ('green', 'connection guard only'),
     }
-    settings_groups=(('Account',('Username',)),('Fishing',('Mode','Rod','Rod stats page','Rod slot','Auto rod','Drop-cast','Fishing titles')),
+    settings_groups=(('Account',('Username','Spawn gamepass')),('Fishing',('Mode','Rod','Rod stats page','Rod slot','Auto rod','Drop-cast','Fishing titles')),
                      ('Overnight',('Overnight enabled','Auto focus','Focus grace seconds','Auto-enable after idle','Idle minutes')),
                      ('Location and camera',('Cast point','Capture pointer','Camera','Heading','Position correction','Save reference','Disable reference')),
                      ('Bait restock',('Fish Head reserve','Refill buffer','Run bait restock','Check bait route','Stop bait restock','BaitBot status','Record bait route','Open bait recordings')),
@@ -74,6 +74,7 @@ class Terminal:
     settings_keys=tuple(key for _,keys in settings_groups for key in keys)
     setting_help = {
         'Username':'Roblox account for presence and reconnect checks.',
+        'Spawn gamepass':'Own "Set Spawn Anywhere"? Yes: Full farmer rejoins to fix itself. No: Farm here fishes where you stand.',
         'Mode':'Full fishes and rejoins; Rejoin only restores the connection; other modes work as labeled.',
         'Rod':'Rod you have equipped (Legendary, Rare, …). Changing it starts a new stats session for that rod.',
         'Rod stats page':'Open the per-rod comparison: drop %, gold/h selling vs Angler crates.',
@@ -150,15 +151,25 @@ class Terminal:
         bait=f"{amount:,} gold" if kind=='budget' else f"{amount:,} Fish Heads"
         running=(getattr(self,'data',None) or {}).get('running')
         expanded=getattr(self,'show_other_modes',False)
-        rows=[('Continue Full farmer' if running else 'Start Full farmer','rejoin · equip rod · fish','gold',lambda:actions.resume('full')),
-              ('Pause','release input, keep counters','text',actions.pause),
-              ('Stop','hold until Continue','text',actions.stop),
-              ('Reset + start Full farmer','rejoin at the saved spawn','text',actions.restart_full),
-              ('Buy bait now',bait+' · pauses the farmer first','text',self.buy_bait_now),
-              ('Other modes','▾ hide' if expanded else '▸ Farm here, Fish here, Minigame, Rejoin','dim',None)]
+        if full_farmer_available(config):
+            rows=[('Continue Full farmer' if running else 'Start Full farmer','rejoin · equip rod · fish','gold',lambda:actions.resume('full')),
+                  ('Pause','release input, keep counters','text',actions.pause),
+                  ('Stop','hold until Continue','text',actions.stop),
+                  ('Reset + start Full farmer','rejoin at the saved spawn','text',actions.restart_full)]
+            others=self.other_modes;summary='Farm here, Fish here, Minigame, Rejoin'
+        else:
+            # Without the spawn gamepass a rejoin lands elsewhere: Farm here leads.
+            rows=[('Continue Farm here' if running else 'Start Farm here','fish · catch · claim where you stand','gold',lambda:actions.resume('here')),
+                  ('Pause','release input, keep counters','text',actions.pause),
+                  ('Stop','hold until Continue','text',actions.stop)]
+            others=tuple(mode for mode in self.other_modes if mode!='here');summary='Fish here, Minigame, Rejoin'
+        rows+=[('Buy bait now',bait+' · pauses the farmer first','text',self.buy_bait_now),
+               ('Other modes','▾ hide' if expanded else '▸ '+summary,'dim',None)]
         if expanded:
             rows+=[('   '+MODES[mode],self.mode_details[mode][1],self.mode_details[mode][0],(lambda mode=mode:actions.resume(mode)))
-                   for mode in self.other_modes]
+                   for mode in others]
+            if not full_farmer_available(config):
+                rows.append(('   Full farmer','needs the Set Spawn Anywhere gamepass','dim',lambda:FULL_NEEDS_GAMEPASS))
             rows.append(('   Export log','save the item log as CSV','dim',lambda:'Saved '+str(self.journal.export())))
         return rows
 
@@ -368,9 +379,15 @@ class Terminal:
             if key == 'Mode':
                 if self.data.get('running') or self.data.get('starting'):
                     self.toast('Pause before switching modes.',False);return
-                modes=list(MODES)
-                save_config({'mode':modes[(modes.index(self.config['mode'])+1)%len(modes)]})
+                modes=[mode for mode in MODES if mode!='full' or full_farmer_available(self.config)]
+                current=modes.index(self.config['mode']) if self.config['mode'] in modes else -1
+                save_config({'mode':modes[(current+1)%len(modes)]})
                 self.config=load_config();return
+            if key=='Spawn gamepass':
+                if self.data.get('running') or self.data.get('starting'):
+                    self.toast('Pause before changing this.',False);return
+                self.config=set_spawn_gamepass(self.config.get('spawn_gamepass') is not True)
+                self.toast('Full farmer enabled' if self.config['spawn_gamepass'] else 'Farm here is now the main mode');return
             if key in ('Overnight enabled','Auto focus','Auto-enable after idle'):
                 option={'Overnight enabled':'overnight_enabled','Auto focus':'overnight_autofocus','Auto-enable after idle':'overnight_auto_enable_idle'}[key]
                 changes={option:not self.config[option]}
@@ -396,7 +413,25 @@ class Terminal:
                          'Cast point': ', '.join(map(str, self.config['cast_point']))}[key]
                 self.edit(key, value)
 
+    def gamepass_question(self):
+        """First-run question; the answer decides which farmer is the main mode."""
+        return ['',tint('  FIRST-TIME SETUP','gold'),'',
+                tint('  Do you own the "Set Spawn Anywhere" gamepass in Project Slayers 2?','text'),'',
+                tint('  It lets you set your spawn at your fishing spot. If Roblox disconnects or','dim'),
+                tint('  something gets stuck, Autofish can then rejoin and land right back there.','dim'),'',
+                tint('  Y  Yes, I own it','gold')+tint('   Full farmer: fishes and fixes itself by rejoining','text'),
+                tint('  N  No','gold')+tint('               Farm here: fishes and claims where you stand;','text'),
+                tint('                      if Roblox disconnects it stops instead of rejoining elsewhere','dim'),'',
+                tint('  You can change this any time in Settings › Spawn gamepass.','dim'),'',
+                tint('  Y yes   N no   Q close','dim')]
+
     def key(self, key):
+        if self.config.get('spawn_gamepass') is None and not self.editing:
+            if key.lower() in ('y','n'):
+                self.config=set_spawn_gamepass(key.lower()=='y')
+                self.toast('Full farmer is your main mode' if self.config['spawn_gamepass'] else 'Farm here is your main mode')
+            elif key.lower()=='q':self.alive=False
+            return
         if self.editing:
             self.effects.secret = ''
             if key == 'ENTER': self.finish_edit()
@@ -622,6 +657,7 @@ class Terminal:
                     ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On')]
         values={key:value for key,(_,value) in zip(('Username','Mode','Rod slot','Auto rod','Camera','Heading','Fishing titles','Cast point','Capture pointer','Position correction','Save reference','Disable reference','Motion'),settings)}
         values.update({'Rod':self.config.get('active_rod') or 'Not set','Rod stats page':'Enter to open',
+            'Spawn gamepass':{True:'Owned · Full farmer',False:'Not owned · Farm here',None:'Not answered'}[self.config.get('spawn_gamepass')],
             'Drop-cast':'On · drop, recast, claim' if self.config.get('drop_cast') else 'Off · claim, then recast',
             'Overnight enabled':'On' if self.config['overnight_enabled'] else 'Off',
             'Fish Head reserve':f"{self.config['bait_reserve']:,}",'Refill buffer':f"{self.config['bait_refill_buffer']:,}",
@@ -657,6 +693,8 @@ class Terminal:
         d = self.data
         if width < 65 or height < 22:
             return ['Fishing  /  '+d.get('state', ''), '', 'Enlarge the terminal to at least 65 columns × 22 rows.', '', 'Q close   C continue   P pause   S stop']
+        if self.config.get('spawn_gamepass') is None:
+            return self.gamepass_question()
         active = d['running'] and not d['stop_requested'] and not d.get('manual_paused') and d['state'] != 'Waiting for Roblox'
         spin = '●' if self.config['reduced_motion'] or not active else '◐◓◑◒'[int(time.monotonic()*5)%4]
         state = tint(spin+' '+d['state'],state_tone(d['state'],active))

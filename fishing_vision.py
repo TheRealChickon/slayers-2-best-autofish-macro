@@ -97,3 +97,61 @@ def ui_visible(crop, template):
         return True
     edge = lambda im: cv2.Canny(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY), 70, 150)
     return cv2.minMaxLoc(cv2.matchTemplate(edge(crop), edge(template), cv2.TM_CCOEFF_NORMED))[1] > .72
+
+
+def balanced(roi, gain):
+    """White-balance and brighten a tinted minigame box (red sky, night)."""
+    out = roi.astype(np.float32)*np.asarray(gain, np.float32)
+    top = float(np.percentile(out, 99.5))
+    out *= min(3., 255./max(top, 1.))
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+class SceneColors:
+    """Adapt minigame detection to the scene's colour cast, automatically.
+
+    The fixed colour thresholds in ``detect`` are tuned for normal daylight.
+    A strong red, green or blue cast (weather, events, night) or a very dark
+    scene can hide the bar. The scenery beside the bar is sampled every frame;
+    when it is clearly tinted or dark, the box is white-balanced before
+    detection, falling back to the raw frame. Normal scenes are untouched.
+    """
+    TINT_ON, TINT_OFF = 1.6, 1.45   # brightest/dimmest channel of the scenery
+    DARK_ON, DARK_OFF = 55, 65      # mean scenery brightness (0-255)
+
+    def __init__(self, event=None, smoothing=.25, detector=None):
+        self.event, self.smoothing = event, smoothing
+        self.detector = detector or detect
+        self.median = None
+        self.adjusted = False
+
+    def observe(self, roi):
+        sides = np.concatenate([roi[::4, :20].reshape(-1, 3), roi[::4, 120:].reshape(-1, 3)]).astype(np.float32)
+        median = np.median(sides, axis=0)
+        self.median = median if self.median is None else self.median+(median-self.median)*self.smoothing
+        tint = float(self.median.max()/max(self.median.min(), 1.))
+        light = float(self.median.mean())
+        if self.adjusted:
+            adjusted = tint > self.TINT_OFF or light < self.DARK_OFF
+        else:
+            adjusted = tint > self.TINT_ON or light < self.DARK_ON
+        if adjusted != self.adjusted:
+            self.adjusted = adjusted
+            if self.event:
+                self.event('colors_adjusted' if adjusted else 'colors_normal', tint=round(tint, 2),
+                           brightness=round(light), scene=[round(float(v)) for v in self.median],
+                           message=('Scene is tinted or dark; balancing minigame colours automatically.'
+                                    if adjusted else 'Scene colours are normal again.'))
+        return adjusted
+
+    @property
+    def gain(self):
+        return self.median.mean()/np.maximum(self.median, 1.)
+
+    def detect(self, roi):
+        if not isinstance(roi, np.ndarray) or roi.shape[:2] != (600, 140):
+            return self.detector(roi)
+        if self.observe(roi):
+            found = self.detector(balanced(roi, self.gain))
+            return found if found is not None else self.detector(roi)
+        return self.detector(roi)
