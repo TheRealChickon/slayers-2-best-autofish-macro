@@ -554,6 +554,16 @@ footer a{color:inherit}
 .segs.low i.on{background:var(--warn)}
 .kpi:hover .segs i.on{transform:scaleY(1.25)}
 
+/* rarity columns (Farm option 9) */
+.rcols{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;height:132px;align-items:end;margin:4px 0 16px}
+.rcol{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+.rcol b{font:600 13px var(--mono);color:var(--rc);margin-bottom:5px}
+.rcol .bar{width:100%;border-radius:9px 9px 4px 4px;background:linear-gradient(180deg,var(--rc),color-mix(in srgb,var(--rc) 55%,transparent));transition:height .9s var(--spring)}
+.rcol .bar.imp{background:linear-gradient(180deg,#ff9a3c,var(--impossible))}
+.rcol small{margin-top:7px;font-size:11.5px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.rcol.zero b{color:var(--text-3)} .rcol.zero .bar{background:var(--border)}
+.rcol.hit .bar{animation:hitfill .8s var(--spring)}
+
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -889,22 +899,25 @@ function drawCatch(s){
   const by = {}; rows.forEach(r => by[r.rarity] = (by[r.rarity] || 0) + r.quantity);
   const tiers = RORDER.filter(r => by[r]), hours = Math.max(.1, (s.active_seconds || 0)/3600);
   if (!box._built) { box._built = true;
-    box.innerHTML = `<div class="mixbar" id="mixbar"></div><div class="mixkey" id="mixkey"></div><div class="ctbl"><table><thead><tr><th>Item</th><th>Rarity</th><th>Count</th><th>/ h</th></tr></thead><tbody id="ctb"></tbody></table></div>`; }
-  // Rare tiers get a floor width so one Krathulon is still visible next to 400 commons.
-  const bar = $('mixbar'), have = new Set();
-  tiers.forEach(r => { let seg = bar.querySelector(`[data-r="${r}"]`);
-    if (!seg) { seg = document.createElement('span'); seg.dataset.r = r; seg.style.background = r === 'Impossible' ? 'linear-gradient(90deg,var(--impossible),#ff9a3c)' : RVAR[r];
-      const at = RORDER.indexOf(r); const next = [...bar.children].find(c => RORDER.indexOf(c.dataset.r) > at); bar.insertBefore(seg, next || null); seg.style.flexGrow = 0; }
-    have.add(r); const share = by[r]/total; seg.style.flexGrow = Math.max(share, .06); seg.textContent = share >= .1 ? Math.round(share*100) + '%' : by[r];
-    seg.title = `${r}: ${fmt(by[r])}`; });
-  [...bar.children].forEach(c => have.has(c.dataset.r) || c.remove());
-  $('mixkey').innerHTML = tiers.map(r => `<span style="color:${RVAR[r]}"><b class="num">${fmt(by[r])}</b>${r}</span>`).join('');
+    box.innerHTML = `<div class="rcols" id="mixbar">${RORDER.map(r => `<div class="rcol" data-r="${r}" style="--rc:${RVAR[r]}"><b class="num">0</b><span class="bar${r === 'Impossible' ? ' imp' : ''}"></span><small>${r}</small></div>`).join('')}</div><div class="ctbl"><table><thead><tr><th>Item</th><th>Rarity</th><th>Count</th><th>/ h</th></tr></thead><tbody id="ctb"></tbody></table></div>`; }
+  // Rarity columns (Farm option 9): log height so one Impossible still shows next to 400 commons.
+  const bar = $('mixbar'), top = Math.log1p(Math.max(...Object.values(by)));
+  bar.querySelectorAll('.rcol').forEach(c => { const n = by[c.dataset.r] || 0;
+    c.classList.toggle('zero', !n); c.querySelector('b').textContent = fmt(n); c.title = `${c.dataset.r}: ${fmt(n)}`;
+    c.querySelector('.bar').style.height = (n ? 8 + 80*Math.log1p(n)/top : 3) + 'px'; });
   const hits = new Set(); if (lastCounts2) rows.forEach(r => { if ((lastCounts2[r.item] || 0) < r.quantity) hits.add(r.item); });
   $('ctb').innerHTML = rows.map(r => `<tr class="${hits.has(r.item) ? 'hit' : ''}" style="--rc:${RVAR[r.rarity]}"><td class="n">${esc(r.item)}</td><td><span class="rtag" style="--rc:${RVAR[r.rarity]}">${r.rarity}</span></td>
     <td class="q num">${fmt(r.quantity)}</td><td class="ph num">${fmt(r.quantity/hours, r.quantity/hours < 10 ? 1 : 0)}</td></tr>`).join('');
   hits.forEach(name => { const r = rows.find(x => x.item === name); const seg = bar.querySelector(`[data-r="${r.rarity}"]`); if (seg) { seg.classList.remove('hit'); void seg.offsetWidth; seg.classList.add('hit'); }
-    if (RORDER.indexOf(r.rarity) <= 2) burst(bar, RVAR[r.rarity]); });
+    if (RORDER.indexOf(r.rarity) <= 2 && seg) burst(seg, RVAR[r.rarity]); });
   lastCounts2 = Object.fromEntries(rows.map(r => [r.item, r.quantity]));
+}
+function burst(el, color){
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = el.getBoundingClientRect(), x = r.left + Math.min(150, r.width/2), y = r.top + r.height/2;
+  for (let i = 0; i < 14; i++) { const d = document.createElement('i'); d.className = 'burst'; d.style.background = color; d.style.left = x + 'px'; d.style.top = y + 'px'; document.body.appendChild(d);
+    const a = Math.random()*Math.PI*2, dist = 24 + Math.random()*40;
+    d.animate([{transform:'translate(0,0) rotate(0)', opacity:1}, {transform:`translate(${Math.cos(a)*dist}px,${Math.sin(a)*dist}px) rotate(${Math.random()*300}deg)`, opacity:0}], {duration:700 + Math.random()*300, easing:'cubic-bezier(.2,.8,.2,1)'}).onfinish = () => d.remove(); }
 }
 function evIcon(e){
   if (e.level === 'error' || e.level === 'warn') return ['warn', 'alert'];
