@@ -52,6 +52,9 @@ TITLE_NAME = re.compile(r"[A-Za-z][A-Za-z'\- ]{3,39}")
 def listed_titles(rows):
     """Title pills left of the detail panel; slot labels and categories are not titles."""
     names=[]
+    # The world's pickup prompt ('OuwFish' over 'Collect') shows through the menu.
+    prompts=[r['center'] for r in rows if normalized(r['text']).startswith('collec')]
+    rows=[r for r in rows if not any(abs(r['center'][0]-x)<160 and 0<y-r['center'][1]<45 for x,y in prompts)]
     for r in sorted(rows,key=lambda r:(round(r['center'][1]/20),r['center'][0])):
         text=re.sub(r'\s+',' ',r['text']).strip()
         if r['center'][0]>=2000 or not TITLE_NAME.fullmatch(text):continue
@@ -169,9 +172,9 @@ class TitleManager:
         names=listed_titles(d.text(frame,(720,340,1300,700)))
         # Pills fade in one by one: the last one is still nearly black at 0.55 s
         # (Living Legend, 2026-10-15). Re-read while the count is short, then scroll.
-        for attempt in range(6):
+        for attempt in range(8):
             if expected is None or len(names)>=expected:break
-            if attempt>=2:
+            if attempt>=4:
                 scroll=getattr(d,'scroll',None)
                 if scroll is None:break
                 scroll(1370,690,-3)
@@ -180,8 +183,8 @@ class TitleManager:
             more=listed_titles(d.text(frame,(720,340,1300,700)))
             added=[n for n in more if normalized(n) not in {normalized(x) for x in names}]
             names+=added
-            if added:self.save_frame(frame)
-            elif attempt>=2:break
+            self.save_frame(frame)
+            if not added and attempt>=4:break
         if expected is not None and len(names)<expected:
             d.event('fishing_titles_partial',expected=expected,read=names)
         return names
