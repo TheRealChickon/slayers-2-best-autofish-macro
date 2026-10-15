@@ -27,8 +27,17 @@ CRATES = {
     'A': {'gold': 2070, 'needs': {'ouwfish': 3, 'seahorse': 3, 'coral': 3, 'ouwfwesh': 3, 'clownfish': 1, 'zebrafish': 1}},
 }
 # Known rod buffs; editable in config under rod_buffs.
-DEFAULT_BUFFS = {'Legendary': {'fish_luck': 1.5, 'fishing_luck_factor': 1.2, 'bite_speed': 3.0, 'catch_tier': 'Items'},
-                 'Rare': {'fish_luck': .25, 'bite_speed': 1.5, 'catch_tier': 'Rare'}}
+DEFAULT_BUFFS = {'Legendary': {'enchant': 10, 'fish_luck': 1.5, 'fishing_luck_factor': 1.2, 'bite_speed': 3.0, 'catch_tier': 'Items'},
+                 'Rare': {'enchant': 0, 'fish_luck': .25, 'bite_speed': 1.5, 'catch_tier': 'Rare'},
+                 'Common': {'enchant': 0, 'catch_tier': 'Common'}}
+# Rod enchant level -> luck multiplier (user, 2026-10-15: +9 = 2x, +10 = 3x; lower
+# levels step up gradually, exact values pending). Override in config: enchant_luck.
+ENCHANT_LUCK = {0: 1.0, 9: 2.0, 10: 3.0}
+
+
+def enchant_luck(level):
+    table = {**ENCHANT_LUCK, **{int(k): v for k, v in (load_config().get('enchant_luck') or {}).items()}}
+    return table.get(int(level))
 
 
 def key_of(name):
@@ -71,7 +80,10 @@ def best_crates(counts):
         for k, n in CRATES['B']['needs'].items(): left[k] -= b*n
         gold = a*CRATES['A']['gold']+b*CRATES['B']['gold']+direct(left)
         if best is None or gold > best['gold']:
-            best = {'gold': gold, 'crate_a': a, 'crate_b': b, 'direct_gold': direct(left)}
+            best = {'gold': gold, 'crate_a': a, 'crate_b': b, 'direct_gold': direct(left),
+                    'crate_gold': a*CRATES['A']['gold']+b*CRATES['B']['gold'], 'left': left}
+    # The common that runs out first and caps crate B.
+    best['limit'] = min(CRATES['B']['needs'], key=lambda k: counts.get(k, 0))
     return best
 
 
@@ -116,7 +128,8 @@ def by_rod(root=None, now=None):
         row['sessions'] += 1; row['active_hours'] += s['active_hours']; row['hooks'] += s['hooks']
         row['other_items'] += s['other_items']
         for k, v in s['counts'].items(): row['counts'][k] = row['counts'].get(k, 0)+v
-    buffs = {**DEFAULT_BUFFS, **(load_config().get('rod_buffs') or {})}
+    saved = load_config().get('rod_buffs') or {}
+    buffs = {rod: {**DEFAULT_BUFFS.get(rod, {}), **saved.get(rod, {})} for rod in {*DEFAULT_BUFFS, *saved}}
     for row in rows.values():
         hours = row['active_hours']; counts = row['counts']; fish = sum(counts.values())
         row['fish'] = fish
@@ -130,7 +143,10 @@ def by_rod(root=None, now=None):
         row['direct_gold_per_hour'] = round(row['direct_gold']/hours) if hours >= .05 else None
         row['crate_gold_per_hour'] = round(row['crate']['gold']/hours) if hours >= .05 else None
         row['best'] = 'Crates' if row['crate']['gold'] > row['direct_gold'] else 'Sell directly'
-        row['buffs'] = buffs.get(row['rod'], {})
+        row['buffs'] = dict(buffs.get(row['rod'], {}))
+        if 'enchant' in row['buffs']:
+            luck = enchant_luck(row['buffs']['enchant'])
+            row['buffs']['enchant'] = f"+{row['buffs']['enchant']} ({luck}x luck)" if luck else f"+{row['buffs']['enchant']} (luck pending)"
     return sorted(rows.values(), key=lambda r: -(r['crate_gold_per_hour'] or 0))
 
 
@@ -138,12 +154,19 @@ def page(root=None, now=None):
     """Write the comparison page next to the run data and return its path."""
     root = Path(root or data_directory())
     rods = by_rod(root, now)
+    runs = [session_stats(root, session, now) for session in sessions(root)]
     fish_keys = [k for k in RARITY if any(k in r['counts'] for r in rods)]
     esc = html.escape
     def cell(v, suffix=''):
         return '—' if v is None else (f'{v:,}' if isinstance(v, int) else str(v))+suffix
     head = ''.join(f'<th>{esc(NAMES.get(k, k))}<br><small>{RARITY[k]}</small></th>' for k in fish_keys)
-    body = []
+    body = []; money = []
+    def money_row(label, hours, direct, c):
+        per_hour = lambda v: f'{round(v/hours):,}' if hours >= .05 else '—'
+        mix = f"{c['crate_b']} B" + (f" + {c['crate_a']} A" if c['crate_a'] else '')
+        return (f"<tr><th>{label}</th><td>{hours:.1f}h</td><td>{direct:,}<br><small>{per_hour(direct)}/h</small></td>"
+                f"<td>{mix}<br><small>{c['crate_gold']:,} gold · short on {esc(NAMES.get(c['limit'], c['limit']))}</small></td>"
+                f"<td>{c['direct_gold']:,}</td><td><b>{c['gold']:,}</b></td><td><b>{per_hour(c['gold'])}</b></td></tr>")
     for r in rods:
         buffs = ', '.join(f'{k.replace("_", " ")} {v}'+('×' if isinstance(v, (int, float)) else '') for k, v in r['buffs'].items()) or 'not recorded'
         drops = ''.join(f"<td>{r['drop_percent'].get(k, 0)}%<br><small>{r['counts'].get(k, 0):,}</small></td>" for k in fish_keys)
@@ -151,8 +174,8 @@ def page(root=None, now=None):
         c = r['crate']
         body.append(f"<tr><th>{esc(r['rod'])}<br><small>{esc(buffs)}</small></th><td>{r['active_hours']:.1f}h<br><small>{r['hooks']:,} hooks</small></td>"
                     f"<td>{cell(r['hooks_per_minute'])}</td>{drops}<td>{esc(rarity)}<br><small>n = {r['fish']:,} fish</small></td>"
-                    f"<td>{cell(r['direct_gold_per_hour'])}</td><td><b>{cell(r['crate_gold_per_hour'])}</b><br><small>{c['crate_b']} B + {c['crate_a']} A</small></td>"
-                    f"<td>{esc(r['best'])}</td></tr>")
+                    f"<td>{cell(r['direct_gold_per_hour'])}</td></tr>")
+        money.append(money_row(esc(r['rod']), r['active_hours'], r['direct_gold'], c))
     crates = ''.join(f"<li>Crate {name}: {', '.join(f'{n}× {NAMES.get(k, k)}' for k, n in c['needs'].items())} → {c['gold']:,} gold</li>"
                      for name, c in CRATES.items())
     prices = ' · '.join(f'{NAMES.get(k, k)} {v}' for k, v in PRICES.items())
@@ -167,8 +190,14 @@ th,td{{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vert
 thead th{{color:var(--dim);font-weight:500}} small{{color:var(--dim)}}
 </style></head><body>
 <h1>Rod comparison</h1><p>Generated {time.strftime('%Y-%m-%d %H:%M')} from the farmer's own catch logs. Drop % = share of fish caught (ores and materials excluded); n is the sample size.</p>
-<div class="wrap"><table><thead><tr><th>Rod</th><th>Fished</th><th>Hooks/min</th>{head}<th>By rarity</th><th>Gold/h selling</th><th>Gold/h with crates</th><th>Best</th></tr></thead>
+<div class="wrap"><table><thead><tr><th>Rod</th><th>Fished</th><th>Hooks/min</th>{head}<th>By rarity</th><th>Gold/h all sold</th></tr></thead>
 <tbody>{''.join(body) or '<tr><td colspan="9">No rod sessions yet.</td></tr>'}</tbody></table></div>
+<h2>Gold: crates plus leftovers</h2><p>As many crates as the catch allows, then everything left over sold directly; the two together are the combined total.</p>
+<div class="wrap"><table><thead><tr><th>Rod</th><th>Fished</th><th>All sold directly</th><th>Crates</th><th>Leftovers sold</th><th>Combined total</th><th>Combined gold/h</th></tr></thead>
+<tbody>{''.join(money)}</tbody></table></div>
+<h2>Per run</h2>
+<div class="wrap"><table><thead><tr><th>Run</th><th>Fished</th><th>All sold directly</th><th>Crates</th><th>Leftovers sold</th><th>Combined total</th><th>Combined gold/h</th></tr></thead>
+<tbody>{''.join(money_row(esc(r['rod'])+'<br><small>'+time.strftime('%d %b %H:%M', time.localtime(r['started']))+'</small>', r['active_hours'], r['direct_gold'], r['crate']) for r in runs)}</tbody></table></div>
 <h2>Angler crates</h2><ul>{crates}</ul>
 <p>Sell prices (gold): {esc(prices)}. Crate gold/h uses the best mix of crates and direct sales for that rod's catches.</p>
 <p>Predicted drop % from luck values needs at least two rods with known luck and a few hundred fish each; until then only observed rates are shown.</p>
