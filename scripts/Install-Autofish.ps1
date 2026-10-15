@@ -63,6 +63,12 @@ foreach ($folder in @('src', 'scripts')) {
     }
 }
 Remove-Item -LiteralPath (Join-Path $Target 'cli') -Recurse -Force -ErrorAction SilentlyContinue
+# The old Fishing window was replaced by the app window that Autofish.exe opens.
+foreach ($retired in @('command_window.py', 'ui_motion.py', 'dashboard.py', 'Counter.html', 'Open-Controls.ps1', 'Open-Counter.ps1')) {
+    foreach ($folder in @('.', 'src', 'scripts')) {
+        Remove-Item -LiteralPath (Join-Path (Join-Path $Target $folder) $retired) -Force -ErrorAction SilentlyContinue
+    }
+}
 # Shortcuts made by older versions pointed at those loose scripts.
 $desktop = [Environment]::GetFolderPath('Desktop')
 $shell = New-Object -ComObject WScript.Shell
@@ -70,7 +76,8 @@ foreach ($name in @('Fishing', 'Fishing CLI', 'Start Fishing')) {
     $link = Join-Path $desktop ($name + '.lnk')
     if (-not (Test-Path -LiteralPath $link)) { continue }
     $old = $shell.CreateShortcut($link)
-    if ($old.Arguments -like ('*"' + $Target + '\*.ps1"*')) { Remove-Item -LiteralPath $link -Force }
+    $loose = $old.Arguments -like ('*"' + $Target + '\*.ps1"*') -and $old.Arguments -notlike '*\scripts\*'
+    if ($loose) { Remove-Item -LiteralPath $link -Force }
 }
 
 $venv = Join-Path $Target '.venv\Scripts\python.exe'

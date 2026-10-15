@@ -4,7 +4,7 @@ $fishingDesktop = [Environment]::GetFolderPath('Desktop')
 $fishingShell = New-Object -ComObject WScript.Shell
 $fishingPowerShell = Join-Path $PSHOME 'powershell.exe'
 foreach ($entry in @(
-    @{Name='Fishing'; Script='Open-Controls.ps1'; Description='Fishing inventory, controls and live log'},
+    @{Name='Autofish'; Script='Open-Autofish.ps1'; Description='Autofish dashboard'},
     @{Name='Fishing CLI'; Script='Open-CLI.ps1'; Description='Keyboard fishing dashboard'},
     @{Name='Start Fishing'; Script='Start-Fishing.ps1'; Description='Continue fishing with saved counters'}
 )) {

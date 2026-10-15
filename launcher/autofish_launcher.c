@@ -80,7 +80,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR arguments, int
         }
     }
 
-    swprintf(path, MAX_PATH, L"%ls\\scripts\\Open-CLI.ps1", target);
+    swprintf(path, MAX_PATH, L"%ls\\scripts\\Open-Autofish.ps1", target);
     if (!exists(path)) fail(L"Autofish is not installed yet. Unzip the download and double-click Autofish.exe there.");
     swprintf(command, 4 * MAX_PATH,
              L"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%ls\"", path);

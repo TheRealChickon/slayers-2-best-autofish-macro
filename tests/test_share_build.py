@@ -20,7 +20,8 @@ class ShareZip(unittest.TestCase):
         self.assertEqual({name.split('/')[1] for name in names}, {'Autofish.exe', 'app'})
         self.assertIn('Autofish/app/scripts/Install-Autofish.ps1', names)
         self.assertIn('Autofish/app/VERSION', names)
-        self.assertIn('Autofish/app/scripts/Open-CLI.ps1', names)
+        self.assertIn('Autofish/app/scripts/Open-Autofish.ps1', names)
+        self.assertIn('Autofish/app/src/app_window.py', names)
         self.assertIn('Autofish/app/src/fishing_cli.py', names)
         for left_out in ('tests/', 'private/', 'launcher/', '.github/', 'docs/images/'):
             self.assertFalse([name for name in names if name.startswith('Autofish/app/'+left_out)], left_out)

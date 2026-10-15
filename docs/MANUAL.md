@@ -7,7 +7,7 @@ A Windows assistant for Project Slayers 2 fishing. It includes a game-inspired i
 
 ## Launch it
 
-**First time:** extract the repository, install Python 3.12 x64, and double-click **scripts\Setup.cmd**. Then open **Fishing** on the desktop, set your Roblox username and rod slot in Settings, prepare the game as described below, and click **Continue**.
+**First time:** extract the repository, install Python 3.12 x64, and double-click **scripts\Setup.cmd**. Then open **Autofish** on the desktop, answer the gamepass question, set your rod slot and cast point in Settings, prepare the game as described below, and press **Start**.
 
 Setup installs the **`autofish`** command for your Windows account. Open a new terminal anywhere and run:
 
@@ -42,10 +42,10 @@ The command points to this application folder and preserves its settings and sav
 
 **After setup:**
 
-- **Fishing** on the desktop opens the window. Continue starts/resumes; Pause and Stop release game input.
+- **Autofish** on the desktop opens the app window (`src/app_window.py`): live status, Start/Continue, Pause and Stop, catches, log, Rod Lab and the main settings. It is served only to this PC on 127.0.0.1 and opens as an Edge app window. Closing it leaves the farmer running.
 - **Fishing CLI** opens the terminal dashboard. Press **C** to continue, **P** to pause, **S** to stop, and **Q** to close only the dashboard.
 - **Start Fishing** resumes the saved run directly.
-- Without desktop shortcuts, run `scripts\Open-Controls.ps1`, `scripts\Open-CLI.ps1`, or `scripts\fishing.cmd --color tui` from the extracted application folder.
+- Without desktop shortcuts, run `scripts\Open-Autofish.ps1`, `scripts\Open-CLI.ps1`, or `scripts\fishing.cmd --color tui` from the extracted application folder.
 
 ## Where it works
 
@@ -69,8 +69,8 @@ Setup has been tested from a clean source checkout on Windows with Python 3.12. 
 1. Install **Python 3.12, 64-bit** from [python.org](https://www.python.org/downloads/windows/). Include the Python launcher and Tcl/Tk when installing.
 2. Download this repository with **Code → Download ZIP** and extract it to a permanent, writable folder, or clone it with Git.
 3. Double-click **scripts\Setup.cmd**. It creates a local Python environment, installs `requirements.txt`, checks the required files, and adds three desktop shortcuts. No administrator privileges are needed.
-4. Open **Fishing** from the desktop. In **Settings**, enter your Roblox **username**, set the rod's hotbar slot (1–9), and save. The username is optional; it enables the public presence check. It does not sign in or change the account open in Roblox.
-5. Sign into the intended account in Roblox, open the game, and complete the fishing position setup below. Select **Continue** in Fishing.
+4. Open **Autofish** from the desktop. In **Settings**, enter your Roblox **username** and set the rod's hotbar slot (1–9). The username is optional; it enables the public presence check. It does not sign in or change the account open in Roblox.
+5. Sign into the intended account in Roblox, open the game, and complete the fishing position setup below. Press **Start** in Autofish.
 
 An existing installation can be checked without reinstalling packages:
 
@@ -272,7 +272,7 @@ checkpoints. Raw mouse device deltas are included for camera turns and shift loc
 alongside normalized cursor positions for menus. Recordings stay in the configured
 local data folder and are excluded from Git.
 
-1. Use **Pause** in Fishing and wait for the controller to stop. F8 alone leaves
+1. Use **Pause** in Autofish and wait for the controller to stop. F8 alone leaves
    the supervisor alive, so use the app/CLI Pause before recording. Existing run
    counters, spawn, configuration and manual stop flags are retained.
 2. Open **Settings → Record bait route**, double-click `scripts\Record-Bait-Route.cmd`,
@@ -438,7 +438,7 @@ All local settings, logs, screenshots, recordings, and the Python environment ar
 - **Setup fails:** check Python 3.12 x64 and internet access, then run scripts\Setup.cmd again. `src/setup_check.py` reports missing imports/assets without starting the game.
 - **Game layout changed:** stop the bot. The current screen coordinates and templates are in `src/fishing_assistant.py`, `src/recovery.py`, and `src/rod_detector.py`.
 
-To remove the app, stop it first, close both views, delete its desktop shortcuts, and remove the extracted folder when you no longer need the saved logs. No Windows service or scheduled task is installed.
+To remove the app, stop it first, close the app window and the terminal dashboard, delete its desktop shortcuts, and remove the extracted folder when you no longer need the saved logs. No Windows service or scheduled task is installed.
 
 ## Branches and rollback
 

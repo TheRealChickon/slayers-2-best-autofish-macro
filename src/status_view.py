@@ -1,4 +1,4 @@
-"""Read-only view shared by the game-style window and the command line."""
+"""Read-only view shared by the app window and the command line."""
 import math
 import time
 from metrics import RUN, read
