@@ -63,13 +63,13 @@ The first time the dashboard opens, it asks one question: do you own the **Set S
 | **Yes** | **Full farmer** | Your spawn is at your fishing spot, so when Roblox disconnects or something gets stuck, Autofish rejoins and lands right back there. It can run all night on its own. |
 | **No** | **Farm here** | Autofish fishes, wins the minigame and claims every catch where you stand, and fixes small problems on the spot. Without the gamepass a rejoin would drop you somewhere else, so after a disconnect it stops and waits for you instead. |
 
-You can change the answer any time in **Settings → Spawn gamepass**.
+If you answer **Yes**, it then asks for your **Roblox username** (not your display name). Full farmer needs it to check that you're in the game and to rejoin after a disconnect. It is saved only on your PC. You can change both answers any time in **Settings**.
 
-Then go to **Settings** with the arrow keys and set these three things:
+Then go to **Settings** with the arrow keys and check these:
 
 | Setting | What to enter |
 | --- | --- |
-| **Username** | Your Roblox **username** (not your display name). Optional, but it lets Autofish notice disconnects faster. |
+| **Username** | Your Roblox **username** (not your display name). Already set if you answered Yes; optional for Farm here, where it helps notice disconnects. |
 | **Rod slot** | The hotbar number (1 – 9) your fishing rod is in. |
 | **Cast point** | Pick **Capture pointer**, then within 4 seconds hover your mouse over the water where you want to cast. |
 
