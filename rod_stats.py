@@ -79,16 +79,11 @@ def session_stats(root, session, now=None):
     window = {'started': session['started'], 'ended': session.get('ended') or now}
     rows = run_log.rows(root, window)
     result = calculate(rows, window, 1, now)
-<<<<<<< HEAD
-    active = result.get('active_seconds') or 0
-    hooks = sum(r.get('event') == 'minigame' for r in rows if str(r.get('source', '')).startswith('events-'))
-=======
     events = [r for r in rows if str(r.get('source', '')).startswith('events-')]
     hooks = sum(r.get('event') == 'minigame' for r in events)
     # Fishing time = gaps between worker events of under 60 s (pauses and rejoins excluded).
     times = sorted(r.get('at', 0) for r in events)
     active = sum(b-a for a, b in zip(times, times[1:]) if b-a < 60)
->>>>>>> feature/overnight-defaults-cli-20261014
     counts = {}; other = 0
     for item in result.get('items', []):
         key = key_of(item['name'])
