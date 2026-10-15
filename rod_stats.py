@@ -27,7 +27,8 @@ CRATES = {
     'A': {'gold': 2070, 'needs': {'ouwfish': 3, 'seahorse': 3, 'coral': 3, 'ouwfwesh': 3, 'clownfish': 1, 'zebrafish': 1}},
 }
 # Known rod buffs; editable in config under rod_buffs.
-DEFAULT_BUFFS = {'Legendary': {'fish_luck': 1.5, 'fishing_luck_factor': 1.2, 'bite_speed': 3.0}, 'Rare': {}}
+DEFAULT_BUFFS = {'Legendary': {'fish_luck': 1.5, 'fishing_luck_factor': 1.2, 'bite_speed': 3.0, 'catch_tier': 'Items'},
+                 'Rare': {'fish_luck': .25, 'bite_speed': 1.5, 'catch_tier': 'Rare'}}
 
 
 def key_of(name):
@@ -144,7 +145,7 @@ def page(root=None, now=None):
     head = ''.join(f'<th>{esc(NAMES.get(k, k))}<br><small>{RARITY[k]}</small></th>' for k in fish_keys)
     body = []
     for r in rods:
-        buffs = ', '.join(f'{k.replace("_", " ")} {v}×' for k, v in r['buffs'].items()) or 'not recorded'
+        buffs = ', '.join(f'{k.replace("_", " ")} {v}'+('×' if isinstance(v, (int, float)) else '') for k, v in r['buffs'].items()) or 'not recorded'
         drops = ''.join(f"<td>{r['drop_percent'].get(k, 0)}%<br><small>{r['counts'].get(k, 0):,}</small></td>" for k in fish_keys)
         rarity = ' · '.join(f"{k} {v}%" for k, v in sorted(r['rarity_percent'].items()))
         c = r['crate']
