@@ -127,7 +127,6 @@ def desired_titles(owned, priority='luck', buffs=None):
 class TitleManager:
     def __init__(self,driver):
         self.driver=driver
-        self.positions={}
 
     def rows(self,box=None):
         return self.driver.text(self.driver.capture(),box)
@@ -187,40 +186,8 @@ class TitleManager:
             self.save_frame(frame)
             if not added and attempt>=4:break
         if expected is not None and len(names)<expected:
-            names+=self.faint_titles(frame,names)
-        if expected is not None and len(names)<expected:
             d.event('fishing_titles_partial',expected=expected,read=names)
         return names
-
-    def loose_text(self,image,box):
-        """OCR that keeps low-confidence lines; only safe because each line must
-        still match a name read clearly in the equipped bar."""
-        d=self.driver
-        ocr=getattr(d,'ocr',None)
-        if ocr is None:return d.text(image,box)
-        x,y,w,h=box
-        rows,_=ocr(image[y:y+h,x:x+w],use_cls=False)
-        return [{'text':r[1],'center':(int(x+np.mean(np.array(r[0])[:,0])),int(y+np.mean(np.array(r[0])[:,1]))),
-                 'score':float(r[2])} for r in rows or [] if r[2]>.6]
-
-    def faint_titles(self,frame,names):
-        """Some pills (red Living Legend) stay almost black in the list but read clearly
-        in the equipped bar. Brighten the list, then name each faint pill from the bar."""
-        d=self.driver
-        bright=np.clip(frame.max(axis=2).astype(np.float32)*4,0,255).astype(np.uint8)
-        bright=np.repeat(bright[:,:,None],3,axis=2)
-        bar=listed_titles(d.text(frame,(720,1100,1500,100)))
-        known={normalized(n) for n in names}
-        found=[]
-        for r in self.loose_text(bright,(720,340,1300,700)):
-            clean=normalized(r['text'])
-            if len(clean)<5 or clean in known:continue
-            if any(SequenceMatcher(None,normalized(n),clean).ratio()>.75 for n in names):continue
-            match=max(bar,key=lambda n:SequenceMatcher(None,normalized(n),clean).ratio(),default=None)
-            if match and normalized(match) not in known and SequenceMatcher(None,normalized(match),clean).ratio()>=.75:
-                found.append(match);known.add(normalized(match))
-                self.positions[match]=r['center']
-        return found
 
     @staticmethod
     def save_frame(frame):
@@ -237,12 +204,8 @@ class TitleManager:
         rows=d.text(frame,(1980,320,560,700))
         # Clicking the title that is already open closes its detail panel.
         if not self.shows(rows,title):
-            try:center=self.named(self.rows((600,340,1500,300)),title)['center']
-            except ValueError:
-                # A faint pill found by faint_titles() is clicked where it was read.
-                if title not in self.positions:raise
-                center=self.positions[title]
-            d.click(*center);d.sleep(.45)
+            title_row=self.named(self.rows((600,340,1500,300)),title)
+            d.click(*title_row['center']);d.sleep(.45)
             frame=d.capture()
             rows=d.text(frame,(1980,320,560,700))
         if not self.shows(rows,title):
