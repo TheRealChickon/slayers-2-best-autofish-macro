@@ -190,12 +190,12 @@ class TitleManager:
         return names
 
     @staticmethod
-    def save_frame(frame):
+    def save_frame(frame,name='titles-list.jpg'):
         """Keep the latest Fishing titles screen for diagnosing new or hidden titles."""
         try:
             import cv2
             from app_config import data_directory
-            cv2.imwrite(str(data_directory()/'titles-list.jpg'),frame,[cv2.IMWRITE_JPEG_QUALITY,85])
+            cv2.imwrite(str(data_directory()/name),frame,[cv2.IMWRITE_JPEG_QUALITY,85])
         except Exception:pass
 
     def inspect(self,title,details=None):
@@ -209,7 +209,8 @@ class TitleManager:
             frame=d.capture()
             rows=d.text(frame,(1980,320,560,700))
         if not self.shows(rows,title):
-            raise ValueError(f'Fishing title detail changed for {title}')
+            self.save_frame(frame,'title-detail.jpg')
+            raise ValueError(f'Fishing title detail changed for {title}; read {[r["text"] for r in rows][:12]}')
         requirement=self.named(rows,'Requirements')
         if details is not None:details[title]=parse_buffs(rows)
         return owned_check(frame,requirement['center'][1])
