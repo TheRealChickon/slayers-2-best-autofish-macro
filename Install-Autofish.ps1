@@ -8,13 +8,16 @@ $version = if (Test-Path -LiteralPath (Join-Path $source 'VERSION')) { (Get-Cont
 Write-Host "Autofish $version -> $Target" -ForegroundColor Cyan
 
 function Find-Python {
-    foreach ($candidate in @(
-        @{ exe = 'py'; args = @('-3.12', '-c', 'import sys;print(sys.executable)') },
-        @{ exe = 'python'; args = @('-c', 'import sys,struct;assert sys.version_info>=(3,11) and struct.calcsize("P")==8;print(sys.executable)') })) {
-        if (Get-Command $candidate.exe -ErrorAction SilentlyContinue) {
-            $path = & $candidate.exe @($candidate.args) 2>$null
+    # A missing runtime makes py.exe write to stderr; that must not stop the installer.
+    $check = 'import sys,struct;assert sys.version_info>=(3,11) and struct.calcsize("P")==8;print(sys.executable)'
+    foreach ($candidate in @(@('py', '-3.12'), @('py', '-3'), @('python'))) {
+        if (-not (Get-Command $candidate[0] -ErrorAction SilentlyContinue)) { continue }
+        try {
+            $ErrorActionPreference = 'Continue'
+            $arguments = @($candidate | Select-Object -Skip 1) + @('-c', $check)
+            $path = & $candidate[0] @arguments 2>$null
             if ($LASTEXITCODE -eq 0 -and $path) { return ($path | Select-Object -Last 1).Trim() }
-        }
+        } catch { } finally { $ErrorActionPreference = 'Stop' }
     }
     $local = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'
     if (Test-Path -LiteralPath $local) { return $local }
