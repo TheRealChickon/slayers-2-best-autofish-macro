@@ -431,6 +431,6 @@ function predict(){
 }
 
 $('asof').textContent = `Data as of ${DATA.generated}`;
-$('foot').innerHTML = `<span>Prices: Common 33 · Uncommon 66 · Legendary 165</span><span>Crate base gold: B ${fmt(DATA.crates.B.gold)} · A ${fmt(DATA.crates.A.gold)} (2× boost doubles crates only)</span><span>Enchant luck: +9 = 2× · +10 = 3× · others interpolated</span><span>Range bars: shaded = measured 95% range, tick = predicted chance</span>`;
+$('foot').innerHTML = `<span>Prices: Common 33 · Uncommon 66 · Legendary 165</span><span>Crate base gold: B ${fmt(DATA.crates.B.gold)} · A ${fmt(DATA.crates.A.gold)} (2× boost doubles crates only)</span><span>Refine luck per level: +1 1.05× … +8 1.9×, +9 2×, +10 3×</span><span>Range bars: shaded = measured 95% range, tick = predicted chance</span>`;
 drawSeg(); render(); drawPredictor();
 </script>
