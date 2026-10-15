@@ -140,6 +140,8 @@ def parser(prog='autofish'):
     add_bait_parser(sub)
     from baitbot_controls import add_parser as add_baitbot_parser
     add_baitbot_parser(sub)
+    from rod_stats import add_parser as add_rods_parser
+    add_rods_parser(sub)
     sub.add_parser('diagnostics',help='Show the last eight failure reports and local screenshot paths')
     sub.add_parser('stop', help='Stop game input and retain counters')
     sub.add_parser('export', help='Save the complete item log and totals as CSV')
@@ -217,6 +219,9 @@ def execute(args, colors=False):
     if command=='bait':
         from bait_buy import execute as buy_bait
         return buy_bait(args)
+    if command=='rods':
+        from rod_stats import command as run_rods
+        return run_rods(args)
     if command=='baitbot':
         from baitbot_controls import execute as run_baitbot
         return run_baitbot(args)

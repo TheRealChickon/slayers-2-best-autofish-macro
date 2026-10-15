@@ -65,7 +65,7 @@ class Terminal:
         'here': ('gold','current server / current location'),
         'rejoin': ('green', 'connection guard only'),
     }
-    settings_groups=(('Account',('Username',)),('Fishing',('Mode','Rod slot','Auto rod','Drop-cast','Fishing titles')),
+    settings_groups=(('Account',('Username',)),('Fishing',('Mode','Rod','Rod stats page','Rod slot','Auto rod','Drop-cast','Fishing titles')),
                      ('Overnight',('Overnight enabled','Auto focus','Focus grace seconds','Auto-enable after idle','Idle minutes')),
                      ('Location and camera',('Cast point','Capture pointer','Camera','Heading','Position correction','Save reference','Disable reference')),
                      ('Bait restock',('Fish Head reserve','Refill buffer','Run bait restock','Check bait route','Stop bait restock','BaitBot status','Record bait route','Open bait recordings')),
@@ -75,6 +75,8 @@ class Terminal:
     setting_help = {
         'Username':'Roblox account for presence and reconnect checks.',
         'Mode':'Full fishes and rejoins; Rejoin only restores the connection; other modes work as labeled.',
+        'Rod':'Rod you have equipped (Legendary, Rare, …). Changing it starts a new stats session for that rod.',
+        'Rod stats page':'Open the per-rod comparison: drop %, gold/h selling vs Angler crates.',
         'Rod slot':'Hotbar number of your fishing rod (1–9).',
         'Auto rod':'Full farmer checks the hotbar and equips an unselected rod.',
         'Drop-cast':'Click to drop the catch, recast at once, and hold T to claim it while the line is out.',
@@ -244,6 +246,9 @@ class Terminal:
                     save_config(resolve_account(value)); return 'Account saved'
                 self.job(account)
             elif key == 'Rod slot': save_config({'rod_slot': int(value)})
+            elif key == 'Rod':
+                import rod_stats
+                rod_stats.set_rod(value);self.toast('Now tracking catches for the '+value+' rod')
             elif key in ('Fish Head reserve','Refill buffer'):
                 save_config({{'Fish Head reserve':'bait_reserve','Refill buffer':'bait_refill_buffer'}[key]:int(value)})
                 self.toast(key+' saved')
@@ -303,6 +308,12 @@ class Terminal:
                 self.job({'Run bait restock':baitbot_controls.launch,'Check bait route':baitbot_controls.check,
                           'Stop bait restock':lambda:baitbot_controls.invoke('stop'),
                           'BaitBot status':baitbot_controls.status}[key]);return
+            if key=='Rod':self.edit(key,self.config.get('active_rod',''));return
+            if key=='Rod stats page':
+                import rod_stats
+                def open_page():
+                    path=rod_stats.page();os.startfile(str(path));return 'Opened '+str(path)
+                self.job(open_page);return
             if key=='Purchase amount':self.edit(key,self.config.get('bait_buy_amount',169000));return
             if key=='Amount type':
                 save_config({'bait_buy_kind':'quantity' if self.config.get('bait_buy_kind','budget')=='budget' else 'budget'});return
@@ -610,7 +621,8 @@ class Terminal:
                     ('Save fishing reference','Enter while paused'),('Disable reference','Enter while paused'),
                     ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On')]
         values={key:value for key,(_,value) in zip(('Username','Mode','Rod slot','Auto rod','Camera','Heading','Fishing titles','Cast point','Capture pointer','Position correction','Save reference','Disable reference','Motion'),settings)}
-        values.update({'Drop-cast':'On · drop, recast, claim' if self.config.get('drop_cast') else 'Off · claim, then recast',
+        values.update({'Rod':self.config.get('active_rod') or 'Not set','Rod stats page':'Enter to open',
+            'Drop-cast':'On · drop, recast, claim' if self.config.get('drop_cast') else 'Off · claim, then recast',
             'Overnight enabled':'On' if self.config['overnight_enabled'] else 'Off',
             'Fish Head reserve':f"{self.config['bait_reserve']:,}",'Refill buffer':f"{self.config['bait_refill_buffer']:,}",
             'Run bait restock':'Reset / shrine / Nori / return','Check bait route':'Enter for readiness',
