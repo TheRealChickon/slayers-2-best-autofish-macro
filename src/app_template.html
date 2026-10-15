@@ -446,22 +446,6 @@ footer a{color:inherit}
 .howto:hover{transform:translateY(-2px)} .howto .i{width:15px;height:15px}
 .input.wide{width:100%;margin-top:18px}
 
-/* on/off settings: sweep rows (the row fills left to right, the tick draws itself) */
-.set:has(.switch){position:relative;isolation:isolate;overflow:hidden;border:1px solid var(--border);border-radius:14px;padding:10px 12px;margin-bottom:8px;background:var(--raised);cursor:pointer;transition:border-color .25s,transform .4s var(--spring)}
-.set:has(.switch):last-child{border-bottom:1px solid var(--border);margin-bottom:0}
-.set:has(.switch)::before{content:'';position:absolute;inset:0;z-index:-1;background:var(--accent-soft);transform:scaleX(0);transform-origin:left;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
-.set:has(.switch[aria-checked="true"]){border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
-.set:has(.switch[aria-checked="true"])::before{transform:none}
-.set:has(.switch):active{transform:scale(.985)}
-.set:has(.switch) .ic{background:var(--surface)}
-.switch,.switch[aria-checked="true"]{width:22px;height:22px;border-radius:7px;border:1.5px solid var(--border-strong);background:var(--surface);display:grid;place-items:center;padding:0;
-  transition:transform .45s var(--spring),background-color .25s,border-color .25s}
-.switch::after{display:none}
-.switch svg{width:14px;height:14px;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:22;stroke-dashoffset:22;transition:stroke-dashoffset .35s .12s}
-.switch[aria-checked="true"]{background:var(--accent);border-color:var(--accent);transform:rotate(-8deg) scale(1.08)}
-.switch[aria-checked="true"] svg{stroke-dashoffset:0}
-.set:has(.switch):hover .switch:not([aria-checked="true"]){border-color:var(--text-3)}
-
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -905,9 +889,7 @@ $('bData').onclick = e => act({action:'data_folder'}, e.currentTarget);
 $('bCast').onclick = e => { toast('Hover over the water in Roblox now'); act({action:'capture_cast'}, e.currentTarget); };
 $('logFilter').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; logKind = b.dataset.k; drawLog(S); });
 async function setting(key, value){ try { const r = await api('/api/settings', {[key]: value}); if (r.state) draw(r.state); toast('Saved'); } catch (e) { toast(e.message); } }
-document.querySelectorAll('.switch').forEach(sw => { sw.innerHTML = '<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
-  sw.onclick = e => { e.stopPropagation(); const v = sw.getAttribute('aria-checked') !== 'true'; sw.setAttribute('aria-checked', v); setting(sw.dataset.key, v); };
-  sw.closest('.set').addEventListener('click', e => { if (!e.target.closest('a,input,button')) sw.click(); }); });
+document.querySelectorAll('.switch').forEach(sw => sw.onclick = () => { const v = sw.getAttribute('aria-checked') !== 'true'; sw.setAttribute('aria-checked', v); setting(sw.dataset.key, v); });
 $('sUser').addEventListener('change', e => setting('account_username', e.target.value.trim()));
 $('sHook').addEventListener('change', e => { const v = e.target.value.trim(); if (v) setting('webhook', v); e.target.value = ''; });
 $('sRod').addEventListener('click', e => { const b = e.target.closest('[data-rod]'); if (b) setting('rod', b.dataset.rod); });
