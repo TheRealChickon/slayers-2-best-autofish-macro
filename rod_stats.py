@@ -131,6 +131,13 @@ def session_stats(root, session, now=None):
             'crate_gold_per_hour': round(crates['gold']/hours) if hours >= .05 else None}
 
 
+def title_buffs(root):
+    import title_manager
+    try: catalog = json.loads((Path(root)/title_manager.CATALOG_FILE).read_text(encoding='utf-8'))
+    except (OSError, ValueError): catalog = {}
+    return title_manager.known_buffs(catalog)
+
+
 def titles_at(root, at):
     """Fishing titles equipped at `at`, from the farmer's last title check."""
     titles = None
@@ -203,7 +210,7 @@ def export_data(root=None, now=None):
             'crates': {k: {'gold': v['gold'], 'needs': v['needs']} for k, v in CRATES.items()},
             'boost': {'multiplier': BOOST_MULTIPLIER, 'on': bool(load_config().get('money_boost', True)),
                       'crates_per_minute': CRATES_PER_BOOST_MINUTE, 'ore_minutes': 1},
-            'title_buffs': __import__('title_manager').TITLE_BUFFS,
+            'title_buffs': title_buffs(root),
             'enchant_luck': {str(k): v for k, v in {**ENCHANT_LUCK, **{int(a): b for a, b in (load_config().get('enchant_luck') or {}).items()}}.items()},
             'bait_left': bait, 'bait_hours': bait_hours,
             'rods': [{'rod': r['rod'], 'active_hours': r['active_hours'], 'hooks': r['hooks'], 'fish': r['fish'], 'counts': r['counts'],

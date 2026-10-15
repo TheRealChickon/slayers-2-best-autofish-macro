@@ -65,7 +65,7 @@ class Terminal:
         'here': ('gold','current server / current location'),
         'rejoin': ('green', 'connection guard only'),
     }
-    settings_groups=(('Account',('Username',)),('Fishing',('Mode','Rod','Rod stats page','Rod slot','Auto rod','Drop-cast','Fishing titles')),
+    settings_groups=(('Account',('Username',)),('Fishing',('Mode','Rod','Rod stats page','Rod slot','Auto rod','Drop-cast','Fishing titles','Title focus')),
                      ('Overnight',('Overnight enabled','Auto focus','Focus grace seconds','Auto-enable after idle','Idle minutes')),
                      ('Location and camera',('Cast point','Capture pointer','Camera','Heading','Position correction','Save reference','Disable reference')),
                      ('Bait restock',('Fish Head reserve','Refill buffer','Run bait restock','Check bait route','Stop bait restock','BaitBot status','Record bait route','Open bait recordings')),
@@ -76,6 +76,7 @@ class Terminal:
         'Username':'Roblox account for presence and reconnect checks.',
         'Mode':'Full fishes and rejoins; Rejoin only restores the connection; other modes work as labeled.',
         'Rod':'Rod you have equipped (Legendary, Rare, …). Changing it starts a new stats session for that rod.',
+        'Title focus':'Which buff auto titles pick for the current rod: luck or bite speed. Applies at the next farmer start.',
         'Rod stats page':'Open the per-rod comparison: drop %, gold/h selling vs Angler crates.',
         'Rod slot':'Hotbar number of your fishing rod (1–9).',
         'Auto rod':'Full farmer checks the hotbar and equips an unselected rod.',
@@ -309,6 +310,11 @@ class Terminal:
                           'Stop bait restock':lambda:baitbot_controls.invoke('stop'),
                           'BaitBot status':baitbot_controls.status}[key]);return
             if key=='Rod':self.edit(key,self.config.get('active_rod',''));return
+            if key=='Title focus':
+                rod=str(self.config.get('active_rod') or 'Any');focus=dict(self.config.get('title_priority') or {})
+                focus[rod]='bite' if focus.get(rod,'luck')=='luck' else 'luck'
+                save_config({'title_priority':focus});self.config=load_config()
+                self.toast(f"{rod} rod: auto titles favour {'bite speed' if focus[rod]=='bite' else 'luck'}");return
             if key=='Rod stats page':
                 import rod_stats
                 def open_page():
@@ -622,6 +628,7 @@ class Terminal:
                     ('Motion', 'Reduced' if self.config['reduced_motion'] else 'On')]
         values={key:value for key,(_,value) in zip(('Username','Mode','Rod slot','Auto rod','Camera','Heading','Fishing titles','Cast point','Capture pointer','Position correction','Save reference','Disable reference','Motion'),settings)}
         values.update({'Rod':self.config.get('active_rod') or 'Not set','Rod stats page':'Enter to open',
+            'Title focus':('Bite speed' if (self.config.get('title_priority') or {}).get(str(self.config.get('active_rod') or 'Any'),'luck')=='bite' else 'Luck')+f" · {self.config.get('active_rod') or 'any'} rod",
             'Drop-cast':'On · drop, recast, claim' if self.config.get('drop_cast') else 'Off · claim, then recast',
             'Overnight enabled':'On' if self.config['overnight_enabled'] else 'Off',
             'Fish Head reserve':f"{self.config['bait_reserve']:,}",'Refill buffer':f"{self.config['bait_refill_buffer']:,}",

@@ -36,3 +36,21 @@ class CurrentTitleScreen(unittest.TestCase):
         luck=1.
         for name in title_manager.desired_titles(set(title_manager.PRIORITY)):luck*=title_manager.TITLE_BUFFS[name].get('fishing_luck',1)
         self.assertAlmostEqual(luck,1.08*1.07*1.05)
+
+
+class TitleCatalog(unittest.TestCase):
+    def test_buffs_are_read_from_the_detail_panel(self):
+        from title_manager import parse_buffs
+        rows=[{'text':'Legendary Fisherman','center':(2100,366)},{'text':'Buffs','center':(2060,640)},
+              {'text':'1.07x (Fishing Luck','center':(2190,680)},{'text':'Factor)','center':(2120,718)},
+              {'text':'1.05x (Bite Speed','center':(2180,760)},{'text':'Factor)','center':(2120,798)},
+              {'text':'1.06x (Breath Duration','center':(2200,900)},{'text':'Factor)','center':(2120,938)}]
+        self.assertEqual(parse_buffs(rows),{'fishing_luck':1.07,'bite_speed':1.05})
+
+    def test_priority_picks_luck_or_bite_titles(self):
+        from title_manager import desired_titles,PRIORITY
+        owned=set(PRIORITY)
+        self.assertEqual(desired_titles(owned,'luck'),('Salvager','Legendary Fisherman','Leviathan Hunter'))
+        self.assertEqual(desired_titles(owned,'bite'),('Legendary Fisherman','Deep Water Angler','Angler'))
+        new={**{n:{} for n in owned},'Salvager':{'fishing_luck':1.08},'Sea Sage':{'fishing_luck':1.2}}
+        self.assertEqual(desired_titles(owned|{'Sea Sage'},'luck',new)[0],'Sea Sage')
