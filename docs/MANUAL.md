@@ -97,9 +97,25 @@ The account is configurable. Each account must own a fishing rod, have it in a v
 
 ## Resolution notes
 
-No manual calibration is required for the supported 16:9 layout. Window borders and title bars are excluded from the measurements, and another monitor or window origin is supported. Moving or resizing Roblox releases input and causes the supervisor to reacquire the client area.
+No manual calibration is needed. The bot reads the Roblox client as a 16:9 picture
+and scales it to a 2560 × 1440 reference; window borders and title bars are
+excluded, and any monitor or window position works.
 
-The same coordinate mapping is tested with 720p and 4K image fixtures, but those sizes have not had a full live fishing run. Very small windows can make text unreadable. An ultrawide, 4:3, or differently scaled game UI may rearrange controls; use a 16:9 window in that case. The bot reports an unsupported shape instead of clicking guessed locations. This is resolution adaptation, not automatic navigation to a fishing spot.
+When the client is not 16:9 (more than 8% off, e.g. maximized on a 1366 × 768
+laptop, a 16:10 or 4:3 monitor, or ultrawide), startup and recovery resize the
+Roblox window to the largest 16:9 client that fits the monitor's work area and
+centre it (`window_fit.py`). A maximized window is restored first. If Roblox is
+fullscreen on a screen that is not 16:9, Full farmer presses F11 once (only with
+Roblox in front) to leave fullscreen and then resizes; Minigame only and damage
+mode ask you to press F11 yourself. Clients from 960 × 540 up to 4K are accepted.
+A screen too small for a 960 × 540 client, or a window Windows refuses to resize,
+stops with a message naming the size and what to change.
+
+The process is per-monitor DPI aware, so 125% and 150% Windows scaling and
+mixed-scale multi-monitor setups use real pixels for the window, cursor and
+capture. `tests/test_resolution_fixtures.py` re-renders real game frames at 16
+client sizes (fullscreen, maximized and fitted windows) and checks the minigame
+and rod detection against the reference.
 
 ## Desktop shortcuts
 
