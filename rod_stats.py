@@ -23,7 +23,8 @@ RARITY = {'ouwfish': 'Common', 'ouwfwesh': 'Common', 'coral': 'Common', 'seahors
           'crustadon': 'Legendary', 'krathulon': 'Legendary'}
 # Angler crate trades confirmed by the user on 2026-10-15. Base gold per crate; the
 # 1,580 / 2,070 the user saw included a temporary 2x money boost, which applies to
-# the crate quest only (never to direct merchant sales). 1 Ore = 1 minute of 2x.
+# the crate quest only (never to direct merchant sales). The boost burns Mythic
+# Refinement Ore, 1 ore = 1 minute of 2x; Mythic is also the refine cost from +5 up.
 CRATES = {
     'B': {'gold': 790, 'needs': {'ouwfish': 2, 'seahorse': 2, 'coral': 2, 'ouwfwesh': 2}},
     'A': {'gold': 1035, 'needs': {'ouwfish': 3, 'seahorse': 3, 'coral': 3, 'ouwfwesh': 3, 'clownfish': 1, 'zebrafish': 1}},
