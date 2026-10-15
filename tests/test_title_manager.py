@@ -22,3 +22,17 @@ class TitleManagerTest(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+
+class CurrentTitleScreen(unittest.TestCase):
+    def test_fishing_category_label_variants_and_luck_titles_lead(self):
+        import re
+        import title_manager
+        pattern=r'Fishing\s*[\(\[]?\s*\d*\s*[\)\]]?'
+        for text in ('Fishing (6)','Fishing(6)','Fishing [6]','Fishing'):
+            self.assertTrue(re.fullmatch(pattern,text,re.I),text)
+        self.assertFalse(re.fullmatch(pattern,'Fishing Permit',re.I))
+        self.assertEqual(title_manager.desired_titles(set(title_manager.PRIORITY)),('Salvager','Legendary Fisherman','Leviathan Hunter'))
+        luck=1.
+        for name in title_manager.desired_titles(set(title_manager.PRIORITY)):luck*=title_manager.TITLE_BUFFS[name].get('fishing_luck',1)
+        self.assertAlmostEqual(luck,1.08*1.07*1.05)

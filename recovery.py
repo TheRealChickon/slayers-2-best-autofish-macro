@@ -415,7 +415,10 @@ def prepare_worker(driver,force,allow_rejoin,prefer_current,current_position,her
                     target=target_heading,actual=actual_heading)
             driver.event('saved_heading_ready',heading=round(actual_heading,1))
         landmarks.align(driver)
-    if load_config()['auto_fishing_titles'] and not titles_checked and not current_position:
+    # Titles are a menu-only check, so they also run when the farmer starts in the
+    # current world (previously they only ran after a rejoin and so rarely ran at
+    # all). An adopted minigame or a local repair still skips the menu.
+    if load_config()['auto_fishing_titles'] and not titles_checked and (not current_position or result=='current_world'):
         try:TitleManager(driver).run()
         except ValueError as title_error:
             driver.event('fishing_titles_unreadable',reason=str(title_error))
