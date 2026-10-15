@@ -682,7 +682,6 @@ footer a{color:inherit}
     </div>
     <nav class="seg tabs" id="tabs" role="tablist" aria-label="Sections">
       <button data-view="farm" aria-pressed="true"><svg class="i"><use href="#i-rod"/></svg>Farm</button>
-      <button data-view="lab" aria-pressed="false"><svg class="i"><use href="#i-lab"/></svg>Rod Lab</button>
       <button data-view="items" aria-pressed="false"><svg class="i"><use href="#i-box"/></svg>Items</button>
       <button data-view="log" aria-pressed="false"><svg class="i"><use href="#i-list"/></svg>Log</button>
       <button data-view="settings" aria-pressed="false" aria-label="Settings" title="Settings"><svg class="i"><use href="#i-sliders"/></svg></button>
@@ -734,8 +733,6 @@ footer a{color:inherit}
     </article>
   </section>
 
-  <!-- Rod Lab -->
-  <section class="view" id="v-lab"><iframe class="lab" id="labFrame" title="Rod Lab"></iframe></section>
 
   <!-- Items -->
   <section class="view" id="v-items">
@@ -782,7 +779,7 @@ footer a{color:inherit}
       <article class="card">
         <div class="sh"><span class="ic"><svg class="i"><use href="#i-rod"/></svg></span><div><h3>Rod</h3><small class="mono" id="sRodSum"></small></div></div>
         <div class="body sform">
-          <div class="fl" title="The rod you fish with; Rod Lab keeps stats per rod"><span class="flab">Rod</span><div class="rods" id="sRod" role="radiogroup" aria-label="Rod"></div></div>
+          <div class="fl" title="The rod you fish with; stats are kept per rod"><span class="flab">Rod</span><div class="rods" id="sRod" role="radiogroup" aria-label="Rod"></div></div>
           <div class="fl" title="The number key your rod is on"><span class="flab">Rod slot</span><div class="slots" id="sSlot" role="radiogroup" aria-label="Rod slot"></div></div>
           <div class="fl" title="Press Capture, then hover over the water within 4 seconds"><span class="flab">Cast point</span>
             <div class="castrow"><span class="castv mono num"><svg class="i"><use href="#i-target"/></svg><span id="sCast"></span></span><button class="btn" id="bCast"><svg class="i"><use href="#i-pointer"/></svg>Capture</button></div></div>
@@ -1179,7 +1176,7 @@ const OB_STEPS = [
   {k:'spawn_gamepass', icon:'ticket', q:'Own the Set Spawn Anywhere gamepass?', sub:'Lets Autofish rejoin and walk back by itself', type:'choice',
     opts:[{v:true, icon:'crown', label:'Yes', note:'Full farmer'}, {v:false, icon:'pin', label:'No', note:'Farm here'}]},
   {k:'account_username', icon:'user', q:'Your Roblox username', sub:'Not your display name. Saved only on this PC', type:'input', ph:'Username', optional:true},
-  {k:'rod', icon:'rod', q:'Which rod are you fishing with?', sub:'Rod Lab keeps stats per rod', type:'choice', c3:true,
+  {k:'rod', icon:'rod', q:'Which rod are you fishing with?', sub:'Stats are kept per rod', type:'choice', c3:true,
     opts:[{v:'Legendary', label:'Legendary', rc:'var(--legendary)'}, {v:'Rare', label:'Rare', rc:'var(--rare)'}, {v:'Common', label:'Common', note:'Also called Basic', rc:'var(--text-2)'}]},
   {k:'rod_slot', icon:'keys', q:'Which hotbar key is your rod on?', type:'keys'},
   {k:'cast_point', icon:'target', q:'Where should it cast?', sub:'Press Capture, then hover over the water in Roblox', type:'cast'},
@@ -1235,15 +1232,12 @@ function show(v){
   view = v; document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v));
   document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === 'v-' + v));
   glide($('tabs'));
-  if (v === 'lab' && !$('labFrame').src) $('labFrame').src = BOOT.sample ? (BOOT.labSrc || 'about:blank') : '/rodlab?t=' + encodeURIComponent(BOOT.token);
   if (S) draw(S);
 }
 $('deck').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (!b || b.disabled || b.dataset.m === pickMode) return; pickMode = b.dataset.m; drawHero(S); });
 function theme(next){ const root = document.documentElement, dark = next ?? !(root.dataset.theme === 'dark' || (!root.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches));
-  root.dataset.theme = dark ? 'dark' : 'light'; $('theme').innerHTML = ico(dark ? 'sun' : 'moon'); if (next === undefined) try { localStorage.setItem('autofish-theme', root.dataset.theme); } catch (e) {}
-  const f = $('labFrame'); try { f.contentDocument && (f.contentDocument.documentElement.dataset.theme = root.dataset.theme); } catch (e) {} }
+  root.dataset.theme = dark ? 'dark' : 'light'; $('theme').innerHTML = ico(dark ? 'sun' : 'moon'); if (next === undefined) try { localStorage.setItem('autofish-theme', root.dataset.theme); } catch (e) {}}
 $('theme').onclick = () => theme();
-$('labFrame').addEventListener('load', () => { try { $('labFrame').contentDocument.documentElement.dataset.theme = document.documentElement.dataset.theme; } catch (e) {} });
 let savedTheme = null; try { savedTheme = localStorage.getItem('autofish-theme'); } catch (e) {}
 theme(savedTheme !== 'light');
 $('bStart').onclick = e => act({action: S && (S.running || S.starting) && pickMode !== S.mode ? 'switch_mode' : 'start', mode: pickMode}, e.currentTarget);
