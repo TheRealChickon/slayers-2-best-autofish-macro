@@ -479,6 +479,53 @@ footer a{color:inherit}
 .tool .ic{width:32px;height:32px;border-radius:10px;border:1px solid var(--border);display:grid;place-items:center;color:var(--text-2)}
 .tool b{font-weight:600;font-size:13.5px} .tool:hover{border-color:var(--border-strong);transform:translateY(-2px)}
 
+/* log: list on the left, the picked event in detail on the right */
+.logsplit{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:900px){.logsplit{grid-template-columns:minmax(0,1fr)}}
+.loglist{display:grid;max-height:calc(100vh - 230px);min-height:420px;overflow:auto;margin:0 -10px;padding:0 10px;scrollbar-width:thin}
+.lrow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:14px;align-items:center;padding:8px 10px;border:1px solid transparent;border-radius:12px;cursor:pointer;font-size:13.5px;text-align:left;background:none;color:var(--text-2);font-family:inherit;transition:background-color .15s,border-color .2s}
+.lrow time{font:400 12px var(--mono);color:var(--text-3)}
+.lrow span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lrow small{font:400 11.5px var(--mono);color:var(--text-3)}
+.lrow:hover{background:var(--raised)}
+.lrow.on{background:var(--raised);border-color:var(--border-strong)}
+.lrow.rar span{color:var(--rc);font-weight:600}
+.lrow.imp span{background:linear-gradient(90deg,var(--impossible),#ff9a3c);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lrow.warn span{color:var(--warn)} .lrow.error span{color:var(--bad)} .lrow.state span,.lrow.rec span{color:var(--text-3)}
+.lrow.fresh{animation:evin .5s var(--spring)}
+.logdetail{padding:20px;display:grid;gap:18px;position:sticky;top:16px}
+.hero2{border-radius:16px;padding:18px 20px;border:1px solid color-mix(in srgb,var(--rc) 45%,transparent);background:linear-gradient(135deg,color-mix(in srgb,var(--rc) 16%,transparent),transparent 70%);animation:obin .5s var(--spring)}
+.hero2 .tier{font:700 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--rc)}
+.hero2 h2{margin:4px 0 6px;font:700 32px/1.1 var(--sans);letter-spacing:-.02em;color:var(--rc)}
+.hero2.imp{--rc:var(--impossible)}
+.hero2.imp h2,.hero2.imp .tier{background:linear-gradient(90deg,var(--impossible),#ff9a3c);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero2 small{font:400 12px var(--mono);color:var(--text-3)}
+.facts{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.facts>div{padding:12px 14px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+.facts>div:nth-child(2n){border-right:0} .facts>div:nth-last-child(-n+2){border-bottom:0}
+.facts .l{font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:6px}
+.facts .l .i{width:14px;height:14px}
+.facts b{display:block;font:600 18px var(--sans);margin-top:4px}
+.around h4{margin:0 0 6px;font:500 12.5px var(--sans);color:var(--text-3)}
+.around .lrow{cursor:default;padding:6px 10px}
+.dbtns{display:flex;gap:8px}
+/* last hour: one row per 10 minutes, a block per event */
+.tlkey{display:flex;gap:14px;font-size:12px;color:var(--text-3)} .tlkey span{display:inline-flex;align-items:center;gap:6px}
+.tl{display:grid;gap:6px}
+.tlr{display:grid;grid-template-columns:56px minmax(0,1fr) auto;gap:14px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)}
+.tlr:last-child{border-bottom:0}
+.tlr time{font:600 14px var(--mono)}
+.tlr .strip{display:flex;flex-wrap:wrap;gap:4px;min-height:22px;align-items:center}
+.tlr .cnt{display:flex;gap:12px;font:500 12px var(--mono);color:var(--text-3)} .tlr .cnt span{display:inline-flex;align-items:center;gap:4px} .tlr .cnt .i{width:13px;height:13px}
+.b{display:inline-block;width:12px;height:22px;border-radius:4px;background:var(--border-strong);animation:bin .5s var(--spring) backwards}
+.tlkey .b{width:9px;height:14px;animation:none}
+.b.drop{background:var(--rc,var(--uncommon))} .b.imp{background:linear-gradient(180deg,var(--impossible),#ff9a3c);box-shadow:0 0 10px color-mix(in srgb,var(--impossible) 60%,transparent)}
+.b.fix{background:transparent;border:1.5px solid var(--accent)}
+.b.prob{background:repeating-linear-gradient(135deg,var(--warn) 0 3px,transparent 3px 6px)}
+.b.st{width:3px;background:var(--text-2)}
+.tlkey .b.drop{background:linear-gradient(180deg,var(--impossible),var(--mythic),var(--rare))}
+@keyframes bin{from{transform:scaleY(.2);opacity:0}}
+
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -522,6 +569,8 @@ footer a{color:inherit}
     <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
     <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
     <symbol id="i-play-c" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="m10 9.5 5 2.5-5 2.5z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
   </defs>
 </svg>
@@ -577,6 +626,10 @@ footer a{color:inherit}
         <div class="body"><div class="feed" id="feed"></div></div>
       </article>
     </section>
+    <article class="card">
+      <header><h3><svg class="i"><use href="#i-clock"/></svg>Last hour</h3><div class="tlkey"><span><i class="b com"></i>Common</span><span><i class="b drop"></i>Drop</span><span><i class="b fix"></i>Fix</span><span><i class="b prob"></i>Problem</span></div></header>
+      <div class="body"><div class="tl" id="timeline"></div></div>
+    </article>
   </section>
 
   <!-- Rod Lab -->
@@ -592,11 +645,14 @@ footer a{color:inherit}
 
   <!-- Log -->
   <section class="view" id="v-log">
-    <article class="card">
-      <header><h3><svg class="i"><use href="#i-list"/></svg>Log</h3>
-        <div class="seg" id="logFilter" role="group" aria-label="Filter"></div></header>
-      <div class="body"><div class="feed tall" id="log"></div></div>
-    </article>
+    <section class="logsplit">
+      <article class="card">
+        <header><h3><svg class="i"><use href="#i-list"/></svg>Log</h3>
+          <div class="seg" id="logFilter" role="group" aria-label="Filter"></div></header>
+        <div class="body"><div class="loglist" id="log"></div></div>
+      </article>
+      <article class="card logdetail" id="logDetail"></article>
+    </section>
   </section>
 
   <!-- Settings -->
@@ -826,11 +882,67 @@ function drawItems(s){
     : `<tbody><tr><td class="empty">${ico('box', 'big')}</td></tr></tbody>`;
 }
 const KINDS = [['all','All','list'],['catch','Catches','fish'],['recovery','Fixes','refresh'],['problem','Problems','alert']];
+let logPick = null;
+const evKey = e => String(e.id ?? (e.at + e.text));
+const tierOf = e => e.group === 'catches' ? rarityOf(e.text) : null;
+function logRow(e, extra = ''){
+  const [cls] = evIcon(e), rar = tierOf(e), rare = rar && RORDER.indexOf(rar) <= 4 && rar !== 'Common';
+  const note = rare && RORDER.indexOf(rar) <= 3 ? rar : '';
+  return `<button class="lrow ${cls}${rare ? ' rar' : ''}${rar === 'Impossible' ? ' imp' : ''}${extra}" data-k="${esc(evKey(e))}"${rare ? ` style="--rc:${RVAR[rar]}"` : ''}><time>${clock(e.at)}</time><span>${esc(e.text)}</span><small>${note}</small></button>`;
+}
 function drawLog(s){
   segHtml($('logFilter'), KINDS.map(([k, l, i]) => `<button data-k="${k}" aria-pressed="${k === logKind}">${ico(i)}${l}</button>`).join(''));
-  const ev = (s.events || []).slice().reverse().filter(e => logKind === 'all' || (logKind === 'catch' ? e.group === 'catches'
+  const all = (s.events || []).slice().reverse();
+  const ev = all.filter(e => logKind === 'all' || (logKind === 'catch' ? e.group === 'catches'
     : logKind === 'problem' ? ['warn','error'].includes(e.level) : e.group === 'recovery'));
-  $('log').innerHTML = ev.length ? feedHtml(ev) : `<div class="empty">${ico('list', 'big')}</div>`;
+  // Default pick: the rarest drop in the log, newest first.
+  if (!logPick || !all.some(e => evKey(e) === logPick)) {
+    const best = all.filter(tierOf).sort((a, b) => RORDER.indexOf(tierOf(a)) - RORDER.indexOf(tierOf(b)))[0] || all[0];
+    logPick = best ? evKey(best) : null;
+  }
+  const html = ev.length ? ev.map(e => logRow(e, evKey(e) === logPick ? ' on' : '')).join('') : `<div class="empty">${ico('list', 'big')}</div>`;
+  if ($('log')._h !== html) { $('log')._h = html; $('log').innerHTML = html; }
+  drawDetail(s, all);
+}
+function drawDetail(s, all){
+  const box = $('logDetail'), i = all.findIndex(e => evKey(e) === logPick), e = all[i];
+  if (!e) { box.innerHTML = `<div class="empty">${ico('list', 'big')}</div>`; box._k = null; return; }
+  const key = logPick + '|' + all.length; if (box._k === key) return; box._k = key;
+  const rar = tierOf(e), [cls] = evIcon(e);
+  const kind = rar || (cls === 'warn' ? 'Problem' : cls === 'rec' ? 'Fix' : e.group === 'catches' ? 'Catch' : 'Event');
+  const col = rar ? RVAR[rar] : cls === 'warn' ? 'var(--warn)' : 'var(--text-2)';
+  const starts = all.filter(x => x.group === 'state' && /start|resum/i.test(x.text) && x.at <= e.at), from = starts.length ? starts[0].at : null;
+  const same = all.filter(x => x.text === e.text), nth = same.length - same.findIndex(x => evKey(x) === logPick);
+  const item = (s.items || []).find(x => x.item === e.text), hours = Math.max(.1, (s.active_seconds || 0)/3600);
+  const secs = new Date(e.at*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23'});
+  const facts = [['rod', 'Rod', s.rod ? `<span style="color:${({Legendary:'var(--legendary)', Rare:'var(--rare)'})[s.rod] || 'var(--text-1)'}">${esc(s.rod)}</span>` : '—'],
+    ['clock', 'In session', from != null ? dur(e.at - from) : '—'],
+    ['star', 'This session', e.group === 'catches' ? (nth === 1 ? 'First one' : `#${nth}`) : `${same.length}×`],
+    ['gauge', 'Per hour', item ? fmt(item.quantity/hours, item.quantity/hours < 10 ? 1 : 0) : '—']];
+  const near = all.slice(Math.max(0, i - 2), i + 3).reverse();
+  box.innerHTML = `<div class="hero2${rar === 'Impossible' ? ' imp' : ''}" style="--rc:${col}"><div class="tier">${kind}</div><h2>${esc(e.text)}</h2><small>${secs}</small></div>
+    <div class="facts">${facts.map(([ic, l, v]) => `<div><div class="l">${ico(ic)}${l}</div><b>${v}</b></div>`).join('')}</div>
+    <div class="around"><h4>Around it</h4>${near.map(x => logRow(x, evKey(x) === logPick ? ' on' : '')).join('')}</div>
+    <div class="dbtns">${e.group === 'catches' ? `<button class="btn" id="dItems">${ico('box')}Open in Items</button>` : ''}<button class="btn" id="dCopy">${ico('copy')}Copy</button></div>`;
+}
+$('log').addEventListener('click', e => { const r = e.target.closest('.lrow'); if (!r) return; logPick = r.dataset.k; drawLog(S); });
+$('logDetail').addEventListener('click', e => {
+  if (e.target.closest('#dItems')) return show('items');
+  if (e.target.closest('#dCopy')) { const ev = (S.events || []).find(x => evKey(x) === logPick); if (ev) { navigator.clipboard?.writeText(`${clock(ev.at)} ${ev.text}`); toast('Copied'); } }
+});
+function drawTimeline(s){
+  const ev = s.events || [], now = Date.now()/1000, slot = 600, last = Math.floor(now/slot)*slot, rows = [];
+  for (let n = 0; n < 6; n++) { const a = last - n*slot, list = ev.filter(e => e.at >= a && e.at < a + slot);
+    const blocks = list.map(e => { const r = tierOf(e), [cls] = evIcon(e);
+      if (cls === 'warn') return '<i class="b prob"></i>';
+      if (cls === 'rec') return '<i class="b fix"></i>';
+      if (e.group === 'state') return '<i class="b st"></i>';
+      if (r === 'Impossible') return `<i class="b imp" title="${esc(e.text)}"></i>`;
+      if (r && r !== 'Common') return `<i class="b drop" style="--rc:${RVAR[r]}" title="${esc(e.text)}"></i>`;
+      return e.group === 'catches' ? '<i class="b"></i>' : ''; }).join('');
+    const c = list.filter(e => e.group === 'catches').length, f = list.filter(e => e.group === 'recovery').length, p = list.filter(e => ['warn','error'].includes(e.level)).length;
+    rows.push(`<div class="tlr"><time>${clock(a)}</time><div class="strip">${blocks}</div><div class="cnt"><span>${ico('fish')}${c}</span><span>${ico('refresh')}${f}</span><span>${ico('alert')}${p}</span></div></div>`); }
+  const html = rows.join(''); if ($('timeline')._h !== html) { $('timeline')._h = html; $('timeline').innerHTML = html; }
 }
 function drawSettings(s){
   const c = s.config || {};
@@ -895,7 +1007,7 @@ function drawOnboarding(s){
   if ((s.config || {}).spawn_gamepass == null && !OB.done) { OB.active = true; OB.i = 0; veil.classList.add('on'); obShow(); }
 }
 function draw(s){
-  S = s; drawHero(s); drawKpis(s); drawCatch(s); drawFeed(s); drawChecks(s);
+  S = s; drawHero(s); drawKpis(s); drawCatch(s); drawFeed(s); drawTimeline(s); drawChecks(s);
   if (view === 'items') drawItems(s); if (view === 'log') drawLog(s); if (view === 'settings') drawSettings(s);
   drawOnboarding(s);
   $('sub').textContent = s.game || 'Project Slayers 2';
