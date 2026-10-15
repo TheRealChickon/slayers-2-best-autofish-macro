@@ -17,7 +17,8 @@ import terminal_app
 class BaitBotSettings(unittest.TestCase):
     def setUp(self):
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
-        self.root=Path(temporary.name)
+        # Resolved: Windows runners hand out 8.3 temp paths (RUNNER~1) that the code expands.
+        self.root=Path(temporary.name).resolve()
         self.config=self.root/'config.local.json'
         self.config.write_text(json.dumps({'account_username':'Player','data_dir':str(self.root/'data'),
                                          'cast_point':[1332,508],'overnight_enabled':False,'overnight_defaults_version':2}))

@@ -315,7 +315,8 @@ class IsolatedState(unittest.TestCase):
         self.assertEqual((self.root/'STOP').read_text(), 'Stopped by user')
 
     def test_timed_full_farmer_stops_at_local_clock_today(self):
-        fixed=datetime.datetime(2026,9,27,3,50,tzinfo=datetime.timezone(datetime.timedelta(hours=2)))
+        # Naive like the real datetime.now(), so the test reads 03:50 in whatever zone the machine is in.
+        fixed=datetime.datetime(2026,9,27,3,50)
         class Clock(datetime.datetime):
             @classmethod
             def now(cls,tz=None):return fixed

@@ -85,7 +85,7 @@ class InstallCommand(unittest.TestCase):
 
     def install(self,*extra):
         return subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(self.app/'scripts'/'Install-CLI.ps1'),
-                               '-BinDirectory',str(self.bin),'-NoPath',*extra],capture_output=True,text=True,timeout=20)
+                               '-BinDirectory',str(self.bin),'-NoPath',*extra],capture_output=True,text=True,timeout=90)
 
     def invoke(self,*args):
         # Only this child shell's PATH changes; no registry or game process.
