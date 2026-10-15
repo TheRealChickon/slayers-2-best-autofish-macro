@@ -17,6 +17,7 @@ import cv2
 from rapidocr_onnxruntime import RapidOCR
 
 from metrics import RUN
+from app_config import load_config
 from damage_build import haori_comparison, load_profile as load_damage_profile
 
 
@@ -293,7 +294,9 @@ def build(root=None,open_site=False):
         if relative and (root/relative).exists():
             (assets/relative).parent.mkdir(parents=True,exist_ok=True)
             shutil.copy2(root/relative,assets/relative)
-    (site/'index.html').write_text(HTML,encoding='utf-8')
+    try:player=load_config().get('account_username') or 'My inventory'
+    except (OSError,ValueError):player='My inventory'
+    (site/'index.html').write_text(HTML.replace('{{PLAYER}}',html.escape(player)),encoding='utf-8')
     shutil.copy2(Path(__file__).with_name('wiki_site.css'),site/'site.css')
     shutil.copy2(Path(__file__).with_name('wiki_site.js'),site/'site.js')
     (site/'data.js').write_text('window.WIKI_DATA='+json.dumps(data,ensure_ascii=False).replace('</','<\\/')+';',encoding='utf-8')

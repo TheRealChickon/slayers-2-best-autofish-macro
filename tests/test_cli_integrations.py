@@ -112,6 +112,7 @@ class IsolatedClients(unittest.TestCase):
             p = patch.object(control_actions, name, return_value=False)
             p.start(); self.addCleanup(p.stop)
         metrics.write('totals.json', {'started': 1})
+        app_config.save_config({'spawn_gamepass': True})
 
     def append(self, rows):
         with (self.root/'events-test.jsonl').open('a', encoding='utf-8') as stream:
@@ -171,6 +172,35 @@ class IsolatedClients(unittest.TestCase):
         with patch.object(control_actions, 'stop', return_value='Stopped') as stop:
             app.key('s'); stop.assert_called_once()
         app.key('q'); self.assertFalse(app.alive)
+
+    def test_first_run_asks_about_the_spawn_gamepass(self):
+        app_config.CONFIG.unlink()
+        app = terminal_app.Terminal(); app.refresh()
+        rendered = '\n'.join(terminal_app.ANSI.sub('', line) for line in app.render(120, 35))
+        self.assertIn('Set Spawn Anywhere', rendered)
+        app.key('x')  # other keys wait for the answer
+        self.assertIsNone(app_config.load_config()['spawn_gamepass'])
+        app.key('n')
+        config = app_config.load_config()
+        self.assertFalse(config['spawn_gamepass'])
+        self.assertEqual(config['mode'], 'here')
+        labels = [row[0] for row in app.run_actions()]
+        self.assertEqual(labels[0], 'Start Farm here')
+        self.assertNotIn('Reset + start Full farmer', labels)
+        app.show_other_modes = True
+        full = [row for row in app.run_actions() if row[0].strip() == 'Full farmer'][0]
+        self.assertIn('gamepass', full[3]())
+        with self.assertRaisesRegex(ValueError, 'gamepass'):
+            control_actions.resume('full')
+        rendered = '\n'.join(terminal_app.ANSI.sub('', line) for line in app.render(120, 35))
+        self.assertNotIn('FIRST-TIME SETUP', rendered)
+
+    def test_gamepass_answer_yes_keeps_full_farmer_first(self):
+        app_config.CONFIG.unlink()
+        app = terminal_app.Terminal(); app.refresh()
+        app.key('y')
+        self.assertEqual(app_config.load_config()['mode'], 'full')
+        self.assertEqual(app.run_actions()[0][0], 'Start Full farmer')
 
     def test_terminal_transitions_respect_reduced_motion(self):
         app = terminal_app.Terminal()

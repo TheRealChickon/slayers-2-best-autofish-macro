@@ -15,4 +15,8 @@
 __pycache__/
 *.pyc
 /share/
+*.dpapi
+/monitor.local.json
+*.local.json
+.env
 /private/

@@ -1,21 +1,33 @@
-# Branches and rollback
+# Contributing
 
-`feature/* → dev-rolling → dev → master`
+Thanks for helping! Bug reports, screenshots from unusual setups and small fixes are all welcome.
 
-Work on feature branches. Merge each feature into `dev-rolling` with `--no-ff`, validate the integrated version, then promote to `dev`. `master` contains the stable release. The original `main` branch remains as a historical reference.
+## Reporting a problem
 
-Before switching versions, pause Fishing and wait for **Paused**, then close its window and CLI so they reload from the intended checkout. The local data folder and ignored settings stay in place.
+Open an [issue](../../issues/new/choose) and include:
 
-```powershell
-git switch master
-git pull --ff-only
-.\fishing.cmd continue
-```
+- what you expected and what happened,
+- your screen resolution, Windows display scaling (100%, 125%, 150%) and whether Roblox is fullscreen or windowed,
+- the last lines of `autofish logs --activity` (remove your Roblox username and anything personal first).
 
-To inspect the saved release before the inventory/resolution work:
+Never paste your Discord webhook URL, Roblox cookie or `config.local.json` into an issue.
 
-```powershell
-git switch --detach stable-before-inventory-resolution
-```
+## Making a change
 
-To undo an integrated feature in shared history, create a rollback branch from `dev-rolling` and revert the feature's merge commit with `git revert -m 1 <merge-commit>`. Validate and merge that rollback branch normally. Avoid resetting shared branches or force-pushing.
+1. Fork the repo and branch from `dev-rolling` (`feature/<short-name>`).
+2. Set up a dev copy on Windows with Python 3.12: double-click `Setup.cmd`.
+3. Run the tests before opening a pull request:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m unittest discover -s tests
+   ```
+
+4. Open the pull request against `dev-rolling`. Keep it focused on one thing and say how you tested it in the game, if it touches vision or input.
+
+Tests use mocked input and saved screenshots; they never control Roblox. Anything that changes what the bot clicks or reads still needs a short live check.
+
+## Branches
+
+`feature/* → dev-rolling → dev → master`. `master` is the stable release that the download links point to. Releases are tagged `vX.Y` and come with a ready-to-install zip built by `Build-Share.ps1`.
+
+To undo a merged feature, revert its merge commit on a new branch (`git revert -m 1 <merge-commit>`) and merge that normally. Please don't force-push shared branches.

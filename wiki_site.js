@@ -105,7 +105,7 @@
 
   function render() {
     $('page-title').textContent = pageNames[page];
-    document.title = `${pageNames[page]} · Grofheyse3729`;
+    document.title = `${pageNames[page]} · ${document.querySelector('.brand-name')?.textContent || 'Slayers II'}`;
     document.querySelectorAll('.nav-link').forEach(button => {
       const active = button.dataset.page === page;
       button.classList.toggle('active',active);

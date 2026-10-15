@@ -8,10 +8,11 @@ from pynput.keyboard import Listener,Key
 from metrics import Ledger, read as read_metrics, write as write_metrics, RUN
 from app_config import load_config,save_config
 from rod_detector import locate_rod, unselected_rod, selected_rod, recheck_selected_rod
-from fishing_vision import detect, ui_visible
+from fishing_vision import detect, ui_visible, SceneColors
 from tracking_control import ReelMotion
 from tracking_watchdog import TrackingWatchdog
 from screen_space import ScreenSpace
+from window_fit import fitted, WindowFitError
 from inventory_watch import InventoryDriver, InventoryWatcher
 import landmarks
 from pickup_policy import Pickup, classify as classify_pickup, classify_toast, same_reward, PickupGate,clear_collect,RewardGate,waiting_decision,before_cast_decision,retain_collect_hold,collect_hold_timeout,CollectHoldMotion,CollectReadyGate
@@ -23,10 +24,11 @@ from capture_session import CaptureSession
 from snapshot_writer import SnapshotWriter
 from prompt_shape import find_discs, DiscTrack
 import ocr_engine
+from dpi import dpi_aware
 
 ROOT = Path(__file__).resolve().parent
 USER = TaggedInput(ctypes.windll.user32)
-USER.SetProcessDPIAware()
+dpi_aware(ctypes.windll.user32)
 
 # Normal hooks arrive within about seven seconds in the observed sessions.
 # Two missed hooks can be ordinary bad luck; wait for a third before rejoining.
@@ -89,6 +91,13 @@ def find_window():
     if not found:raise FishingFault('client_lost','Roblox Player window closed; found 0 game windows')
     if len(found)!=1:raise FishingFault('user_required','Multiple Roblox Player windows need user selection')
     return found[0]
+
+def press_f11(h):
+    """Roblox's own fullscreen toggle, only while that Player is in front."""
+    if win32gui.GetForegroundWindow()!=h:
+        raise WindowFitError('Roblox is fullscreen on a screen that is not 16:9. Click Roblox and press F11 to leave fullscreen.')
+    scan=USER.MapVirtualKeyW(0x7A,0)
+    USER.keybd_event(0x7A,scan,0,0);time.sleep(.03);USER.keybd_event(0x7A,scan,2,0)
 
 def rectangle(h):
     # Client pixels exclude the title bar and resize border in windowed mode.
@@ -189,11 +198,16 @@ def main():
     lock.write_text(json.dumps({'pid':os.getpid(),'created':psutil.Process().create_time()}))
     stop=RUN/'STOP'
     if stop.exists():raise RuntimeError('Stop is set; use the launcher to start a new session')
-    hwnd=find_window();rect=rectangle(hwnd)
-    screen=ScreenSpace(rect)
+    hwnd=find_window()
     if a.focus:win32gui.SetForegroundWindow(hwnd);time.sleep(.3)
+    # A window that is not 16:9 (maximized on a laptop, 16:10, ultrawide) is
+    # resized to the largest 16:9 client that fits; 16:9 clients are untouched.
+    rect=fitted(hwnd,rectangle(hwnd),press_f11=lambda:press_f11(hwnd))
+    screen=ScreenSpace(rect)
     ocr=RapidOCR()
     exit_template=cv2.imread(str(ROOT/'assets'/'exit.png'))
+    # Late-bound so tests can patch detect and event is defined below.
+    colors=SceneColors(lambda kind,**kw:event(kind,**kw),detector=lambda roi:detect(roi))
     inp=Input(hwnd);started=time.monotonic();now=started;stage='casting';since=now;lastseen=now;ledger=Ledger();last_gui_scan=0;last_tracking_cast=None;last_game_activity=time.time()
     # Roblox captures and recenters the cursor in first person. The foreground
     # window remains the reliable guard there; a pointer hit test can flicker
@@ -489,7 +503,7 @@ def main():
                     if not win32gui.IsWindow(hwnd):raise RuntimeError('Roblox window closed; rejoin required')
                     if rectangle(hwnd)!=rect:raise RuntimeError('Roblox moved or resized; reacquiring the client area')
                     roi=screen.capture(sct,(1850,400,140,600))
-                    d=detect(roi)
+                    d=colors.detect(roi)
                     if d is not None and not ui_active():d=None
                     if a.current_position and casts==0 and stage=='casting' and d is None and ui_active():
                         # A visible startup minigame owns input even while its
@@ -504,7 +518,7 @@ def main():
                     if d is None and stage=='cooldown' and now-since>cooldown_delay:
                         finish_cooldown()
                         if confirmed_recast is None:
-                            d=detect(screen.capture(sct,(1850,400,140,600)))
+                            d=colors.detect(screen.capture(sct,(1850,400,140,600)))
                             if d is not None and not ui_active():d=None
                         # A confirmed recast gets its fresh minigame read after
                         # the scene OCR below, immediately before casting.
@@ -541,7 +555,7 @@ def main():
                             if needs_inventory_start and stage=='casting':continue
                             if full_scene:
                                 # A minigame that appeared during OCR owns input.
-                                d=detect(screen.capture(sct,(1850,400,140,600)))
+                                d=colors.detect(screen.capture(sct,(1850,400,140,600)))
                                 if d is not None and not ui_active():d=None
                         elif decision=='timeout':
                             raise FishingFault('pickup_timeout','Cannot confirm a clear scene before casting; pending loot retained',evidence=last_pickup_evidence)

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Setup help
+    url: https://github.com/TheRealChickon/roblox-fishing-assistant#troubleshooting
+    about: Most setup problems are covered in the README troubleshooting section.
