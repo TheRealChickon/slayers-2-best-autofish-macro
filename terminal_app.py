@@ -547,8 +547,7 @@ class Terminal:
                              'text' if item['unit_price_wen'] is not None else 'dim'))
         sold='No confirmed sales logged' if p['actual_sold_proceeds_wen'] is None else f"{p['actual_sold_proceeds_wen']:,} gold"
         rows+=['',f"Unpriced units (materials, ores): {p['unknown_price_quantity']}  ·  Actual sold proceeds: {sold}",
-               tint('Gold = Ginzo NPC sell price × units; fish only. * estimated (rarity tier or older build).','dim'),
-               tint('Crustadon/Krathulon 110 gold* is the last published (older-build) price.','dim'),
+               tint('Gold = Ginzo NPC sell price × units; fish only. Common 33, Uncommon 66, Legendary 165. * priced by rarity.','dim'),
                tint('Projections assume the observed worker-active pace continues.','dim')]
         return rows
 
