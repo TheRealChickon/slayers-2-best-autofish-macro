@@ -54,6 +54,13 @@ The session clock advances only with fresh fishing telemetry while Roblox is foc
 
 Rod Lab is a tab in the app. It shows what each rod catches and how many fish per hour, predicts your gold per hour for any rod, enchant level and titles, and ranks your rods.
 
+## More screens
+
+| Items | Log | Settings |
+|:---:|:---:|:---:|
+| <img src="docs/images/items.png" alt="Items: everything you collected as a map, with a searchable list view" width="300"> | <img src="docs/images/log.png" alt="Log: every catch and fix, with details for the selected drop" width="300"> | <img src="docs/images/settings.png" alt="Settings: account, rod, slot, cast point, overnight and Discord" width="300"> |
+| Everything you collected, as a map or a searchable list | Every catch and fix, with details on any drop | Account, rod, overnight and Discord in one place |
+
 ## Install
 
 > **You need:** a Windows 10 or 11 PC, Roblox, and Project Slayers 2 with a fishing rod in your hotbar. Python is installed for you if it's missing.
