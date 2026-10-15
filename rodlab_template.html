@@ -261,7 +261,8 @@ function hourly(perHour,mult=1){
   COMMONS.forEach(x=>left[x]-=2*b);
   return {b,crate:mult*b*DATA.crates.B.gold,rest:direct(left)};
 }
-const oreOf = r => (r.ores&&r.ores.ore)||0;
+// The 2x cash boost burns Mythic Refinement Ore: 1 ore = 1 minute (user, 2026-10-15).
+const oreOf = r => (r.ores&&r.ores.mythicrefinementore)||0;
 const TITLE_LUCK = t => (DATA.title_buffs[t]||{}).fishing_luck||1;
 const luckOfTitles = list => (list||[]).reduce((m,t)=>m*TITLE_LUCK(t),1);
 const rarityOf = c => { const o={Common:0,Uncommon:0,Legendary:0}; for(const[x,v]of Object.entries(c))o[DATA.rarity[x]]+=v; return o; };
@@ -360,12 +361,12 @@ function render(){
   $('crates').innerHTML = shown.map(r=>{
     const w=100*(r.crPerH||0)/cmax;
     return `<div class="row${r.small?' dim':''}"><div class="name">${r.rod}<small>${DATA.names[r.c.limit]} limits</small></div>
-      <div class="track"><div class="stack" style="width:${w}%"><div class="seg-fill" style="flex:1;background:var(--crate)" data-tip="${r.rod}<br><b>${fmt(r.crPerH,1)}</b> crates/h · ${fmt(r.c.a+r.c.b)} total<br>scarcest: ${DATA.names[r.c.limit]} (${fmt(r.counts[r.c.limit]||0)})<br>Ores: <b>${fmt(r.oreH,1)}</b>/h (${fmt(oreOf(r))} caught) · crate cash ×${r.mult.toFixed(2)}"></div></div></div>
+      <div class="track"><div class="stack" style="width:${w}%"><div class="seg-fill" style="flex:1;background:var(--crate)" data-tip="${r.rod}<br><b>${fmt(r.crPerH,1)}</b> crates/h · ${fmt(r.c.a+r.c.b)} total<br>scarcest: ${DATA.names[r.c.limit]} (${fmt(r.counts[r.c.limit]||0)})<br>Mythic ore: <b>${fmt(r.oreH,2)}</b>/h (${fmt(oreOf(r))} caught) · crate cash ×${r.mult.toFixed(2)}"></div></div></div>
       <div class="val">${fmt(r.crPerH,1)}</div></div>`;
   }).join('');
 
-  $('oreNote').innerHTML = shown.map(r=>`<b>${r.rod}</b>: ${fmt(r.oreH,1)} ores/h`).join(' · ')+
-    ` — 1 ore = 1 minute of 2× crate cash; stockpiled crates are turned in at about ${DATA.boost.crates_per_minute}/min (estimate).`;
+  $('oreNote').innerHTML = shown.map(r=>`<b>${r.rod}</b>: ${fmt(r.oreH,2)} Mythic ore/h`).join(' · ')+
+    ` — 1 Mythic Refinement Ore = 1 minute of 2× crate cash; stockpiled crates are turned in at about ${DATA.boost.crates_per_minute}/min (estimate).`;
   /* species matrix */
   const species = Object.keys(DATA.rarity).sort((a,b)=>RAR.indexOf(DATA.rarity[a])-RAR.indexOf(DATA.rarity[b]));
   const smax = Math.max(1,...shown.flatMap(r=>species.map(x=>r.per[x]||0)));
@@ -376,7 +377,7 @@ function render(){
 
   /* runs */
   const list = DATA.runs.filter(r=>view==='All'||r.rod===view).slice().reverse();
-  $('runs').innerHTML = '<thead><tr><th>Run</th><th>Started</th><th>Fished</th><th>Hooks</th><th>Fish</th><th>Crates</th><th>Crate gold</th><th>Leftovers</th><th>Combined</th><th>Per hour</th><th>Ores</th><th>Titles</th></tr></thead><tbody>'+
+  $('runs').innerHTML = '<thead><tr><th>Run</th><th>Started</th><th>Fished</th><th>Hooks</th><th>Fish</th><th>Crates</th><th>Crate gold</th><th>Leftovers</th><th>Combined</th><th>Per hour</th><th>Mythic</th><th>Titles</th></tr></thead><tbody>'+
     list.map(r=>{const h=r.active_hours,c0=bestCrates(r.counts,1),c=bestCrates(r.counts,crateMult({ores:oreOf(r),hours:h,cratesPerH:h?(c0.a+c0.b)/h:0})),d=new Date(r.started*1000);
       return `<tr><td><span class="chip"><i style="background:${ROD_SW[r.rod]||'var(--text-3)'}"></i>${r.rod}</span></td><td class="mono">${d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})} ${d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</td><td class="num">${fmt(h,1)}h</td><td class="num">${fmt(r.hooks)}</td><td class="num">${fmt(r.fish)}</td><td class="num">${c.b} B${c.a?' + '+c.a+' A':''}</td><td class="num">${fmt(c.crate)}</td><td class="num">${fmt(c.rest)}</td><td class="num"><b>${fmt(c.total)}</b></td><td class="num">${h>=.05?fmt(c.total/h):'—'}</td><td class="num">${fmt(oreOf(r))}</td><td style="color:var(--text-2)">${(r.titles||[]).map(t=>t.split(' ').map(w=>w[0]).join('')).join(' · ')||'—'}</td></tr>`}).join('')+'</tbody>';
   if(view!=='All'&&pick!==view&&rods.some(r=>r.rod===view)){pick=view;lvl=rods.find(r=>r.rod===view).enchant_level;drawPredictor()}
@@ -431,6 +432,6 @@ function predict(){
 }
 
 $('asof').textContent = `Data as of ${DATA.generated}`;
-$('foot').innerHTML = `<span>Prices: Common 33 · Uncommon 66 · Legendary 165</span><span>Crate base gold: B ${fmt(DATA.crates.B.gold)} · A ${fmt(DATA.crates.A.gold)} (2× boost doubles crates only)</span><span>Enchant luck: +9 = 2× · +10 = 3× · others interpolated</span><span>Range bars: shaded = measured 95% range, tick = predicted chance</span>`;
+$('foot').innerHTML = `<span>Prices: Common 33 · Uncommon 66 · Legendary 165</span><span>Crate base gold: B ${fmt(DATA.crates.B.gold)} · A ${fmt(DATA.crates.A.gold)} (2× boost doubles crates only)</span><span>Refine luck per level: +1 1.05× … +8 1.9×, +9 2×, +10 3×</span><span>Range bars: shaded = measured 95% range, tick = predicted chance</span>`;
 drawSeg(); render(); drawPredictor();
 </script>
