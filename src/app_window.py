@@ -21,6 +21,7 @@ import app_config
 from app_config import CODE, ROOT, data_directory, load_config, save_config
 
 TEMPLATE = CODE/'app_template.html'
+OVERLAY_TEMPLATE = CODE/'overlay_template.html'
 STATE_FILE = 'app-window.json'
 IDLE_EXIT_SECONDS = 120
 MODES = ('full', 'here', 'assist', 'spot')
@@ -163,6 +164,36 @@ def settings(body):
     return 'Saved'
 
 
+OVERLAY = None
+
+
+def overlay():
+    global OVERLAY
+    if OVERLAY is None:
+        from overlay import Overlay
+        OVERLAY = Overlay(find_browser())
+    return OVERLAY
+
+
+def gear():
+    """What the overlay shows as equipped: rod, its enchant and the fishing titles worn now."""
+    import rod_stats
+    root = data_directory()
+    rod = load_config().get('active_rod') or current_rod()
+    saved = (load_config().get('rod_buffs') or {}).get(rod, {})
+    enchant = {**rod_stats.DEFAULT_BUFFS.get(rod, {}), **saved}.get('enchant', 0) if rod else 0
+    buffs = rod_stats.title_buffs(root)
+    titles = rod_stats.titles_at(root, time.time()) or []
+    return {'rod': rod, 'enchant': enchant,
+            'titles': [{'name': t, 'luck': (buffs.get(t) or {}).get('fishing_luck'), 'bite': (buffs.get(t) or {}).get('bite_speed')} for t in titles]}
+
+
+def overlay_page(token):
+    import rod_stats
+    boot = json.dumps({'token': token, 'rarity': rod_stats.ITEM_RARITY})
+    return OVERLAY_TEMPLATE.read_text(encoding='utf-8').replace('/*FONTS*/', rod_stats.font_faces()).replace('/*BOOT*/', boot)
+
+
 def page(token):
     import rod_stats
     boot = json.dumps({'token': token, 'rarity': rod_stats.ITEM_RARITY})
@@ -203,7 +234,9 @@ def make_server(token, port=0):
                 if path == '/rodlab':
                     import rod_stats
                     return self.send(200, rod_stats.dashboard(rod_stats.export_data()), 'text/html')
-                if path == '/api/state': return self.send(200, state())
+                if path == '/api/state': return self.send(200, {**state(), 'overlay': overlay().running})
+                if path == '/overlay': return self.send(200, overlay_page(token), 'text/html')
+                if path == '/api/gear': return self.send(200, gear())
             except Exception as error:
                 return self.send(500, {'error': str(error)})
             self.send(404, {'error': 'Not found'})
@@ -217,10 +250,15 @@ def make_server(token, port=0):
                 body = json.loads(self.rfile.read(length) or b'{}')
                 if not isinstance(body, dict): raise ValueError('Bad request')
                 path = urlparse(self.path).path
-                if path == '/api/action': message = action(body)
+                if path == '/api/action' and body.get('action') == 'overlay':
+                    on = body.get('on', not overlay().running)
+                    if on: overlay().start(f'http://127.0.0.1:{self.server.server_port}/overlay?t={token}')
+                    else: overlay().stop()
+                    message = 'Overlay on' if on else 'Overlay off'
+                elif path == '/api/action': message = action(body)
                 elif path == '/api/settings': message = settings(body)
                 else: return self.send(404, {'error': 'Not found'})
-                return self.send(200, {'message': message, 'state': state()})
+                return self.send(200, {'message': message, 'state': {**state(), 'overlay': overlay().running}})
             except Exception as error:
                 return self.send(400, {'error': str(error)})
 
@@ -290,6 +328,7 @@ def main():
             elif time.time()-server.last_seen['at'] > IDLE_EXIT_SECONDS:
                 break
     finally:
+        if OVERLAY is not None: OVERLAY.stop()
         server.shutdown()
         try:
             if json.loads(path.read_text(encoding='utf-8')).get('pid') == os.getpid(): path.unlink()

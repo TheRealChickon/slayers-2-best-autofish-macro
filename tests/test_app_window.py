@@ -6,7 +6,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 import app_config
@@ -90,6 +90,38 @@ class AppWindow(unittest.TestCase):
         with patch.object(app_config, 'resolve_account', return_value={'account_username': 'FishFan42', 'user_id': 7}):
             self.assertEqual(self.call('POST', '/api/settings', {'account_username': 'fishfan42'})[0], 200)
         self.assertEqual(app_config.load_config()['account_username'], 'FishFan42')
+
+
+    def test_overlay_page_and_gear_need_the_token(self):
+        self.assertEqual(self.call('GET', '/overlay', token=None)[0], 403)
+        status, body = self.call('GET', '/overlay?t=secret-token', token=None)
+        page = body.decode('utf-8')
+        self.assertEqual(status, 200)
+        self.assertIn('"token": "secret-token"', page)
+        self.assertNotIn('/*BOOT*/', page); self.assertNotIn('/*FONTS*/', page)
+        status, body = self.call('GET', '/api/gear')
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)['rod'], 'Legendary')
+
+    def test_overlay_action_starts_and_stops_the_window(self):
+        fake = MagicMock(running=False)
+        with patch.object(app_window, 'OVERLAY', fake):
+            status, body = self.call('POST', '/api/action', {'action': 'overlay', 'on': True})
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(body)['message'], 'Overlay on')
+            url = fake.start.call_args[0][0]
+            self.assertTrue(url.startswith(f'http://127.0.0.1:{self.port}/overlay?t=secret-token'))
+            self.call('POST', '/api/action', {'action': 'overlay', 'on': False})
+            fake.stop.assert_called_once()
+
+
+class OverlayPlacement(unittest.TestCase):
+    def test_card_sits_on_the_right_a_quarter_down_and_stays_inside_the_game(self):
+        import overlay
+        self.assertEqual(overlay.placement((0, 0, 1920, 1080), (284, 452)), (1920-284-12, 259))
+        x, y = overlay.placement((100, 50, 900, 450), (284, 452))
+        self.assertEqual(x, 900-284-12); self.assertEqual(y, 50+12)
+        self.assertEqual(overlay.placement((0, 0, 2560, 1440), (426, 678), 1.5), (2560-426-18, 346))
 
 
 if __name__ == '__main__':

@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Autofish overlay</title>
+<style>
+/*FONTS*/
+/* In-game overlay (Sami's pick, A): one corner card. The window itself is the card;
+   overlay.py makes it frameless, click-through and slightly see-through. */
+:root{
+  --spring:cubic-bezier(.34,1.56,.64,1);
+  --line:rgba(255,255,255,.09);
+  --t1:#f3f5f8; --t2:rgba(232,237,245,.62); --t3:rgba(232,237,245,.38);
+  --amber:#e7a928;
+  --imp1:#ff5a8a; --imp2:#ff9a3c; --myth:#b47cf2; --leg:#d69a12; --rare:#22b5c9; --unc:#3987e5; --com:rgba(232,237,245,.72);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#12141a}
+body{font-family:Geist,system-ui,sans-serif;color:var(--t1);-webkit-font-smoothing:antialiased;font-feature-settings:"tnum" 1;user-select:none;cursor:default}
+.card{position:relative;height:100%;border-radius:18px;border:1px solid var(--line);background:linear-gradient(180deg,#171a21,#111318);
+  padding:12px 14px 13px;display:flex;flex-direction:column;gap:11px;overflow:hidden}
+svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none;display:block}
+.glass{background:var(--glass);backdrop-filter:blur(18px) saturate(150%);-webkit-backdrop-filter:blur(18px) saturate(150%);
+  border:1px solid var(--line);box-shadow:0 12px 32px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.06)}
+.ov{position:absolute;transition:opacity .45s ease, transform .6s var(--spring)}
+body:not([data-v="A"]) .ov-A, body:not([data-v="B"]) .ov-B, body:not([data-v="C"]) .ov-C{opacity:0;transform:scale(.92);pointer-events:none}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+
+/* ---------- state block ---------- */
+.st{display:flex;align-items:center;gap:11px;min-width:0}
+.st-ic{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.06);display:grid;place-items:center;flex:none}
+.st-ic svg.i{width:22px;height:22px;stroke-width:1.7}
+.st-lbl{position:relative;height:22px;overflow:hidden;flex:1;min-width:0}
+.st-lbl span{position:absolute;left:0;top:0;white-space:nowrap;font-size:17px;font-weight:620;letter-spacing:-.01em;line-height:22px}
+.st.sm .st-ic{width:28px;height:28px;border-radius:9px}
+.st.sm .st-ic svg.i{width:17px;height:17px}
+.st.sm .st-lbl{height:20px}
+.st.sm .st-lbl span{font-size:14px;line-height:20px}
+.lbl-in{animation:lblIn .55s var(--spring) both}
+.lbl-out{animation:lblOut .3s ease both}
+@keyframes lblIn{from{transform:translateY(16px) scale(.92);opacity:0}to{transform:none;opacity:1}}
+@keyframes lblOut{to{transform:translateY(-14px);opacity:0}}
+.ic-pop{animation:icPop .6s var(--spring) both}
+@keyframes icPop{from{transform:scale(.55) rotate(-12deg);opacity:.2}to{transform:none;opacity:1}}
+/* per state icon motion */
+.s-cast svg{animation:swing 1s var(--spring) both;transform-origin:20% 85%}
+@keyframes swing{0%{transform:rotate(-28deg)}60%{transform:rotate(6deg)}100%{transform:none}}
+.s-wait .bob{animation:bob 1.6s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(2px)}}
+.s-reel svg .spin{animation:spin .9s linear infinite;transform-origin:12px 12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.s-collect svg .drop{animation:drop .8s var(--spring) infinite}
+@keyframes drop{0%{transform:translateY(-4px);opacity:0}50%{opacity:1}100%{transform:none}}
+.s-rejoin svg{animation:spin 1.4s linear infinite}
+.prog{height:2px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:rgba(255,255,255,.72);border-radius:2px}
+
+/* ---------- stats ---------- */
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.stat{background:rgba(255,255,255,.05);border-radius:12px;padding:8px 9px 7px;white-space:nowrap}
+.stat .k{display:flex;align-items:center;gap:5px;color:var(--t3)}
+.stat .k svg.i{width:13px;height:13px}
+.stat .k em{font-style:normal;font-size:10.5px;font-weight:500}
+.stat .v{font-size:16px;font-weight:620;margin-top:3px;letter-spacing:-.01em;display:inline-block}
+.u{color:var(--t3);font-size:11px;font-weight:500;margin-left:2px}
+.bump{animation:bump .6s var(--spring)}
+@keyframes bump{0%{transform:scale(1)}30%{transform:scale(1.22);color:#fff}100%{transform:scale(1)}}
+
+/* ---------- equipped ---------- */
+.eq{display:flex;flex-direction:column;gap:7px}
+.rod{display:flex;align-items:center;gap:8px;color:var(--amber);font-size:13px;font-weight:600;white-space:nowrap}
+.rod .lvl{font-size:11px;font-weight:650;padding:1px 6px;border-radius:999px;background:rgba(231,169,40,.16);color:#f3c25a}
+.titles{display:flex;flex-direction:column;gap:4px}
+.ti{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--t2);white-space:nowrap}
+.ti svg.i{width:14px;height:14px;color:var(--t3)}
+.ti .tn{flex:1;overflow:hidden;text-overflow:ellipsis}
+.mult{display:flex;align-items:center;gap:3px;color:var(--t1);font-weight:560;font-size:11.5px}
+.mult svg.i{width:11px;height:11px;color:var(--t3)}
+.mult svg.i+span{margin-right:4px}
+.mult span:last-child{margin-right:0}
+.chips{display:flex;gap:6px}
+.chip{display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;background:rgba(255,255,255,.06);font-size:12.5px;font-weight:600;white-space:nowrap}
+.chip svg.i{width:14px;height:14px;color:var(--t2)}
+.chip b{font-weight:620;display:inline-block}
+.sep{height:1px;background:var(--line);margin:0 -2px}
+
+/* ---------- feed ---------- */
+.feed{display:flex;flex-direction:column;position:relative}
+.row{display:flex;align-items:center;gap:10px;height:22px;font-size:12.5px;font-weight:540;white-space:nowrap;border-radius:7px;padding:0 6px;margin:0 -6px;position:relative}
+.row time{font-family:'Geist Mono',monospace;font-size:11px;color:var(--t3);width:34px;flex:none}
+.row .n{overflow:hidden;text-overflow:ellipsis}
+.r-common .n{color:var(--com)} .r-uncommon .n{color:var(--unc);filter:brightness(1.25)} .r-rare .n{color:var(--rare)}
+.r-legendary .n{color:var(--leg);filter:brightness(1.12)} .r-mythic .n{color:var(--myth)}
+.r-impossible .n{background:linear-gradient(90deg,var(--imp1),var(--imp2),var(--imp1));background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:680;animation:shim 2.2s linear infinite}
+.r-impossible{background:linear-gradient(90deg,rgba(255,90,138,.16),rgba(255,154,60,.06) 70%,transparent)}
+@keyframes shim{to{background-position:-200% 0}}
+.row.in{animation:rowIn .7s var(--spring) both}
+@keyframes rowIn{from{height:0;opacity:0;transform:translateX(-14px) scale(.86)}to{height:22px;opacity:1;transform:none}}
+.row.out{animation:rowOut .4s ease both}
+@keyframes rowOut{to{height:0;opacity:0}}
+.row.hl{animation:rowIn .7s var(--spring) both, hl 1.8s ease .2s both}
+@keyframes hl{0%{background:rgba(255,255,255,.14)}100%{background:transparent}}
+.r-impossible.hl{animation:rowIn .7s var(--spring) both}
+.sect{display:flex;align-items:center;gap:6px;color:var(--t3);font-size:10.5px;font-weight:550;letter-spacing:.06em;text-transform:uppercase}
+.sect svg.i{width:12px;height:12px}
+
+/* ---------- burst (Impossible) ---------- */
+.burst{position:absolute;pointer-events:none;inset:-1px;border-radius:inherit;opacity:0}
+.burst.go{animation:burstFade 3.2s ease both}
+.burst::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1.5px;
+  background:conic-gradient(from var(--a,0deg),var(--imp1),var(--imp2),transparent 40%,var(--imp1) 60%,var(--imp2),var(--imp1));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:rot 1.4s linear infinite}
+.burst::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:0 0 40px rgba(255,90,138,.45),inset 0 0 30px rgba(255,120,90,.18)}
+@property --a{syntax:'<angle>';initial-value:0deg;inherits:false}
+@keyframes rot{to{--a:360deg}}
+@keyframes burstFade{0%{opacity:0}8%{opacity:1}75%{opacity:1}100%{opacity:0}}
+.rays{position:absolute;width:0;height:0;pointer-events:none;z-index:5}
+.rays i{position:absolute;left:0;top:0;width:2px;height:12px;border-radius:2px;background:linear-gradient(var(--imp1),var(--imp2));transform-origin:1px 0;opacity:0}
+.rays.go i{animation:ray .9s cubic-bezier(.2,.8,.3,1) both}
+@keyframes ray{0%{opacity:1;transform:rotate(var(--r)) translateY(4px) scaleY(.4)}60%{opacity:1}100%{opacity:0;transform:rotate(var(--r)) translateY(46px) scaleY(1)}}
+.banner{position:absolute;left:50%;z-index:6;display:flex;align-items:center;gap:8px;height:32px;padding:0 14px;border-radius:999px;white-space:nowrap;
+  background:rgba(22,12,16,.82);backdrop-filter:blur(14px);border:1px solid rgba(255,120,120,.35);box-shadow:0 8px 30px rgba(255,90,138,.35);
+  transform:translate(-50%,-10px) scale(.6);opacity:0;pointer-events:none}
+.banner b{font-size:11px;letter-spacing:.14em;font-weight:750;background:linear-gradient(90deg,var(--imp1),var(--imp2),var(--imp1));background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shim 1.6s linear infinite}
+.banner span{font-size:13px;font-weight:620}
+.banner svg.i{width:15px;height:15px;color:var(--imp2)}
+.banner.go{animation:banner 3s var(--spring) both}
+@keyframes banner{0%{opacity:0;transform:translate(var(--tx,-50%),-12px) scale(.6)}14%{opacity:1;transform:translate(var(--tx,-50%),0) scale(1)}82%{opacity:1;transform:translate(var(--tx,-50%),0) scale(1)}100%{opacity:0;transform:translate(var(--tx,-50%),-8px) scale(.9)}}
+.ov-B .banner{transform-origin:left center}
+
+
+.hdr{display:flex;align-items:center;gap:10px}
+.hdr .st{flex:1}
+.st-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.st-txt .st-lbl{flex:none;width:100%}
+.sub{display:flex;align-items:center;gap:5px;color:var(--t3);font-size:11px}
+.sub svg.i{width:11px;height:11px}
+.hdr .st-ic{width:42px;height:42px;border-radius:13px}
+.hdr .st-ic svg.i{width:23px;height:23px}
+.prog i{width:38%;animation:prog 2.4s ease-in-out infinite}
+.idle .prog i{animation:none;width:0}
+@keyframes prog{0%{transform:translateX(-100%)}100%{transform:translateX(280%)}}
+.banner{top:10px}
+.empty{color:var(--t3);font-size:12px}
+.rod.none{color:var(--t2)}
+</style></head>
+<body class="idle">
+<div class="card" id="card">
+  <div class="hdr"><div class="st"><div class="st-ic" id="sic"></div><div class="st-txt"><div class="st-lbl" id="slbl"><span>Loading</span></div>
+    <div class="sub"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span class="mono" id="time">0:00:00</span></div></div></div></div>
+  <div class="prog"><i></i></div>
+  <div class="stats" id="stats"></div>
+  <div class="sep"></div>
+  <div class="eq"><div class="rod" id="rod"></div><div class="titles" id="titles"></div><div class="chips" id="chips"></div></div>
+  <div class="sep"></div>
+  <div class="sect" id="sect"></div>
+  <div class="feed" id="feed"></div>
+  <div class="burst" id="burst"></div>
+  <div class="banner" id="banner"></div>
+</div>
+<script>
+const BOOT = /*BOOT*/;
+const P = {
+  cast:'<path d="M4 20 17 5"/><path d="M17 5c2.6 3 3 7 1.2 10.5"/><path d="M18.2 15.5v1.8"/><circle cx="18.2" cy="19" r="1.6"/>',
+  wait:'<g class="bob"><path d="M12 3.5v3.5"/><circle cx="12" cy="11" r="4"/><path d="M8 11h8"/></g><path d="M3 19.5c1.5 0 1.5-1.2 3-1.2s1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2"/>',
+  reel:'<circle cx="12" cy="12" r="8.5"/><g class="spin"><circle cx="12" cy="12" r="2.4"/><path d="M12 9.6V4.2M14.1 13.2l4.6 2.7M9.9 13.2l-4.6 2.7"/></g>',
+  collect:'<g class="drop"><path d="M12 3v10"/><path d="M8 9.5 12 13.5l4-4"/></g><path d="M4 14v3.5A2.5 2.5 0 0 0 6.5 20h11a2.5 2.5 0 0 0 2.5-2.5V14"/>',
+  rejoin:'<path d="M20 11.5A8 8 0 0 0 5.6 7"/><path d="M5 3.5V7.5h4"/><path d="M4 12.5A8 8 0 0 0 18.4 17"/><path d="M19 20.5v-4h-4"/>',
+  paused:'<path d="M9 5.5v13M15 5.5v13"/>',
+  rod:'<path d="M4 20 17 5"/><path d="M17 5c2.6 3 3 7 1.2 10.5"/><path d="M7.5 16.5l-2-2"/>',
+  crown:'<path d="M4 8.5l4 3.5 4-6 4 6 4-3.5-1.6 9.5H5.6z"/>',
+  luck:'<path d="M12 3.5c.6 4.4 2.4 6.2 6.8 6.8-4.4.6-6.2 2.4-6.8 6.8-.6-4.4-2.4-6.2-6.8-6.8 4.4-.6 6.2-2.4 6.8-6.8z"/>',
+  bite:'<circle cx="12" cy="13.5" r="7"/><path d="M12 10v3.5l2.2 1.6M10 3h4"/>',
+  bait:'<path d="M14 3v11.5a4.5 4.5 0 0 1-9 0V12"/><path d="M5 12l2.5 2"/><circle cx="14" cy="3.5" r=".5"/><path d="M17.5 6.5c1.5 1 1.5 3 0 4"/>',
+  bolt:'<path d="M13 3 5 13.5h6l-1 7.5 8-10.5h-6z"/>',
+  pace:'<path d="M4 17.5a8 8 0 1 1 16 0"/><path d="M12 15l3.5-4.5"/>',
+  coin:'<ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7"/><path d="M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/>',
+  sum:'<path d="M17 5H7l6 7-6 7h10"/>',
+  clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  list:'<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
+  fish:'<path d="M3 12c3-4.5 9-6 14-2l3-2.5v9L17 14c-5 4-11 2.5-14-2z"/>',
+  chev:'<path d="M6 15l6-6 6 6"/>',
+  spark:'<path d="M12 3.5c.6 4.4 2.4 6.2 6.8 6.8-4.4.6-6.2 2.4-6.8 6.8-.6-4.4-2.4-6.2-6.8-6.8 4.4-.6 6.2-2.4 6.8-6.8z"/><path d="M19 3v3M17.5 4.5h3"/>'
+};
+const I = (k, cls='') => `<svg class="i ${cls}" viewBox="0 0 24 24">${P[k]}</svg>`;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = (v, d=0) => v == null || !isFinite(v) ? '—' : Number(v).toLocaleString('en-US', {maximumFractionDigits:d, minimumFractionDigits:d});
+const kfmt = v => v == null || !isFinite(v) ? '—' : v >= 1000 ? (v/1000).toFixed(1) + 'k' : fmt(v);
+const clock = t => new Date(t*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hourCycle:'h23'});
+const RARITY = BOOT.rarity || {};
+const rarityOf = name => RARITY[name] || Object.entries(RARITY).find(([k]) => new RegExp('\\b' + k + '\\b', 'i').test(name))?.[1] || 'Common';
+const RCLS = {Impossible:'r-impossible', Mythic:'r-mythic', Legendary:'r-legendary', Rare:'r-rare', Uncommon:'r-uncommon', Common:'r-common'};
+const MODE = {full:'Full farmer', here:'Farm here', fish:'Fish here', minigame:'Minigame'};
+const api = async path => { if (BOOT.sample) return BOOT.sample[path]; const r = await fetch(path, {headers:{'X-Autofish-Token': BOOT.token}}); return r.json(); };
+
+function stateKey(s){
+  const t = s.state || '';
+  if (s.paused || s.manual_paused) return 'paused';
+  if (!s.running && !s.starting) return 'paused';
+  return /bite|wait/i.test(t) ? 'wait' : /reel|minigame/i.test(t) ? 'reel' : /cast/i.test(t) ? 'cast' : /collect|claim|pick/i.test(t) ? 'collect' : /rejoin|recover|walk/i.test(t) ? 'rejoin' : 'wait';
+}
+let tBase = {at: 0, secs: 0, live: false}, lastLabel = null, seen = null;
+function tick(){
+  const n = Math.max(0, (tBase.secs + (tBase.live ? Date.now()/1000 - tBase.at : 0)) | 0), p = v => String(v).padStart(2, '0');
+  $('time').textContent = `${n/3600|0}:${p((n%3600)/60|0)}:${p(n%60)}`;
+}
+setInterval(tick, 1000);
+
+function bump(el, html){ if (el.innerHTML === html) return; el.innerHTML = html; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+
+function draw(s){
+  const live = (s.running || s.starting) && !s.paused;
+  document.body.classList.toggle('idle', !live);
+  const key = stateKey(s), label = s.running || s.starting ? s.state : (s.paused ? 'Paused' : 'Not farming');
+  if (label !== lastLabel) { lastLabel = label;
+    $('sic').className = 'st-ic ic-pop s-' + key; $('sic').innerHTML = I(key);
+    $('slbl').innerHTML = `<span class="lbl-in">${esc(label)}</span>`; }
+  tBase = {at: Date.now()/1000, secs: s.active_seconds || 0, live}; tick();
+  if (!$('stats').children.length) $('stats').innerHTML =
+    `<div class="stat"><div class="k">${I('pace')}<em>Pace</em></div><span class="v" id="vPace">—</span><span class="u">/min</span></div>
+     <div class="stat"><div class="k">${I('coin')}<em>Gold</em></div><span class="v" id="vGold">—</span><span class="u">/h</span></div>
+     <div class="stat"><div class="k">${I('sum')}<em>Session</em></div><span class="v" id="vTot">—</span></div>`;
+  const pace = s.pace ?? (s.hooks_per_hour ? s.hooks_per_hour/60 : null);
+  bump($('vPace'), fmt(pace, 1)); bump($('vGold'), kfmt(s.gold_per_hour));
+  bump($('vTot'), s.gold_per_hour && s.active_seconds ? kfmt(s.gold_per_hour*s.active_seconds/3600) : '—');
+  const bait = s.bait_remaining_estimate, hrs = s.bait_hours_remaining_estimate;
+  $('chips').innerHTML = (bait != null ? `<div class="chip">${I('bait')}<b>${fmt(bait)}</b>${hrs ? `<span class="u">≈${Math.round(hrs)}h</span>` : ''}</div>` : '') +
+    (s.mode ? `<div class="chip">${I('bolt')}${MODE[s.mode] || esc(s.mode)}</div>` : '');
+  if (!$('sect').innerHTML) $('sect').innerHTML = `${I('list')}<span>Recent</span>`;
+  drawFeed(s);
+}
+function drawFeed(s){
+  const rows = (s.events || []).filter(e => e.group === 'catches').slice(-5).reverse();
+  if (!rows.length) { $('feed').innerHTML = '<div class="empty">Catches show up here</div>'; return; }
+  const keys = rows.map(e => String(e.id ?? e.at + e.text)), fresh = seen ? keys.filter(k => !seen.has(k)) : [];
+  $('feed').innerHTML = rows.map((e, n) => { const r = rarityOf(e.text), k = keys[n];
+    return `<div class="row ${RCLS[r] || 'r-common'}${fresh.includes(k) ? ' in hl' : ''}"><time>${clock(e.at)}</time><span class="n">${esc(e.text)}</span></div>`; }).join('');
+  const imp = rows.find((e, n) => fresh.includes(keys[n]) && rarityOf(e.text) === 'Impossible');
+  if (imp) celebrate(imp.text);
+  seen = new Set(keys);
+}
+function celebrate(name){
+  const b = $('burst'); b.classList.remove('go'); void b.offsetWidth; b.classList.add('go');
+  const ban = $('banner'); ban.innerHTML = `${I('spark')}<b>IMPOSSIBLE</b><span>${esc(name)}</span>`; ban.classList.remove('go'); void ban.offsetWidth; ban.classList.add('go');
+  const row = $('feed').querySelector('.r-impossible'); if (!row) return;
+  const cr = $('card').getBoundingClientRect(), rr = row.getBoundingClientRect(), rays = document.createElement('div'); rays.className = 'rays';
+  rays.style.left = (rr.left - cr.left + 60) + 'px'; rays.style.top = (rr.top - cr.top + 11) + 'px';
+  for (let k = 0; k < 14; k++) { const i = document.createElement('i'); i.style.setProperty('--r', (k*360/14) + 'deg'); i.style.animationDelay = (k%2 ? 60 : 0) + 'ms'; rays.appendChild(i); }
+  $('card').appendChild(rays); void rays.offsetWidth; rays.classList.add('go'); setTimeout(() => rays.remove(), 1200);
+}
+function drawGear(g){
+  if (!g) return;
+  $('rod').className = 'rod' + (g.rod ? '' : ' none');
+  $('rod').innerHTML = g.rod ? `${I('rod')}<span>${esc(g.rod)} Fishing Rod</span>${g.enchant ? `<span class="lvl">+${g.enchant}</span>` : ''}` : `${I('rod')}<span>No rod picked</span>`;
+  const col = {Legendary:'var(--amber)', Rare:'var(--rare)', Common:'var(--t1)'}[g.rod]; if (col) $('rod').style.color = col;
+  $('titles').innerHTML = (g.titles || []).map(t => `<div class="ti">${I('crown')}<span class="tn">${esc(t.name)}</span><span class="mult">${t.luck ? `${I('luck')}<span>${t.luck}×</span>` : ''}${t.bite ? `${I('bite')}<span>${t.bite}×</span>` : ''}</span></div>`).join('');
+}
+async function poll(){ try { draw(await api('/api/state')); } catch (e) {} }
+async function pollGear(){ try { drawGear(await api('/api/gear')); } catch (e) {} }
+poll(); pollGear();
+if (!BOOT.sample) { setInterval(poll, 2000); setInterval(pollGear, 30000); }
+</script>
+</body></html>
