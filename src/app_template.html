@@ -446,6 +446,39 @@ footer a{color:inherit}
 .howto:hover{transform:translateY(-2px)} .howto .i{width:15px;height:15px}
 .input.wide{width:100%;margin-top:18px}
 
+/* settings: three columns, Off/On segments, rod cards, hotbar keys */
+.cols3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}
+@media (max-width:900px){.cols3{grid-template-columns:minmax(0,1fr)}}
+.sh{display:flex;align-items:center;gap:12px;padding:18px 20px 0}
+.sh .ic{width:40px;height:40px;border-radius:12px;background:var(--raised);border:1px solid var(--border);display:grid;place-items:center;color:var(--text-2);flex:none}
+.sh h3{margin:0;font:600 15px var(--sans)} .sh small{color:var(--text-3);font-size:11.5px}
+.sform{display:grid;gap:18px;padding:18px 20px 20px}
+.fl{display:grid;gap:8px;min-width:0}
+.fl .flab{font:600 11px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);display:flex;justify-content:space-between;align-items:center}
+.fl .flab .how{text-transform:none;letter-spacing:0;font-size:12.5px}
+.fl .input{width:100%}
+.flab a.how{color:var(--accent);text-decoration:none;font-weight:500}.flab a.how:hover{text-decoration:underline}
+.seg.onoff .glide{background:var(--border-strong);box-shadow:none}
+.seg.onoff button[aria-pressed="true"]{color:var(--text-1);font-weight:600}
+.seg.onoff{display:grid;grid-template-columns:1fr 1fr}
+.seg.onoff button{justify-content:center;padding:8px 12px}
+.rods{display:grid;gap:8px}
+.rodc{display:flex;align-items:center;gap:10px;padding:11px 14px;border:1px solid var(--border);border-radius:12px;background:var(--raised);color:var(--text-2);font:500 13.5px var(--sans);cursor:pointer;transition:border-color .2s,color .2s,transform .4s var(--spring)}
+.rodc .i{color:var(--rc)} .rodc:hover{border-color:var(--border-strong);transform:translateX(3px)}
+.rodc .dot{margin-left:auto;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--border-strong);display:grid;place-items:center;transition:border-color .2s}
+.rodc .dot::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--text-1);transform:scale(0);transition:transform .4s var(--spring)}
+.rodc[aria-checked="true"]{border-color:var(--text-1);color:var(--text-1)}
+.rodc[aria-checked="true"] .dot{border-color:var(--text-1)} .rodc[aria-checked="true"] .dot::after{transform:none}
+.slots{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.slots .key{width:auto;height:42px;font-size:15px}
+.castrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+.castv{display:flex;align-items:center;justify-content:center;gap:8px;border:1px dashed var(--border-strong);border-radius:12px;font-size:14px;color:var(--text-1)}
+.castv .i{color:var(--text-3)}
+.tools{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tool{display:grid;gap:26px;justify-items:start;text-align:left;padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--raised);color:var(--text-1);cursor:pointer;font:inherit;transition:border-color .2s,transform .4s var(--spring)}
+.tool .ic{width:32px;height:32px;border-radius:10px;border:1px solid var(--border);display:grid;place-items:center;color:var(--text-2)}
+.tool b{font-weight:600;font-size:13.5px} .tool:hover{border-color:var(--border-strong);transform:translateY(-2px)}
+
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -568,40 +601,39 @@ footer a{color:inherit}
 
   <!-- Settings -->
   <section class="view" id="v-settings">
-    <section class="grid">
+    <section class="cols3">
       <article class="card">
-        <header><h3><svg class="i"><use href="#i-user"/></svg>Account</h3></header>
-        <div class="body form">
-          <label class="set" title="Your Roblox username, not your display name"><span class="ic"><svg class="i"><use href="#i-user"/></svg></span><span class="t">Username</span>
+        <div class="sh"><span class="ic"><svg class="i"><use href="#i-user"/></svg></span><div><h3>Account</h3><small class="mono" id="sWho"></small></div></div>
+        <div class="body sform">
+          <label class="fl" title="Your Roblox username, not your display name"><span class="flab">Username</span>
             <input class="input" id="sUser" autocomplete="off" spellcheck="false" placeholder="Roblox username"></label>
-          <div class="set" title="Set Spawn Anywhere: Full farmer can rejoin and walk back by itself"><span class="ic"><svg class="i"><use href="#i-ticket"/></svg></span><span class="t">Spawn gamepass</span>
-            <button class="switch" role="switch" data-key="spawn_gamepass" aria-checked="false" aria-label="Spawn gamepass"></button></div>
-          <div class="set" title="The rod you fish with; Rod Lab keeps stats per rod"><span class="ic"><svg class="i"><use href="#i-rod"/></svg></span><span class="t">Rod</span>
-            <div class="seg" id="sRod" role="group" aria-label="Rod"></div></div>
-          <div class="set" title="The number key your rod is on"><span class="ic"><svg class="i"><use href="#i-keys"/></svg></span><span class="t">Rod slot</span>
-            <div class="stepper"><button data-step="-1" aria-label="Lower">−</button><output id="sSlot" class="num">5</output><button data-step="1" aria-label="Higher">+</button></div></div>
-          <div class="set" title="Press Capture, then hover over the water within 4 seconds"><span class="ic"><svg class="i"><use href="#i-pointer"/></svg></span><span class="t">Cast point <small class="mono num" id="sCast"></small></span>
-            <button class="btn sm" id="bCast"><svg class="i"><use href="#i-target"/></svg>Capture</button></div>
+          <div class="fl" title="Set Spawn Anywhere: Full farmer can rejoin and walk back by itself"><span class="flab">Spawn gamepass</span><div class="seg onoff" data-key="spawn_gamepass" role="group" aria-label="Spawn gamepass"></div></div>
+          <div class="tools">
+            <button class="tool" id="bTerm" title="Discord, hotkeys and every other setting"><span class="ic"><svg class="i"><use href="#i-term"/></svg></span><b>Terminal</b></button>
+            <button class="tool" id="bData" title="Logs, stats and screenshots"><span class="ic"><svg class="i"><use href="#i-folder"/></svg></span><b>Data folder</b></button>
+          </div>
         </div>
       </article>
       <article class="card">
-        <header><h3><svg class="i"><use href="#i-fish"/></svg>Farming</h3></header>
-        <div class="body form">
-          <div class="set" title="Keeps farming through small problems and restarts on failure"><span class="ic"><svg class="i"><use href="#i-moon"/></svg></span><span class="t">Overnight</span>
-            <button class="switch" role="switch" data-key="overnight" aria-checked="false" aria-label="Overnight"></button></div>
-          <div class="set" title="Starts farming after you leave the PC alone"><span class="ic"><svg class="i"><use href="#i-mouse"/></svg></span><span class="t">Start when idle</span>
-            <button class="switch" role="switch" data-key="auto_idle" aria-checked="false" aria-label="Start when idle"></button></div>
-          <div class="set" title="Wears the three fishing titles that catch the most"><span class="ic"><svg class="i"><use href="#i-crown"/></svg></span><span class="t">Best titles</span>
-            <button class="switch" role="switch" data-key="auto_titles" aria-checked="false" aria-label="Best titles"></button></div>
-          <div class="set" title="One Discord message per session that updates itself"><span class="ic"><svg class="i"><use href="#i-chat"/></svg></span><span class="t">Discord <a class="how" href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks" target="_blank" rel="noopener">How?</a></span>
-            <input class="input" id="sHook" type="password" autocomplete="off" spellcheck="false" placeholder="Webhook URL"></div>
+        <div class="sh"><span class="ic"><svg class="i"><use href="#i-rod"/></svg></span><div><h3>Rod</h3><small class="mono" id="sRodSum"></small></div></div>
+        <div class="body sform">
+          <div class="fl" title="The rod you fish with; Rod Lab keeps stats per rod"><span class="flab">Rod</span><div class="rods" id="sRod" role="radiogroup" aria-label="Rod"></div></div>
+          <div class="fl" title="The number key your rod is on"><span class="flab">Rod slot</span><div class="slots" id="sSlot" role="radiogroup" aria-label="Rod slot"></div></div>
+          <div class="fl" title="Press Capture, then hover over the water within 4 seconds"><span class="flab">Cast point</span>
+            <div class="castrow"><span class="castv mono num"><svg class="i"><use href="#i-target"/></svg><span id="sCast"></span></span><button class="btn" id="bCast"><svg class="i"><use href="#i-pointer"/></svg>Capture</button></div></div>
+        </div>
+      </article>
+      <article class="card">
+        <div class="sh"><span class="ic"><svg class="i"><use href="#i-fish"/></svg></span><div><h3>Farming</h3><small class="mono" id="sFarmSum"></small></div></div>
+        <div class="body sform">
+          <div class="fl" title="Keeps farming through small problems and restarts on failure"><span class="flab">Overnight</span><div class="seg onoff" data-key="overnight" role="group" aria-label="Overnight"></div></div>
+          <div class="fl" title="Starts farming after you leave the PC alone"><span class="flab">Start when idle</span><div class="seg onoff" data-key="auto_idle" role="group" aria-label="Start when idle"></div></div>
+          <div class="fl" title="Wears the three fishing titles that catch the most"><span class="flab">Best titles</span><div class="seg onoff" data-key="auto_titles" role="group" aria-label="Best titles"></div></div>
+          <label class="fl" title="One Discord message per session that updates itself"><span class="flab">Discord <a class="how" href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks" target="_blank" rel="noopener">How?</a></span>
+            <input class="input" id="sHook" type="password" autocomplete="off" spellcheck="false" placeholder="Webhook URL"></label>
         </div>
       </article>
     </section>
-    <div class="btns">
-      <button class="btn" id="bTerm" title="Discord, hotkeys and every other setting"><svg class="i"><use href="#i-term"/></svg>Terminal</button>
-      <button class="btn" id="bData" title="Logs, stats and screenshots"><svg class="i"><use href="#i-folder"/></svg>Data folder</button>
-    </div>
   </section>
 
   <footer><span id="foot"></span><span>Fan-made · not affiliated with Roblox</span></footer>
@@ -803,12 +835,19 @@ function drawLog(s){
 function drawSettings(s){
   const c = s.config || {};
   const u = $('sUser'); if (document.activeElement !== u) u.value = c.account_username || '';
-  document.querySelectorAll('.switch').forEach(sw => sw.setAttribute('aria-checked', !!c[sw.dataset.key]));
-  $('sSlot').value = c.rod_slot ?? 5;
-  segHtml($('sRod'), ['Legendary', 'Rare', 'Common'].map(r => `<button data-rod="${r}" aria-pressed="${c.rod === r}">${r}</button>`).join(''));
+  $('sWho').textContent = c.account_username || 'Not set';
+  document.querySelectorAll('.seg.onoff').forEach(g => segHtml(g, [false, true].map(v => `<button data-v="${v}" aria-pressed="${!!c[g.dataset.key] === v}">${v ? 'On' : 'Off'}</button>`).join('')));
+  const ROD_C = {Legendary:'var(--legendary)', Rare:'var(--rare)', Common:'var(--text-2)'};
+  const rods = Object.entries(ROD_C).map(([r, col]) => `<button class="rodc" role="radio" data-rod="${r}" aria-checked="${c.rod === r}" style="--rc:${col}">${ico('rod')}${r}<span class="dot"></span></button>`).join('');
+  if ($('sRod')._h !== rods) { $('sRod')._h = rods; $('sRod').innerHTML = rods; }
+  const slot = c.rod_slot ?? 5, keys = [1,2,3,4,5].map(k => `<button class="key${k === slot ? ' on' : ''}" role="radio" aria-checked="${k === slot}" data-slot="${k}">${k}</button>`).join('');
+  if ($('sSlot')._h !== keys) { $('sSlot')._h = keys; $('sSlot').innerHTML = keys; }
+  $('sRodSum').textContent = `${c.rod || 'No rod'} · key ${slot}`;
+  const on = ['overnight', 'auto_idle', 'auto_titles'].filter(k => c[k]).length; $('sFarmSum').textContent = `${on} of 3 on`;
   const h = $('sHook'); if (document.activeElement !== h) h.placeholder = c.webhook ? 'Saved · paste to replace' : 'Webhook URL';
-  $('sCast').textContent = c.cast_point ? c.cast_point.join(', ') : '';
+  $('sCast').textContent = c.cast_point ? c.cast_point.join(', ') : 'Not set';
 }
+
 const OB_STEPS = [
   {k:'spawn_gamepass', icon:'ticket', q:'Own the Set Spawn Anywhere gamepass?', sub:'Lets Autofish rejoin and walk back by itself', type:'choice',
     opts:[{v:true, icon:'crown', label:'Yes', note:'Full farmer'}, {v:false, icon:'pin', label:'No', note:'Farm here'}]},
@@ -889,11 +928,12 @@ $('bData').onclick = e => act({action:'data_folder'}, e.currentTarget);
 $('bCast').onclick = e => { toast('Hover over the water in Roblox now'); act({action:'capture_cast'}, e.currentTarget); };
 $('logFilter').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; logKind = b.dataset.k; drawLog(S); });
 async function setting(key, value){ try { const r = await api('/api/settings', {[key]: value}); if (r.state) draw(r.state); toast('Saved'); } catch (e) { toast(e.message); } }
-document.querySelectorAll('.switch').forEach(sw => sw.onclick = () => { const v = sw.getAttribute('aria-checked') !== 'true'; sw.setAttribute('aria-checked', v); setting(sw.dataset.key, v); });
+document.querySelectorAll('.seg.onoff').forEach(g => g.addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b || b.getAttribute('aria-pressed') === 'true') return;
+  g.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); glide(g); setting(g.dataset.key, b.dataset.v === 'true'); }));
 $('sUser').addEventListener('change', e => setting('account_username', e.target.value.trim()));
 $('sHook').addEventListener('change', e => { const v = e.target.value.trim(); if (v) setting('webhook', v); e.target.value = ''; });
 $('sRod').addEventListener('click', e => { const b = e.target.closest('[data-rod]'); if (b) setting('rod', b.dataset.rod); });
-document.querySelectorAll('.stepper button').forEach(b => b.onclick = () => { const v = Math.min(5, Math.max(1, (+$('sSlot').value || 5) + +b.dataset.step)); $('sSlot').value = v; const o = $('sSlot'); o.classList.remove('bump'); void o.offsetWidth; o.classList.add('bump'); setting('rod_slot', v); });
+$('sSlot').addEventListener('click', e => { const b = e.target.closest('[data-slot]'); if (b) { $('sSlot').querySelectorAll('.key').forEach(x => x.classList.toggle('on', x === b)); setting('rod_slot', +b.dataset.slot); } });
 $('sheet').addEventListener('click', e => {
   const st = OB_STEPS[OB.i];
   const o = e.target.closest('[data-o]'); if (o) { o.classList.add('done-burst'); return setTimeout(() => obAnswer(st.opts[+o.dataset.o].v), 180); }
