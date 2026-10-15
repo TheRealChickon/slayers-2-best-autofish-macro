@@ -14,6 +14,24 @@ def duration(seconds):
     return f'{seconds // 3600}h {seconds % 3600 // 60:02d}m'
 
 
+FISHING_STAGES = {'tracking', 'waiting', 'casting', 'cast_press', 'pickup', 'pickup_wait', 'cooldown'}
+
+
+def activity_running(supervisor, worker, live, held=False, now=None):
+    """Advance the display only with fresh fishing telemetry and real foreground ownership."""
+    now = time.time() if now is None else now
+    if not live or held or supervisor.get('stage') != 'fishing': return False
+    if worker.get('stage') not in FISHING_STAGES or worker.get('manual_paused') or worker.get('spot_paused'): return False
+    if not worker.get('running') or not 0 <= now - worker.get('updated', 0) <= 4: return False
+    try:
+        import win32gui, win32process, psutil
+        hwnd = win32gui.GetForegroundWindow()
+        return bool(hwnd and not win32gui.IsIconic(hwnd) and
+                    psutil.Process(win32process.GetWindowThreadProcessId(hwnd)[1]).name().lower() == 'robloxplayerbeta.exe')
+    except Exception:
+        return False
+
+
 def snapshot(journal=None):
     journal = journal if journal is not None else Journal()
     totals, supervisor, worker, bait, presence, bait_observation = [read(name + '.json') for name in
@@ -84,6 +102,7 @@ def snapshot(journal=None):
         'logged_collections': len(journal.items), 'unread_items': unknown,
         'hooks': rounds, 'casts': totals.get('casts', 0), 'failed_rounds': totals.get('failed', 0),
         'server_rejoins': max(0, journal.joins - 1), 'game_launches': journal.launches,
+        'activity_running': activity_running(supervisor, worker, live, stop or paused or f8_paused),
         'active_seconds': seconds, 'last_item': journal.items[-1]['item'] if journal.items else None,
         'bait_remaining_estimate': remaining, 'bait_source': bait_source, 'hooks_per_hour': rate,
         'bait_hours_remaining_estimate': remaining / rate if remaining is not None and rate else None,
