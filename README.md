@@ -21,7 +21,7 @@ You don't need to know anything about coding. Download, double-click, done.
 - **Fully hands-free.** Casts, plays the reel minigame, holds T to collect drops and recasts.
 - **Recovers by itself.** Re-equips your rod and fixes a stuck screen. With the Set Spawn Anywhere gamepass it also rejoins after a disconnect and gets straight back to fishing.
 - **Overnight mode.** Waits until you've stepped away, then takes over. Moving your mouse hands control back.
-- **Live dashboard.** Catches, hooks per minute, gold per hour, bait left and a running log.
+- **A proper app.** One window with live status, Start / Pause / Stop, catches, pace, gold per hour, bait left and a running log. Power users also get a keyboard dashboard in the terminal.
 - **Bait buying.** Stand at Baitmonger Nori, pick an amount or a gold budget, and Autofish buys the Fish Heads in bulk. It can go straight back to farming afterwards, and the dashboard tracks how much bait is left.
 - **Best fishing titles.** Can equip your three strongest fishing titles for you, with luck or bite speed as the focus for each rod.
 - **Rod Lab.** Compares your rods side by side: drop rates, gold per hour and Angler crate value.
@@ -30,13 +30,29 @@ You don't need to know anything about coding. Download, double-click, done.
 - **Any light.** Red skies, night and other tinted scenes are balanced automatically, so the minigame is still read correctly.
 - **Private.** No Roblox password or cookie is ever used. Your settings and logs stay on your PC.
 
+## The app
+
+<p align="center">
+  <img src="docs/images/app.png" alt="The Autofish app: live status, session timer, pace and gold graphs, bait, catch by rarity, activity and the last hour" width="100%">
+</p>
+
+Autofish.exe opens one window with everything in it: what the farmer is doing right now, Start / Pause / Stop, a session timer, pace and gold per hour graphs, bait left, your catch by rarity, a live log and a timeline of the last hour. Items shows everything you've collected as a map or a searchable list. It works in light and dark mode and runs offline on your PC.
+
+The **Overlay** button toggles a small translucent card over Roblox with your status, pace, gold, rod and latest catches. Pace is green; Gold / h and Session are gold. The background is transparent while text stays solid. It appears only while Roblox is in front, lets clicks pass through, and never takes keyboard focus.
+
+<p align="center"><img src="docs/images/overlay.png" alt="Translucent Autofish overlay with green Pace and gold Gold per hour and Session values" width="284"></p>
+
+*Dashboard and overlay previews use demonstration data. The overlay image is rendered by the actual native renderer.*
+
+The session clock advances only with fresh fishing telemetry while Roblox is focused. It freezes during manual pause, focus loss, recovery or a stale connection. Mode cards stay selectable while running: choose a mode, then **Switch to** to pause the old controller and continue the saved run. A new Stop or Pause cancels the switch. Pages still scroll with the mouse wheel and keyboard, without visible scrollbars.
+
 ## Rod Lab
 
 <p align="center">
-  <img src="docs/images/rod-lab.png" alt="Rod Lab comparing fishing rods: catch mix, gold per hour and crate value" width="100%">
+  <img src="docs/images/rod-lab.png" alt="Rod Lab: what each rod catches, fish per hour, a gold predictor and your rods ranked" width="100%">
 </p>
 
-Rod Lab compares your rods side by side: what each one catches, how much gold per hour it earns, and how many Angler crates it fills. It runs offline on your PC.
+Rod Lab is a tab in the app. It shows what each rod catches and how many fish per hour, predicts your gold per hour for any rod, enchant level and titles, and ranks your rods.
 
 ## Install
 
@@ -50,13 +66,13 @@ Go to the **[latest release](../../releases/latest)** and download the file call
 
 Right-click the zip, choose **Extract All…**, and open the extracted **Autofish** folder. Inside there is **Autofish.exe** and an `app` folder. Double-click **Autofish.exe**.
 
-The first time, a window opens and installs everything, which takes a few minutes. Then the dashboard opens by itself, and you get one **Autofish** icon on your desktop. From then on, just use that icon. You can delete the downloaded folder.
+The first time, a window opens and installs everything, which takes a few minutes. Then the Autofish app opens by itself, and you get one **Autofish** icon on your desktop. From then on, just use that icon. You can delete the downloaded folder.
 
 > **"Windows protected your PC"?** That's Windows SmartScreen being careful with a new program from the internet. Click **More info → Run anyway**. All of Autofish's code is in this repository if you want to check it first.
 
 ### 3. First-time settings
 
-The first time the dashboard opens, it asks one question: do you own the **Set Spawn Anywhere** gamepass? Answer **Y** or **N**. This decides your main mode:
+The first time the app opens, it asks one question: do you own the **Set Spawn Anywhere** gamepass? Click **Yes** or **No**. This decides your main mode:
 
 | Your answer | Main mode | What it means |
 | --- | --- | --- |
@@ -65,18 +81,18 @@ The first time the dashboard opens, it asks one question: do you own the **Set S
 
 If you answer **Yes**, it then asks for your **Roblox username** (not your display name). Full farmer needs it to check that you're in the game and to rejoin after a disconnect. It is saved only on your PC. You can change both answers any time in **Settings**.
 
-Then go to **Settings** with the arrow keys and check these:
+Then open the **Settings** tab and check these:
 
 | Setting | What to enter |
 | --- | --- |
 | **Username** | Your Roblox **username** (not your display name). Already set if you answered Yes; optional for Farm here, where it helps notice disconnects. |
 | **Rod slot** | The hotbar number (1 – 9) your fishing rod is in. |
-| **Cast point** | Pick **Capture pointer**, then within 4 seconds hover your mouse over the water where you want to cast. |
+| **Cast point** | Press **Capture**, then within 4 seconds hover your mouse over the water where you want to cast. |
 
 ### 4. Start fishing
 
 1. In Roblox, walk to your fishing spot and face the water. With the gamepass, **set your spawn there** too, so a rejoin brings you back.
-2. In the dashboard, open **Run** and choose **Start Full farmer** (or **Start Farm here** without the gamepass).
+2. In the app, pick **Full farmer** (or **Farm here** without the gamepass) and press **Start**.
 3. Leave Roblox in front. That's it.
 
 **Controls while it runs** (with Roblox in front):
@@ -97,11 +113,11 @@ Then go to **Settings** with the arrow keys and check these:
 | **Minigame only** | Cast and collect yourself | Only plays the reel minigame |
 | **Auto rejoin** | Play normally | Watches for disconnects and rejoins; no fishing |
 
-The other modes live under **Run → Other modes**. Full farmer needs the **Set Spawn Anywhere** gamepass, because rejoining only fixes things when it brings you back to your spot.
+**Fish here** and **Minigame** (Minigame only) sit next to Start in the app; **Auto rejoin** is in the terminal dashboard (`autofish rejoin`). Full farmer needs the **Set Spawn Anywhere** gamepass, because rejoining only fixes things when it brings you back to your spot.
 
 ## Discord reports (optional)
 
-Get one Discord message per session that edits itself every few minutes with your catches, pace and gold. In your Discord server, open **Server Settings → Integrations → Webhooks → New Webhook → Copy Webhook URL**, then paste it in **Settings → Discord webhook** and choose **Test webhook**.
+Get one Discord message per session that edits itself every few minutes with your catches, pace and gold. In your Discord server, open **Server Settings → Integrations → Webhooks → New Webhook → Copy Webhook URL**, then in the app open **Settings → Open terminal dashboard**, paste it in **Settings → Discord webhook** and choose **Test webhook**.
 
 The webhook is stored encrypted for your Windows account and never shown again or uploaded anywhere else.
 
@@ -136,7 +152,7 @@ Autofish only sends input while Roblox is the window in front, so it never types
 <details>
 <summary><b>It doesn't cast, or casts into the floor.</b></summary>
 
-Set the **Cast point** again with **Capture pointer** while standing at your spot, and check that your camera faces the water. The rod must be in the hotbar (not only in your backpack) and **Rod slot** must match.
+Set the **Cast point** again with **Settings → Capture** while standing at your spot, and check that your camera faces the water. The rod must be in the hotbar (not only in your backpack) and **Rod slot** must match.
 </details>
 
 <details>
@@ -160,7 +176,7 @@ Download the new zip from [Releases](../../releases/latest), unzip it and double
 <details>
 <summary><b>How do I uninstall?</b></summary>
 
-Stop Autofish, run `Install-CLI.cmd -Uninstall` from `%LOCALAPPDATA%\Autofish\app` to remove the `autofish` command, delete the **Autofish** desktop icon, then delete the `%LOCALAPPDATA%\Autofish` folder (this also deletes your stats). Nothing else is installed: no service, no scheduled task, no admin rights.
+Stop Autofish, run `scripts\Install-CLI.cmd -Uninstall` from `%LOCALAPPDATA%\Autofish\app` to remove the `autofish` command, delete the **Autofish** desktop icon, then delete the `%LOCALAPPDATA%\Autofish` folder (this also deletes your stats). Nothing else is installed: no service, no scheduled task, no admin rights.
 </details>
 
 Still stuck? [Open an issue](../../issues/new/choose) with your screen resolution, Windows scaling and the last lines of `autofish logs --activity`.
@@ -176,7 +192,8 @@ Autofish only looks at your screen and presses keys and mouse buttons like a per
 ## For tinkerers
 
 - **[Full manual](docs/MANUAL.md):** every mode, setting, hotkey, file and command (`autofish status`, `autofish logs`, `autofish predictions` …).
-- **Run from source:** install Python 3.12 (64-bit), clone the repo and double-click `Setup.cmd`. Tests: `.\.venv\Scripts\python.exe -m unittest discover -s tests`.
+- **Run from source:** install Python 3.12 (64-bit), clone the repo and double-click `scripts\Setup.cmd`. Tests: `.\.venv\Scripts\python.exe -m unittest discover -s tests`.
+- **Repo layout:** `src/` the app (Python), `scripts/` Windows setup and launch scripts, `assets/` game templates and icons, `launcher/` the Autofish.exe source, `docs/` manual and images, `tests/` the test suite.
 - **[Contributing](CONTRIBUTING.md):** bug reports, screenshots from unusual setups and pull requests are welcome.
 
 Released under the [MIT license](LICENSE).

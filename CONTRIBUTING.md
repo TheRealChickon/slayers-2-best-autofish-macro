@@ -15,7 +15,7 @@ Never paste your Discord webhook URL, Roblox cookie or `config.local.json` into 
 ## Making a change
 
 1. Fork the repo and branch from `dev-rolling` (`feature/<short-name>`).
-2. Set up a dev copy on Windows with Python 3.12: double-click `Setup.cmd`.
+2. Set up a dev copy on Windows with Python 3.12: double-click `scripts\Setup.cmd`.
 3. Run the tests before opening a pull request:
 
    ```powershell
@@ -28,6 +28,6 @@ Tests use mocked input and saved screenshots; they never control Roblox. Anythin
 
 ## Branches
 
-`feature/* → dev-rolling → dev → master`. `master` is the stable release that the download links point to. Releases are tagged `vX.Y` and come with a ready-to-install zip built by `Build-Share.ps1`.
+`feature/* → dev-rolling → dev → master`. `master` is the stable release that the download links point to. Releases are tagged `vX.Y` and come with a ready-to-install zip built by `scripts\Build-Share.ps1`.
 
 To undo a merged feature, revert its merge commit on a new branch (`git revert -m 1 <merge-commit>`) and merge that normally. Please don't force-push shared branches.

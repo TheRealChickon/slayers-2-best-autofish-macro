@@ -3,7 +3,7 @@ import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 from screen_space import ScreenSpace, client_problem
 import window_fit
 from window_fit import plan_window, frame_of, fit_window, fitted, WindowFitError
