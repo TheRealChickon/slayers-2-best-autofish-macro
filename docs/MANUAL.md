@@ -106,8 +106,8 @@ laptop, a 16:10 or 4:3 monitor, or ultrawide), startup and recovery resize the
 Roblox window to the largest 16:9 client that fits the monitor's work area and
 centre it (`src/window_fit.py`). A maximized window is restored first. If Roblox is
 fullscreen on a screen that is not 16:9, Full farmer presses F11 once (only with
-Roblox in front) to leave fullscreen and then resizes; Minigame only and damage
-mode ask you to press F11 yourself. Clients from 960 × 540 up to 4K are accepted.
+Roblox in front) to leave fullscreen and then resizes; Minigame only asks you
+to press F11 yourself. Clients from 960 × 540 up to 4K are accepted.
 A screen too small for a 960 × 540 client, or a window Windows refuses to resize,
 stops with a message naming the size and what to change.
 
@@ -216,7 +216,7 @@ The **Run** tab has direct **Minigame only**, **Fish here**, **Full farmer** cho
 
 Use Ctrl+G to cancel an edit; Escape remains a global stop key in Full farmer. In Setup, **Motion** toggles animations. Use a terminal at least 65 columns × 22 rows; 100 × 32 or larger is more comfortable.
 
-The field-terminal view has Run, Catches, Radio (live log), Rig (setup), and Damage pages. Run keeps the current state, pace, last catch, bait estimate and four mode choices together. Detailed recovery history is in Radio, where Catches can also open a filtered catch history. The live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
+The terminal view has Run, Items, Logs, Settings and Predictions pages. Run keeps the current state, pace, last catch, bait estimate and four mode choices together. Detailed recovery history is in Logs. The live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
 
 ## Personal item wiki
 

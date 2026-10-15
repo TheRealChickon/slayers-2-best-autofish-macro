@@ -33,18 +33,20 @@ You don't need to know anything about coding. Download, double-click, done.
 ## The app
 
 <p align="center">
-  <img src="docs/images/app.png" alt="The Autofish app: live status, pace, catches by species and the activity log" width="100%">
+  <img src="docs/images/app.png" alt="The Autofish app: live status, session timer, pace and gold graphs, bait, catch by rarity, activity and the last hour" width="100%">
 </p>
 
-Autofish.exe opens one window with everything in it: what the farmer is doing right now, Start / Pause / Stop, your catch this run, pace, gold per hour, bait left and a live log. It works in light and dark mode and runs offline on your PC.
+Autofish.exe opens one window with everything in it: what the farmer is doing right now, Start / Pause / Stop, a session timer, pace and gold per hour graphs, bait left, your catch by rarity, a live log and a timeline of the last hour. Items shows everything you've collected as a map or a searchable list. It works in light and dark mode and runs offline on your PC.
+
+The **Overlay** button puts a small card in the corner of the Roblox window with your status, pace, gold, rod and latest catches. Clicks pass straight through it to the game.
 
 ## Rod Lab
 
 <p align="center">
-  <img src="docs/images/rod-lab.png" alt="Rod Lab comparing fishing rods: catch mix, gold per hour and crate value" width="100%">
+  <img src="docs/images/rod-lab.png" alt="Rod Lab: what each rod catches, fish per hour, a gold predictor and your rods ranked" width="100%">
 </p>
 
-Rod Lab is a tab in the app. It compares your rods side by side: what each one catches, how much gold per hour it earns, and how many Angler crates it fills.
+Rod Lab is a tab in the app. It shows what each rod catches and how many fish per hour, predicts your gold per hour for any rod, enchant level and titles, and ranks your rods.
 
 ## Install
 

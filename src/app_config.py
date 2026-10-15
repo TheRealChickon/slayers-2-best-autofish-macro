@@ -12,7 +12,6 @@ CODE = Path(__file__).resolve().parent
 ROOT = CODE.parent
 MODES = {'full': 'Full farmer', 'here':'Farm here', 'assist': 'Minigame only', 'spot': 'Fish here',
          'rejoin': 'Auto rejoin'}
-GUI_MODES = {key: label for key, label in MODES.items() if key != 'rejoin'}
 CONFIG = ROOT / 'config.local.json'
 # Bump to switch Overnight and Auto-enable after idle back on once in every saved config.
 OVERNIGHT_DEFAULTS_VERSION = 2
