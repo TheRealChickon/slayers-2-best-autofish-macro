@@ -24,13 +24,151 @@ import numpy as np
 
 
 class IsolatedState(unittest.TestCase):
+    def session_fixture(self):
+        metrics.write('totals.json',{'started':1,'casts':100,'rounds':99,'rewards':90,'active_seconds':500})
+        metrics.write('current-run.json',{'id':'current-session','started':100,'ended':200})
+        self.append('events-20261011-010000.jsonl',[
+            {'at':50,'event':'reward_observed','text':'Ore X3','cycle':1},
+            {'at':105,'event':'started'},
+            {'at':106,'event':'cast','cast':1},
+            {'at':106.5,'event':'cast','cast':1},
+            {'at':107,'event':'minigame','cycle':1},
+            {'at':107.5,'event':'minigame','cycle':1},
+            {'at':108,'event':'reward_observed','text':'Coral X2','cycle':2},
+            {'at':108.5,'event':'reward_observed','text':'Coral X2','cycle':2},
+            {'at':110,'event':'input_paused'},
+            {'at':120,'event':'input_resumed'},
+            {'at':130,'event':'stopped'},
+            {'at':250,'event':'reward_observed','text':'ClownFish X9','cycle':3}])
+        self.append('events-20261011-020000.jsonl',[
+            {'at':140,'event':'started'},
+            {'at':141,'event':'cast','cast':1},
+            {'at':142,'event':'minigame','cycle':1},
+            {'at':143,'event':'reward_observed','text':'GoldenFish X1','cycle':1},
+            {'at':145,'event':'stopped'}])
+
+    def test_t_toggles_only_catches_without_changing_run_logs_or_game_controls(self):
+        self.session_fixture()
+        before={p:p.read_bytes() for p in self.root.iterdir() if p.is_file()}
+        app=terminal_app.Terminal();app.refresh()
+        self.assertFalse(app.show_total)
+        self.assertEqual(sum(qty for _,qty in app.item_rows()),3)
+        self.assertTrue(all(100<=r['at']<=200 for r in app.feed.rows))
+        original_stats={k:app.data[k] for k in ('hooks','casts','collections','active_seconds')}
+        original_logs=list(app.feed.rows)
+        with patch.object(control_actions,'resume') as resume,patch.object(control_actions,'pause') as pause,patch.object(control_actions,'stop') as stop:
+            for page in (0,2):
+                app.switch(page);app.key('t')
+                self.assertFalse(app.show_total)
+            app.switch(1);app.key('T')
+            self.assertTrue(app.show_total)
+            self.assertEqual(sum(qty for _,qty in app.item_rows()),15)
+            self.assertIn('TOTAL','\n'.join(app.body(20)))
+            self.assertEqual(original_stats,{k:app.data[k] for k in original_stats})
+            self.assertEqual(original_logs,app.feed.rows)
+            app.key('t')
+            self.assertFalse(app.show_total)
+            self.assertEqual(sum(qty for _,qty in app.item_rows()),3)
+            self.assertEqual(original_logs,app.feed.rows)
+            resume.assert_not_called();pause.assert_not_called();stop.assert_not_called()
+        self.assertEqual(before,{p:p.read_bytes() for p in self.root.iterdir() if p.is_file()})
+        self.assertFalse(terminal_app.Terminal().show_total)
+
+    def test_session_journal_stops_at_end_and_can_switch_back_to_total(self):
+        self.session_fixture()
+        journal=item_journal.Journal();journal.update(100,200);journal.update(100,200)
+        self.assertEqual(len(journal.items),2)
+        journal.update(1)
+        self.assertEqual(len(journal.items),4)
+        journal.update(100,200)
+        self.assertEqual(len(journal.items),2)
+
+    def test_overnight_defaults_on_and_preserves_a_saved_off(self):
+        self.assertTrue(app_config.load_config()['overnight_enabled'])
+        self.assertTrue(app_config.load_config()['overnight_auto_enable_idle'])
+        app_config.save_config({'overnight_enabled':False,'overnight_auto_enable_idle':False})
+        self.assertFalse(app_config.load_config()['overnight_enabled'])
+        self.assertFalse(app_config.load_config()['overnight_auto_enable_idle'])
+
+    def test_overnight_switches_back_on_once_for_an_older_saved_off(self):
+        app_config.CONFIG.write_text(json.dumps({'overnight_enabled':False,'overnight_auto_enable_idle':False}))
+        config=app_config.load_config()
+        self.assertTrue(config['overnight_enabled']);self.assertTrue(config['overnight_auto_enable_idle'])
+        app_config.save_config({'overnight_enabled':False})
+        self.assertFalse(app_config.load_config()['overnight_enabled'])
+
+    def test_log_navigation_reaches_last_row_without_enabling_follow(self):
+        app=terminal_app.Terminal();app.page=2;app.height=22;app.follow=False
+        app.feed.rows=[{'text':f'entry-{i}','at':i,'level':'normal','group':'fishing'} for i in range(100)]
+        for _ in range(120):app.key('DOWN')
+        lines=[terminal_app.ANSI.sub('',line) for line in app.body(10)]
+        self.assertIn('entry-99',lines[-1]);self.assertEqual(app.scroll,92)
+        self.assertFalse(app.follow);self.assertIn('Rows 93–100 of 100',lines[1])
+        app.key('PGUP');self.assertEqual(app.scroll,84)
+        lines=[terminal_app.ANSI.sub('',line) for line in app.body(10)]
+        self.assertIn('8 newer',lines[1])
+        app.key('PGDN');self.assertEqual(app.scroll,92)
+
+    def test_finished_run_keeps_browsing_anchor_when_full_archive_is_loaded(self):
+        metrics.write('totals.json',{'started':10})
+        metrics.write('current-run.json',{'id':'run-1','started':10,'ended':None})
+        self.append('events-test.jsonl',[{'at':11+i,'event':'cast','cast':i} for i in range(4005)])
+        app=terminal_app.Terminal();app.page=2;app.refresh();app.follow=False;app.scroll=100
+        anchor=app.feed.rows[app.scroll]['id']
+        metrics.write('current-run.json',{'id':'run-1','started':10,'ended':5000})
+        app.refresh()
+        self.assertEqual(len(app.feed.rows),4005)
+        self.assertEqual(app.feed.rows[app.scroll]['id'],anchor)
+        self.assertFalse(app.follow)
+        self.assertTrue(all(10<=r['at']<=5000 for r in app.feed.rows))
+        self.assertIn('Finished',terminal_app.ANSI.sub('',app.body(18)[1]))
+
+    def test_new_current_run_returns_to_follow_and_excludes_previous_logs(self):
+        metrics.write('totals.json',{'started':10})
+        metrics.write('current-run.json',{'id':'old','started':10,'ended':None})
+        self.append('events-test.jsonl',[{'at':11+i,'event':'cast','cast':i} for i in range(30)])
+        app=terminal_app.Terminal();app.refresh();app.follow=False;app.scroll=12
+        metrics.write('totals.json',{'started':100})
+        metrics.write('current-run.json',{'id':'new','started':100,'ended':None})
+        self.append('events-test.jsonl',[{'at':101,'event':'cast','cast':1}])
+        app.refresh()
+        self.assertTrue(app.follow);self.assertEqual(app.scroll,0)
+        self.assertTrue(all(r['at']>=100 for r in app.feed.rows))
+
+    def test_previous_run_selector_skips_duplicate_current_run(self):
+        from discord_hourly import atomic_json
+        for run_id,at in [('old',10),('new',20)]:
+            atomic_json(self.root/'runs'/run_id/'run.json',{'id':run_id,'started':at,'ended':at+5})
+        metrics.write('current-run.json',{'id':'new','started':20,'ended':25})
+        app=terminal_app.Terminal();app.page=2;app.data={'log_run':{'id':'new'}}
+        app.key('r');self.assertEqual(app.log_run_id,'old')
+        app.key('r');self.assertEqual(app.log_run_id,'current')
+
+    def test_inventory_quantity_is_a_warning_without_inflating_journal(self):
+        self.append('events-test.jsonl',[{'at':11,'event':'reward_observed','text':'X2964 Bait'},
+                    {'at':12,'event':'reward_observed','text':'Coral X2'}])
+        before=(self.root/'events-test.jsonl').read_bytes()
+        journal=item_journal.Journal();journal.update(10)
+        self.assertEqual(journal.counts,{'Coral':2})
+        feed=live_feed.LiveFeed();feed.update(10)
+        self.assertEqual(len(feed.filtered('','Catches')),1)
+        warnings=feed.filtered('','Warnings')
+        self.assertEqual(len(warnings),1)
+        self.assertIn('Ignored unconfirmed reward read',warnings[0]['text'])
+        self.assertEqual((self.root/'events-test.jsonl').read_bytes(),before)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         for module in (metrics, item_journal, live_feed, control_actions, status_view):
             patcher = patch.object(module, 'RUN', self.root)
             patcher.start(); self.addCleanup(patcher.stop)
+        patcher=patch.object(terminal_app,'data_directory',return_value=self.root)
+        patcher.start();self.addCleanup(patcher.stop)
         patcher = patch.object(app_config, 'CONFIG', self.root/'config.local.json')
+        patcher.start(); self.addCleanup(patcher.stop)
+        # Answer the first-run gamepass question so Terminal() opens on its pages.
+        patcher = patch.dict(app_config.DEFAULTS, {'spawn_gamepass': True})
         patcher.start(); self.addCleanup(patcher.stop)
         self.addCleanup(self.temporary.cleanup)
 
@@ -107,7 +245,7 @@ class IsolatedState(unittest.TestCase):
 
     def test_terminal_navigation_search_and_edit_cancel(self):
         app=terminal_app.Terminal()
-        app.journal.counts=collections.Counter({'Coral':4,'Ore':2})
+        app.catch_journal.counts=collections.Counter({'Coral':4,'Ore':2})
         app.key('2'); app.key('DOWN'); app.key('ENTER')
         self.assertEqual((app.page,app.query,app.category),(2,'Ore',1))
         app.key('/'); app.key('BACKSPACE'); app.key('x'); app.key('CANCEL')
@@ -124,6 +262,21 @@ class IsolatedState(unittest.TestCase):
         app.body(18); self.assertEqual(app.scroll,position)
         app.key('END'); self.assertTrue(app.follow)
 
+    def test_prediction_page_scrolls_to_values_and_duration_is_read_only(self):
+        import catch_predictions
+        rows=[{'at':0,'event':'started','source':'events-20261009-010000.jsonl'},
+              {'at':900,'event':'stopped','source':'events-20261009-010000.jsonl'}]
+        rows.extend({'at':i,'event':'reward_observed','source':'events-20261009-010000.jsonl',
+                     'cycle':i,'text':'Item '+str(i)+' X1'} for i in range(1,26))
+        app=terminal_app.Terminal();app.switch(4);app.height=22
+        app.predictions=catch_predictions.calculate(rows,{'id':'test','started':0,'ended':900})
+        app.key('END');self.assertGreater(app.scroll,0)
+        self.assertIn('Actual sold proceeds','\n'.join(app.body(10)))
+        app.key('HOME');self.assertEqual(app.scroll,0)
+        with patch.object(control_actions,'resume') as resume,patch.object(terminal_app,'save_config') as save:
+            app.key('h');app.buffer='12';app.finish_edit()
+            self.assertEqual(app.prediction_hours,12);resume.assert_not_called();save.assert_not_called()
+
     def test_pause_in_flight_prevents_duplicate_controller(self):
         (self.root/'STOP').write_text('Paused by user')
         with patch.object(control_actions,'alive',side_effect=lambda name='supervisor-pid.json':name=='supervisor-pid.json'), patch.object(control_actions,'starting',return_value=False), patch.object(control_actions.subprocess,'Popen') as spawn:
@@ -131,6 +284,35 @@ class IsolatedState(unittest.TestCase):
         self.assertIn('still finishing',result)
         spawn.assert_not_called()
         self.assertTrue((self.root/'STOP').exists())
+
+    def test_combat_modes_are_rejected_before_starting_input(self):
+        with patch.object(control_actions.subprocess, 'Popen') as spawn:
+            for mode in ('damage', 'boss'):
+                with self.assertRaisesRegex(ValueError, 'Unknown controller mode'):
+                    control_actions.resume(mode)
+            spawn.assert_not_called()
+
+    def test_old_boss_settings_migrate_to_fishing_without_resetting_data_or_titles(self):
+        app_config.CONFIG.write_text(json.dumps({'mode': 'boss', 'boss': {'invalid': True},
+            'data_dir': 'saved-run', 'auto_fishing_titles': True}))
+        values = app_config.load_config()
+        self.assertEqual(values['mode'], 'full')
+        self.assertEqual(values['data_dir'], 'saved-run')
+        self.assertTrue(values['auto_fishing_titles'])
+        self.assertNotIn('boss', values)
+
+    def test_running_peer_blocks_start_without_clearing_manual_stop(self):
+        (self.root/'STOP').write_text('Stopped by user')
+        peer = self.root/'sanemi'; peer.mkdir()
+        (peer/'supervisor-pid.json').write_text(json.dumps({'pid': 555, 'created': 123}))
+        app_config.save_config({'peer_data_dir': str(peer)})
+        with patch.object(control_actions.psutil, 'Process') as process, \
+             patch.object(control_actions.subprocess, 'Popen') as spawn:
+            process.return_value.create_time.return_value = 123
+            with self.assertRaisesRegex(RuntimeError, 'other Slayers 2 macro'):
+                control_actions.resume('full')
+            spawn.assert_not_called()
+        self.assertEqual((self.root/'STOP').read_text(), 'Stopped by user')
 
     def test_timed_full_farmer_stops_at_local_clock_today(self):
         fixed=datetime.datetime(2026,9,27,3,50,tzinfo=datetime.timezone(datetime.timedelta(hours=2)))
@@ -153,13 +335,37 @@ class IsolatedState(unittest.TestCase):
         with patch.object(control_actions,'stop',return_value='Stopped') as stop:
             app.key('s'); stop.assert_called_once()
 
-    def test_run_page_launches_each_explicit_mode_without_changing_focus_itself(self):
+    def test_first_run_gamepass_prompt_answers_and_still_allows_stop(self):
+        with patch.dict(app_config.DEFAULTS, {'spawn_gamepass': None}):
+            app=terminal_app.Terminal()
+            self.assertIn('FIRST-TIME SETUP', '\n'.join(app.gamepass_question()))
+            with patch.object(control_actions,'stop',return_value='Stopped') as stop:
+                app.key('s'); stop.assert_called_once()
+            app.key('x'); self.assertIsNone(app.config['spawn_gamepass'])
+            app.key('n'); self.assertFalse(app.config['spawn_gamepass'])
+            self.assertEqual(app_config.load_config()['mode'], 'here')
+
+    def test_run_page_leads_with_full_farmer_and_keeps_other_modes_one_level_down(self):
         app=terminal_app.Terminal()
-        with patch.object(app,'job',side_effect=lambda fn:fn()), patch.object(control_actions,'resume') as resume:
-            for index,mode in enumerate(('assist','spot','full')):
-                app.selection=index;app.key('ENTER')
-                resume.assert_called_with(mode)
+        with patch.object(app,'job',side_effect=lambda fn:fn()), patch.object(control_actions,'resume') as resume,\
+                patch.object(control_actions,'restart_full') as restart,patch.object(control_actions,'focus_game') as focus:
+            app.selection=0;app.key('ENTER');resume.assert_called_with('full')
+            app.selection=3;app.key('ENTER');restart.assert_called_once_with()
             app.key('END');self.assertEqual(app.selection,5)
+            app.key('ENTER');self.assertTrue(app.show_other_modes)
+            for offset,mode in enumerate(('here','spot','assist','rejoin')):
+                app.selection=6+offset;app.key('ENTER');resume.assert_called_with(mode)
+            app.key('END');self.assertEqual(app.selection,10)
+            self.assertEqual(resume.call_count,5);focus.assert_not_called()
+
+    def test_buy_bait_now_pauses_a_running_farmer_before_launching(self):
+        app=terminal_app.Terminal()
+        live=[True,True,False]
+        with patch.object(control_actions,'alive',side_effect=lambda *a:live.pop(0) if live else False),\
+                patch.object(control_actions,'starting',return_value=False),\
+                patch.object(control_actions,'pause') as pause,patch('bait_buy.launch',return_value='launched') as launch:
+            self.assertEqual(app.buy_bait_now(),'launched')
+        pause.assert_called_once();launch.assert_called_once()
 
     def test_run_modes_and_stop_reason_are_visible_with_keyboard_scrolling(self):
         (self.root/'STOP').write_text('Stopped by F12 in Roblox')
@@ -169,11 +375,10 @@ class IsolatedState(unittest.TestCase):
         self.assertIn('Stopped by F12 in Roblox','\n'.join(fishing_cli.status_lines(data)))
         app=terminal_app.Terminal();app.data=data
         normal='\n'.join(app.render(100,32))
-        for text in ('Minigame only','Fish here','Full farmer','Stopped by F12 in Roblox'):
+        for text in ('Start Full farmer','Other modes','Full farmer','Stopped by F12 in Roblox','RECENT'):
             self.assertIn(text,normal)
-        for text in ('reel', 'cast', 'collect', 'rejoin'):
-            self.assertIn(text,normal)
-        for index,label in enumerate(('Minigame only','Fish here','Full farmer','Pause','Stop','Export log')):
+        app.show_other_modes=True
+        for index,(label,_,_,_) in enumerate(app.run_actions()):
             app.selection=index
             self.assertIn('› '+label,'\n'.join(app.render(65,22)))
 

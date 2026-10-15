@@ -39,6 +39,18 @@ def enable_color(force=False):
 def status_lines(data, colors=False):
     c = lambda text, tone='white': color(text, tone, colors)
     tone = state_tone(data['state'],data['running'] and not data['stop_requested'])
+    if data.get('mode') == 'rejoin':
+        guard = data.get('rejoin') or {}
+        return [c('AUTO REJOIN', 'gold') + '  /  ' + c(data['state'].upper(), tone),
+                '  ' + (data.get('reason') or guard.get('detail') or 'Waiting to start'), '',
+                f"  Account         {guard.get('account') or 'Not configured'}",
+                f"  Presence        {data['presence']}",
+                f"  Rejoins         {guard.get('rejoins', 0):,}",
+                f"  Attempts        {guard.get('attempts', 0):,}",
+                f"  Client launches {guard.get('launches', 0):,}",
+                f"  Retry in        {guard.get('retry_seconds', 0)}s" if guard.get('retry_seconds') else '',
+                c('  F8 pauses in Roblox. Pause, Continue and Stop work from this CLI.', 'gray'),
+                c('  Watches the connection only; no fishing, attacks or gear changes.', 'gray')]
     remain = data['bait_remaining_estimate']
     hours = data['bait_hours_remaining_estimate']
     recent=data.get('recent')
@@ -83,6 +95,7 @@ def parser(prog='autofish'):
         command.add_argument('--json', action='store_true', help='Machine-readable JSON')
         if name == 'items':
             command.add_argument('--filter', default='', help='Match part of an item name')
+            command.add_argument('--total', action='store_true', help='Show lifetime catches instead of this session')
     logs = sub.add_parser('logs', help='Read collection or recovery logs')
     logs.add_argument('--tail', type=int, default=20, metavar='N')
     logs.add_argument('--all', action='store_true')
@@ -90,35 +103,55 @@ def parser(prog='autofish'):
     logs.add_argument('--activity', action='store_true', help='Show recovery/control events instead of items')
     logs.add_argument('--filter', default='')
     logs.add_argument('--json', action='store_true', help='One JSON object per line')
+    logs.add_argument('--run', default='current', help='Current run or ID from autofish runs')
+    runs=sub.add_parser('runs',help='List archived runs independently of lifetime counters')
+    runs.add_argument('--json',action='store_true')
+    predictions=sub.add_parser('predictions',help='Read-only current or archived run catch projections')
+    predictions.add_argument('--hours',type=float,default=8)
+    predictions.add_argument('--run',default='current')
+    predictions.add_argument('--json',action='store_true')
+    night=sub.add_parser('overnight',help='Persistent opt-in unattended farming settings')
+    night.add_argument('operation',choices=('status','on','off'),nargs='?',default='status')
+    night.add_argument('--autofocus',choices=('on','off'))
+    night.add_argument('--auto-idle',choices=('on','off'))
+    night.add_argument('--idle-minutes',type=int)
+    night.add_argument('--focus-grace',type=int)
     watch = sub.add_parser('watch', help='Live colored status; Ctrl+C exits the view')
     watch.add_argument('--interval', type=float, default=2, metavar='SECONDS')
     plan = sub.add_parser('plan', help='Estimate bait for a future session using the observed hook rate')
     plan.add_argument('--hours', type=float, required=True)
     sub.add_parser('pause', help='Release game input and retain counters')
     resume=sub.add_parser('continue', aliases=['resume'], help='Explicitly start the selected mode')
-    resume.add_argument('--mode',choices=('full','assist','spot'),help='Full farmer, minigame only, or fish here')
+    resume.add_argument('--mode',choices=tuple(MODES),help='Full farmer, minigame only, fish here, ')
     resume.add_argument('--until',help='Stop Full farmer at HH:MM local time today')
     sub.add_parser('assist',help='Start minigame only; you cast and collect manually')
     sub.add_parser('spot',help='Click, reel and collect; F8 starts/pauses/resumes, losing focus pauses automatically')
+    sub.add_parser('rejoin',help='Watch configured Roblox account and reconnect; no fishing or attacks')
+    full=sub.add_parser('full',help='Start Full farmer with rejoin, rod equip and automatic recovery')
+    full.add_argument('--restart',action='store_true',help='Stop the current controller and rejoin; retain counters')
+    full.add_argument('--overnight',action='store_true',help='Enable overnight autofocus and idle activation')
     reference=sub.add_parser('reference',help='Save a local fishing view while paused')
     reference.add_argument('operation',choices=('status','save','disable'),nargs='?',default='status')
     reference.add_argument('--position',action='store_true',help='Calibrate small position corrections as well as camera movement')
     reference.add_argument('--boxes',help='JSON list of x,y,width,height boxes in a 1280x720 screenshot; two near surfaces first, then optional distant scenery')
+    route=sub.add_parser('route',help='Record a manual shrine/bait/reset demonstration; no replay or buying automation')
+    route.add_argument('operation',choices=('record','status','folder'),nargs='?',default='status')
+    from bait_buy import add_parser as add_bait_parser
+    add_bait_parser(sub)
+    from baitbot_controls import add_parser as add_baitbot_parser
+    add_baitbot_parser(sub)
+    from rod_stats import add_parser as add_rods_parser
+    add_rods_parser(sub)
     sub.add_parser('diagnostics',help='Show the last eight failure reports and local screenshot paths')
     sub.add_parser('stop', help='Stop game input and retain counters')
     sub.add_parser('export', help='Save the complete item log and totals as CSV')
     wiki=sub.add_parser('wiki', help='Build and open the local item wiki from saved captures')
     wiki.add_argument('--no-open', action='store_true', help='Build files without opening the browser')
     wiki.add_argument('--site', action='store_true', help='Open your configured private ChatGPT Site')
-    build=sub.add_parser('build', aliases=['gear'], help='Show your saved damage loadout and mastery estimate')
-    mastery=build.add_mutually_exclusive_group()
-    mastery.add_argument('--mastery', type=int, help='Preview this mastery without saving it')
-    mastery.add_argument('--save-mastery', type=int, metavar='LEVEL', help='Save your current Gauntlet mastery')
-    build.add_argument('--json', action='store_true', help='Machine-readable report')
     webhook=sub.add_parser('webhook', help='Set or inspect the hourly Discord webhook')
     webhook.add_argument('operation', choices=('status','set','verify','remove'), nargs='?', default='status')
     tui=sub.add_parser('tui', help='Keyboard interface with live logs and settings')
-    tui.add_argument('--page', choices=('run','items','log','setup','build'), default='run')
+    tui.add_argument('--page', choices=('run','items','log','setup','predictions'), default='run')
     sub.add_parser('shell', help='Interactive command prompt; does not start fishing')
     from control_api import COMMANDS
     api = sub.add_parser('api', help='Versioned JSON interface for local integrations')
@@ -140,17 +173,24 @@ def log_line(row, activity=False, colors=False):
 
 
 def stream_logs(args, journal, colors):
+    from run_log import select, rows as run_rows
+    from app_config import data_directory
     if args.tail < 0:
         raise ValueError('--tail must be zero or greater')
     seen, previous_run = set(), None
     first = True
     while True:
         data = snapshot(journal)
+        selected=select(data_directory(),getattr(args,'run','current'))
+        run_start=selected.get('started',data['started']);run_end=selected.get('ended')
         if data['started'] != previous_run:
             seen.clear()
             previous_run = data['started']
             first = True
-        rows = journal.activity if args.activity else journal.items
+        if args.activity:
+            from live_feed import describe
+            rows=[{**r,'kind':r.get('event',''),'message':describe(r)} for r in run_rows(data_directory(),selected)]
+        else:rows=[r for r in journal.items if (run_start or 0)<=r['at'] and (run_end is None or r['at']<=run_end)]
         rows = [r for r in rows if args.filter.lower() in json.dumps(r).lower()]
         # Include the occurrence index so two equal-timestamp drops remain distinct.
         keyed = [(json.dumps(row, sort_keys=True) + ':' + str(i), row) for i, row in enumerate(rows)]
@@ -167,6 +207,71 @@ def stream_logs(args, journal, colors):
 
 def execute(args, colors=False):
     command = args.command or 'status'
+    if command=='full':
+        if args.restart: message=actions.restart_full(overnight=args.overnight)
+        else:
+            if args.overnight:
+                from app_config import save_config
+                save_config({'overnight_enabled':True,'overnight_autofocus':True,'overnight_auto_enable_idle':True})
+            message=actions.resume('full')
+        print(message)
+        return 0
+    if command=='bait':
+        from bait_buy import execute as buy_bait
+        return buy_bait(args)
+    if command=='rods':
+        from rod_stats import command as run_rods
+        return run_rods(args)
+    if command=='baitbot':
+        from baitbot_controls import execute as run_baitbot
+        return run_baitbot(args)
+    if command=='route':
+        from app_config import data_directory
+        root=data_directory()
+        if args.operation=='record':
+            from bait_route_recorder import launch
+            print(launch())
+        elif args.operation=='folder':
+            path=root/'bait-routes';path.mkdir(parents=True,exist_ok=True);os.startfile(str(path))
+        else:
+            from metrics import read
+            print(json.dumps({'recorder_open':actions.alive('route-recorder-pid.json'),
+                'folder':str(root/'bait-routes'),'latest':read('bait-route-latest.json') or None},indent=2))
+        return 0
+    if command=='predictions':
+        from app_config import data_directory
+        from run_log import select
+        from catch_predictions import load
+        p=load(data_directory(),select(data_directory(),args.run),args.hours)
+        if args.json:print(json.dumps(p,indent=2))
+        else:
+            from terminal_app import Terminal,ANSI
+            view=Terminal.__new__(Terminal);view.predictions=p
+            print('\n'.join(ANSI.sub('',line) for line in view.prediction_rows()))
+        return 0
+    if command=='overnight':
+        from app_config import load_config,save_config
+        changes={}
+        if args.operation!='status':changes['overnight_enabled']=args.operation=='on'
+        for option,key in (('autofocus','overnight_autofocus'),('auto_idle','overnight_auto_enable_idle')):
+            if getattr(args,option) is not None:changes[key]=getattr(args,option)=='on'
+        for option,key in (('idle_minutes','overnight_idle_minutes'),('focus_grace','overnight_focus_grace_seconds')):
+            if getattr(args,option) is not None:changes[key]=getattr(args,option)
+        if args.operation=='off':changes['overnight_auto_enable_idle']=False
+        config=save_config(changes) if changes else load_config()
+        if config['overnight_enabled'] or config['overnight_auto_enable_idle']:
+            from overnight_guard import ensure_guard
+            ensure_guard()
+        print(json.dumps({k:v for k,v in config.items() if k.startswith('overnight_')},indent=2))
+        return 0
+    if command=='runs':
+        from run_log import list_runs
+        from app_config import data_directory
+        rows=list_runs(data_directory())
+        if args.json:print(json.dumps(rows,indent=2))
+        else:
+            for row in rows:print(row['id']+'  '+('Finished' if row.get('ended') else 'Live')+'  '+row.get('reason',''))
+        return 0
     if command=='start':
         from start_picker import start
         return start(args, colors)
@@ -204,13 +309,6 @@ def execute(args, colors=False):
         print(f'Wiki: {path}')
         print(f"{counts['inventory']} owned variants · {counts['archive_only']} archive-only entries")
         return 0
-    if command in ('build', 'gear'):
-        from damage_build import report, save_mastery, text_lines
-        if args.save_mastery is not None:
-            save_mastery(args.save_mastery)
-        data = report(mastery=args.mastery)
-        print(json.dumps(data, indent=2, ensure_ascii=False) if args.json else '\n'.join(text_lines(data)))
-        return 0
     if command=='webhook':
         from app_config import data_directory
         from discord_hourly import SECRET_FILE, configure_secret, load_secret, request_webhook
@@ -233,17 +331,18 @@ def execute(args, colors=False):
         response, code = dispatch(args.operation, args.request_id, args.limit)
         print(json.dumps(response, ensure_ascii=True), flush=True)
         return code
-    if command in ('pause', 'stop', 'continue', 'resume', 'assist', 'spot'):
+    if command in ('pause', 'stop', 'continue', 'resume', 'assist', 'spot', 'rejoin'):
         action = {'pause': actions.pause, 'stop': actions.stop,
                   'continue':lambda:actions.resume(getattr(args,'mode',None),getattr(args,'until',None)),
                   'resume':lambda:actions.resume(getattr(args,'mode',None),getattr(args,'until',None)),
                   'assist':lambda:actions.resume('assist'),
-                  'spot':lambda:actions.resume('spot')}[command]
+                  'spot':lambda:actions.resume('spot'),
+                  'rejoin':lambda:actions.resume('rejoin')}[command]
         print(color(action(), 'green' if command in ('continue', 'resume') else 'gold', colors))
         return 0
     if command == 'tui':
         from terminal_app import Terminal
-        client=Terminal();client.switch(('run','items','log','setup','build').index(args.page))
+        client=Terminal();client.switch(('run','items','log','setup','predictions').index(args.page))
         return client.run()
     if command == 'shell':
         return shell(colors)
@@ -252,11 +351,14 @@ def execute(args, colors=False):
     if command == 'status':
         print(json.dumps(data, indent=2) if getattr(args, 'json', False) else '\n'.join(status_lines(data, colors)))
     elif command == 'items':
+        if not args.total:
+            run=data.get('log_run') or {}
+            journal.update(run.get('started',data['started']),run.get('ended'))
         rows = [{'item': item, 'quantity': qty} for item, qty in journal.counts.most_common() if args.filter.lower() in item.lower()]
         if args.json:
             print(json.dumps(rows, indent=2))
         else:
-            print(color('COLLECTED THIS RUN', 'gold', colors))
+            print(color('LIFETIME CATCHES' if args.total else 'COLLECTED THIS SESSION', 'gold', colors))
             for row in rows:
                 print(f"  {row['item']:<32} x{row['quantity']:,}")
             print(f"  {'Total':<32} {sum(row['quantity'] for row in rows):,}")
@@ -284,7 +386,7 @@ def execute(args, colors=False):
 
 def shell(colors):
     print('\n'.join(status_lines(snapshot(), colors)))
-    print(color('\nModes: assist, spot, continue --mode full\nCommands: status, watch, items, logs, build, wiki, pause, continue, stop, plan --hours 8, export', 'gray', colors))
+    print(color('\nModes: assist, spot, rejoin, continue --mode full\nCommands: status, watch, items, logs, wiki, pause, continue, stop, plan --hours 8, export', 'gray', colors))
     print('help shows options. exit closes this prompt and leaves the bot unchanged.\n')
     while True:
         try:
@@ -314,6 +416,11 @@ def shell(colors):
 
 
 def main(argv=None, prog='autofish'):
+    # Redirected Windows output otherwise uses an ANSI code page and aborts
+    # a full archived log on arrows/item names that it cannot encode.
+    if os.name=='nt':
+        for stream in (sys.stdout,sys.stderr):
+            if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='replace')
     args = parser(prog).parse_args(argv)
     colors = enable_color(args.color) and not args.no_color
     if colors and args.command in ('watch', 'shell', 'tui'):

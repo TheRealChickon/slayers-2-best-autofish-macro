@@ -12,5 +12,10 @@
   "auto_rod": true,
   "inventory_check": true,
   "reduced_motion": false,
-  "place_id": 16205713724
+  "place_id": 16205713724,
+  "overnight_enabled": true,
+  "overnight_autofocus": true,
+  "overnight_auto_enable_idle": true,
+  "overnight_idle_minutes": 10,
+  "overnight_focus_grace_seconds": 30
 }

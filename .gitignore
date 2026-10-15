@@ -1,6 +1,8 @@
 /.venv/
+/.runtime/
 /config.local.json
 /runtime.local.json
+/baitbot.local.json
 /data/
 /Logs/
 /Screenshots/
@@ -8,6 +10,13 @@
 *.jsonl
 *.log
 *.mp4
+*.avi
 *.tmp
 __pycache__/
 *.pyc
+/share/
+*.dpapi
+/monitor.local.json
+*.local.json
+.env
+/private/

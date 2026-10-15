@@ -49,7 +49,7 @@ class InventoryDriver:
 
     def guard(self):
         self.inp.guard_press(True)
-        if any(self.user.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):
+        if not getattr(self.inp,'physical_stop_owned',False) and any(self.user.GetAsyncKeyState(k)&0x8000 for k in (27,120,123)):
             (RUN/'STOP').write_text('Stopped by physical hotkey')
         if (RUN/'STOP').exists():
             self.inp.release(); raise RuntimeError('Stopped by user during inventory check')
@@ -72,7 +72,7 @@ class InventoryDriver:
         self.guard();self.move_pointer(*self.screen.point(x,y))
 
     def click(self,x,y):
-        self.move(x,y);self.sleep(.10);self.move(x+1,y);self.sleep(.06);self.move(x,y);self.sleep(.10);self.inp.hold(True)
+        self.move(x,y);self.sleep(.10);self.move(x+1,y);self.sleep(.06);self.move(x,y);self.sleep(.10);self.move(x,y);self.inp.hold(True)
         try:self.sleep(.16)
         finally:self.inp.hold(False)
         self.sleep(.2)
@@ -133,7 +133,53 @@ class InventoryScanner:
         rows=self.driver.text(frame[140:235,660:905])
         text=' '.join(r[1] for r in rows)
         match=re.search(r'All\s*[\(\[]?\s*(\d+)',text,re.I)
-        return int(match[1]) if match else None
+        total=int(match[1]) if match else None
+        self.count_evidence={'crop':[660,140,905,235],
+            'rows':[{'text':r[1],'score':float(r[2])} for r in rows], 'parsed_total':total}
+        return total
+
+    def record_count_rejection(self,frame,total):
+        # Reuse the rejected frame; diagnostics must not open/capture the menu.
+        details={'at':time.time(),'reason':'unreadable_header' if total is None else 'outside_first_page_limit',
+            'parsed_total':total,'supported_count':[1,100],
+            'header':getattr(self,'count_evidence',{}),'frame':'inventory-count-unreadable.jpg'}
+        try:
+            details['frame_saved']=bool(cv2.imwrite(str(RUN/details['frame']),frame,[cv2.IMWRITE_JPEG_QUALITY,85]))
+            write('inventory-count-evidence.json',details)
+            self.event('inventory_count_evidence',**details)
+        except OSError:
+            # A diagnostic write cannot turn an optional comparison into a
+            # fatal worker failure. The original bounded warning still applies.
+            pass
+
+    def tab_target(self,frame,label):
+        x,y,w,h=620,100,300,600
+        rows=self.driver.text(frame[y:y+h,x:x+w])
+        matches=[r for r in rows if re.match(r'^'+re.escape(label)+r'\s*[\(\[]\d+',r[1],re.I)]
+        if len(matches)!=1:raise ValueError(label+' inventory filter is unreadable')
+        points=np.asarray(matches[0][0])
+        return x+int(points[:,0].mean()),y+int(points[:,1].mean())
+
+    def confirm_empty_search(self,frame):
+        crop=frame[45:128,920:1250]
+        self.search_evidence={'crop':[920,45,1250,128],'readings':[]}
+        for scale in (1,2):
+            rows=self.driver.text(crop if scale==1 else cv2.resize(crop,None,fx=scale,fy=scale))
+            # OCR can return the words of this single-line placeholder in
+            # detection order. Only screen order can establish its exact text.
+            rows=sorted(rows,key=lambda r:float(np.asarray(r[0])[:,0].mean()))
+            text=''.join(row[1] for row in rows)
+            self.search_evidence['readings'].append({'scale':scale,
+                'rows':[{'text':r[1],'score':float(r[2])} for r in rows], 'text':text})
+            if re.sub(r'[^a-z]','',text.lower())=='itemnamehere':return
+        details={'at':time.time(),'reason':'empty_search_unconfirmed',
+            'search':self.search_evidence,'frame':'inventory-search-unreadable.jpg'}
+        try:
+            details['frame_saved']=bool(cv2.imwrite(str(RUN/details['frame']),frame,[cv2.IMWRITE_JPEG_QUALITY,85]))
+            write('inventory-search-evidence.json',details)
+            self.event('inventory_search_evidence',**details)
+        except OSError:pass
+        raise ValueError('Inventory search is unreadable or filtered; keep the unknown label until empty search is confirmed')
 
     def open(self):
         d=self.driver;d.inp.release()
@@ -141,16 +187,19 @@ class InventoryScanner:
             d.key('M');d.sleep(.6)
         # Inventory is the first section in the observed game menu.
         frame=d.capture()
-        labels=' '.join(r[1] for r in d.text(frame[340:470,10:340])).lower()
-        if 'inventory' not in labels:raise RuntimeError('The inventory menu was not visible; recovery required')
-        d.click(155,395);d.click(812,186)
+        # The side menu's vertical position changed in a game update (Inventory
+        # moved from y≈395 to y≈525 at 1440p). Read a taller strip and click the
+        # label where it actually is.
+        top=250
+        rows=[r for r in d.text(frame[top:820,10:400]) if 'inventory' in r[1].lower()]
+        if not rows:raise RuntimeError('The inventory menu was not visible; recovery required')
+        y=top+float(np.asarray(rows[0][0])[:,1].mean())
+        d.click(155,round(y));frame=d.capture();d.click(*self.tab_target(frame,'All'))
         # Never send movement or drop keys to clear a search. A missed textbox
         # click can let Roblox interpret Ctrl+A as movement underneath the menu.
         d.move(2060,1080);d.sleep(.3)
         frame=d.capture()
-        search=''.join(row[1] for row in d.text(frame[80:143,932:1245])).lower()
-        if 'itemnamehere' not in re.sub(r'[^a-z]','',search):
-            raise ValueError('Clear the inventory search field for automatic item identification')
+        self.confirm_empty_search(frame)
         return frame
 
     def read_name(self,x,y):
@@ -211,7 +260,7 @@ class InventoryScanner:
         d.deadline=time.monotonic()+10
         try:
             self.open()
-            d.click(810,577)
+            d.click(*self.tab_target(d.capture(),'Fishing'))
             frame=d.capture()
             selected=frame[548:606,725:892]
             if np.mean(np.all(selected>180,axis=2))<.25:
@@ -243,6 +292,7 @@ class InventoryScanner:
             self.progress(done=0,total=0)
             frame=self.open();total=self.inventory_count(frame)
             if total is None or not 1<=total<=100:
+                self.record_count_rejection(frame,total)
                 raise ValueError('Inventory is not fully visible; keep the unknown label until a complete comparison is available')
             # A complete first-page snapshot is required. Never infer from an offscreen item.
             result=collections.Counter();read_items=[]
@@ -282,7 +332,7 @@ class InventoryScanner:
     def close(self):
         d=self.driver
         frame=d.capture()
-        labels=' '.join(r[1] for r in d.text(frame[340:470,10:340])).lower()
+        labels=' '.join(r[1] for r in d.text(frame[250:820,10:400])).lower()
         if self.inventory_count(frame) is not None or 'inventory' in labels:
             d.guard();d.key('M');d.sleep(.5);d.move(1650,800)
             if self.inventory_count(d.capture()) is not None:
@@ -301,6 +351,7 @@ class InventoryWatcher:
                     'place':config.get('place_id')}
         self.baseline=None;self.known=collections.Counter();self.pending=[]
         self.overflow=False;self.round_active=False;self.failures=0;self.next_check_at=0
+        self.unsupported_total=None;self.unsupported_at=0;self.deferred_notice=False
         saved=read('inventory-watch.json')
         legacy=read('inventory-baseline.json')
         self.had_checkpoint=bool(saved or legacy)
@@ -320,13 +371,30 @@ class InventoryWatcher:
         elif legacy:
             # Old baselines lack known-catch accounting; never guess from them.
             self.next_check_at=min(now+CHECK_INTERVAL,legacy.get('at',0)+CHECK_INTERVAL)
+        if saved.get('scope')==self.scope:
+            total=saved.get('unsupported_total')
+            if isinstance(total,int) and total>100:
+                self.unsupported_total=total;self.unsupported_at=saved.get('unsupported_at',0)
+            elif saved.get('failures',0)>0 and saved.get('baseline') is None:
+                # Migrate only recent count evidence from this unchanged run.
+                evidence=read('inventory-count-evidence.json')
+                if (evidence.get('reason')=='outside_first_page_limit'
+                        and isinstance(evidence.get('parsed_total'),int) and evidence['parsed_total']>100
+                        and self.scope['supervisor'] is not None
+                        and evidence.get('at',0)>=self.scope['supervisor']
+                        and 0<=now-evidence.get('at',0)<CACHE_MAX_AGE):
+                    self.unsupported_total=evidence['parsed_total'];self.unsupported_at=evidence['at']
+
+    @property
+    def comparison_blocked(self):return self.unsupported_total is not None
 
     def checkpoint(self):
         if not self.enabled:return
         write('inventory-watch.json',{'schema':1,'scope':self.scope,'updated_at':self.clock(),
             'baseline':self.baseline,'known':dict(self.known),'pending':self.pending,
             'overflow':self.overflow,'round_active':self.round_active,
-            'failures':self.failures,'next_check_at':self.next_check_at})
+            'failures':self.failures,'next_check_at':self.next_check_at,
+            'unsupported_total':self.unsupported_total,'unsupported_at':self.unsupported_at})
 
     def begin_round(self):
         if not self.enabled or self.round_active:return
@@ -346,10 +414,15 @@ class InventoryWatcher:
         try:
             result=self.scanner.scan(max_seconds=SCAN_BUDGET)
             self.failures=0
+            self.unsupported_total=None;self.unsupported_at=0;self.deferred_notice=False
             self.event('inventory_checked',reason=reason,items=len(result),seconds=round(self.clock()-started,1))
             return result
         except ValueError as error:
             self.failures=min(3,self.failures+1)
+            evidence=read('inventory-count-evidence.json')
+            if (evidence.get('at',0)>=started and evidence.get('reason')=='outside_first_page_limit'
+                    and isinstance(evidence.get('parsed_total'),int) and evidence['parsed_total']>100):
+                self.unsupported_total=evidence['parsed_total'];self.unsupported_at=evidence['at']
             self.event('inventory_unreadable',message=str(error),retry_minutes=min(MAX_BACKOFF,CHECK_INTERVAL*2**self.failures)//60)
             write('inventory-progress.json',{'at':self.clock(),'stage':'unreadable','message':str(error)})
             return None
@@ -387,13 +460,20 @@ class InventoryWatcher:
             self.queue({'reward_id':reward_id,'quantity':1,'unconfirmed':True,'raw':prompt})
 
     def check_pending(self):
+        if getattr(self,'comparison_blocked',False) is True:
+            if self.enabled and self.pending and not self.deferred_notice:
+                self.event('inventory_comparison_deferred',entries=self.unsupported_total,
+                    message='Automatic comparison cannot read this inventory completely; original catch evidence retained')
+                self.deferred_notice=True
+            return
         if not self.enabled or not self.pending or self.clock()<self.next_check_at:return
         pending=self.pending
         # No periodic scans: only unresolved loot can make a check eligible.
         after=self.snapshot('unknown drop' if len(pending)==1 else 'unknown drops')
         if after is None:
             # Losing the baseline prevents a later scan from attributing stale gains.
-            self.baseline=None;self.known.clear();self.pending=[];self.overflow=False
+            self.baseline=None;self.known.clear()
+            if not self.comparison_blocked:self.pending=[];self.overflow=False
             self.checkpoint();return
         # Several unknown catches can be different items or missed pickups.
         # Keep their original evidence instead of allocating an aggregate delta.

@@ -20,6 +20,17 @@ def row(text,x=1250,y=700):return {'text':text,'score':.95,'center':(x,y)}
 
 
 class PickupEvidence(unittest.TestCase):
+    def test_inventory_stack_and_ambiguous_amounts_are_not_rewards(self):
+        for text in ('X2964 Bait','Bait X100','Ore X0','Ore X01','Ore X1 X2'):
+            self.assertEqual(classify([row(text)]).kind,'empty',text)
+        for text in ('Ore X1','Ore X99','Lost Mask NEW'):
+            self.assertEqual(classify([row(text)]).kind,'reward',text)
+
+    def test_inventory_headers_block_quantity_and_collect_candidates(self):
+        for header in ('All (188)','All classes (188)','Equipped (11)','Fishing (13)'):
+            self.assertEqual(classify([row(header,x=800,y=180),row('Ore X1')]).kind,'empty')
+            self.assertEqual(classify([row(header,x=800,y=180),row('Collect')]).kind,'empty')
+
     def test_separate_quantity_and_item_rows_form_one_reward(self):
         quantity=row('x1',y=729);quantity['score']=.75
         evidence=classify([row('Silk Thread'),quantity])

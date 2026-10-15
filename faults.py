@@ -14,6 +14,8 @@ class FishingFault(RuntimeError):
 
 def reason_code(reason):
     text = reason.lower()
+    if any(word in text for word in ('banned','captcha','security challenge','requires user action','needs user attention')):return 'user_required'
+    if 'window closed' in text or 'found 0' in text:return 'client_lost'
     for word, code in (('stopped by', 'manual_stop'), ('session_limit', 'session_limit'),
                        ('lost focus', 'focus'), ('pointer is outside', 'focus'), ('pointer did not reach', 'focus'), ('moved or resized', 'window'), ('window changed', 'window'),
                        ('disconnect', 'disconnect'), ('presence', 'disconnect'), ('non-fishing', 'pickup_other'),
@@ -57,14 +59,14 @@ class RecoveryPolicy:
     """One local repair per two minutes; persistent trouble escalates to rejoin."""
     # Repeated casts with no minigame can mean the player fell into water.
     # Re-equipping the rod there cannot restore the saved fishing position.
-    LOCAL = {'pickup_other','pickup_timeout','tracking_lost','window','alignment_drift'}
+    LOCAL = {'pickup_other','pickup_timeout','tracking_lost','tracking_frozen','tracking_timeout','capture_unavailable','window','alignment_drift'}
 
     def __init__(self):
         self.last_local = -float('inf')
         self.no_minigame_rejoins = collections.deque()
 
     def choose(self, code, now, reference_ready):
-        if code in ('manual_stop','session_limit'): return 'stop'
+        if code in ('manual_stop','session_limit','user_required'): return 'stop'
         if code == 'focus': return 'wait_focus'
         if code == 'no_minigame':
             # A rejoin restores the saved spot, but cannot make an unsafe
@@ -74,7 +76,9 @@ class RecoveryPolicy:
                 self.no_minigame_rejoins.popleft()
             self.no_minigame_rejoins.append(now)
             return 'stop_unstable_position' if len(self.no_minigame_rejoins)>=3 else 'rejoin'
-        if code in self.LOCAL and (reference_ready or code == 'window') and now-self.last_local >= 120:
+        if code=='capture_unavailable':return 'local'
+        if code=='worker_reload':return 'local'
+        if code in self.LOCAL and (reference_ready or code in ('window','tracking_frozen','tracking_timeout')) and now-self.last_local >= 120:
             self.last_local = now
             return 'local'
         return 'rejoin'

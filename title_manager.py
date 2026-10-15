@@ -4,9 +4,13 @@ from difflib import SequenceMatcher
 import numpy as np
 
 
-# Observed fishing buffs in this game version. Luck matters most for rare drops;
-# ties preserve the user's current loadout. Unknown/new titles are never guessed.
-PRIORITY = ('Legendary Fisherman', 'Salvager', 'Leviathan Hunter',
+# Fishing title buffs read in game on 2026-10-15. Luck matters most for rare drops,
+# so the three luck titles lead; ties preserve the user's current loadout.
+# Unknown/new titles are never guessed.
+TITLE_BUFFS = {'Salvager': {'fishing_luck': 1.08}, 'Legendary Fisherman': {'fishing_luck': 1.07, 'bite_speed': 1.05},
+               'Leviathan Hunter': {'fishing_luck': 1.05}, 'Deep Water Angler': {'bite_speed': 1.05},
+               'Angler': {'bite_speed': 1.03}}
+PRIORITY = ('Salvager', 'Legendary Fisherman', 'Leviathan Hunter',
             'Deep Water Angler', 'Angler')
 SLOTS = ('One', 'Two', 'Three')
 
@@ -48,8 +52,37 @@ def owned_check(frame, requirement_y):
     return max((int(white[y:y+34].sum()) for y in range(0,87,4)),default=0)>130
 
 
-def desired_titles(owned):
-    return tuple(name for name in PRIORITY if name in owned)[:3]
+BUFF_KEYS = {'fishingluckfactor': 'fishing_luck', 'fishluck': 'fishing_luck', 'bitespeedfactor': 'bite_speed',
+             'bitespeedmultiplier': 'bite_speed'}
+CATALOG_FILE = 'fishing-titles.json'
+
+
+def parse_buffs(rows):
+    """'1.07x (Fishing Luck Factor)' lines from the detail panel, in reading order."""
+    text = ' '.join(r['text'] for r in sorted(rows, key=lambda r: (round(r['center'][1]/14), r['center'][0])))
+    buffs = {}
+    for value, name in re.findall(r'(\d+(?:\.\d+)?)\s*[x×]\s*\(([^)]*)\)?', text, re.I):
+        key = BUFF_KEYS.get(normalized(name))
+        if key and key not in buffs: buffs[key] = float(value)
+    return buffs
+
+
+def known_buffs(catalog=None):
+    """Built-in buffs merged with every title the farmer has read in game."""
+    merged = {name: dict(b) for name, b in TITLE_BUFFS.items()}
+    for name, row in (catalog or {}).items():
+        merged[name] = dict(row.get('buffs') or {})
+    return merged
+
+
+def desired_titles(owned, priority='luck', buffs=None):
+    """Best three owned titles for the rod's priority: 'luck' or 'bite'. Ties keep PRIORITY order."""
+    table = buffs or TITLE_BUFFS
+    key = 'bite_speed' if priority == 'bite' else 'fishing_luck'
+    other = 'fishing_luck' if key == 'bite_speed' else 'bite_speed'
+    order = {name: i for i, name in enumerate(PRIORITY)}
+    ranked = sorted(owned, key=lambda n: (-(table.get(n, {}).get(key, 1)), -(table.get(n, {}).get(other, 1)), order.get(n, 99), n))
+    return tuple(ranked[:3])
 
 
 class TitleManager:
@@ -59,11 +92,28 @@ class TitleManager:
     def rows(self,box=None):
         return self.driver.text(self.driver.capture(),box)
 
-    def named(self,rows,name):
+    def named(self,rows,name,pattern=None):
         want=normalized(name)
-        found=[r for r in rows if want==normalized(r['text'])]
-        if len(found)!=1:raise ValueError(f'Fishing title screen did not show one {name}')
+        found=[r for r in rows if (re.fullmatch(pattern,r['text'].strip(),re.I) if pattern else want==normalized(r['text']))]
+        if len(found)!=1:raise ValueError(f'Fishing title screen did not show one {name}; read {[r["text"] for r in rows][:24]}')
         return found[0]
+
+    def update_catalog(self,names,owned,details):
+        """Remember every fishing title's buffs; log titles seen for the first time."""
+        import json,time
+        from app_config import data_directory
+        path=data_directory()/CATALOG_FILE
+        try:catalog=json.loads(path.read_text(encoding='utf-8'))
+        except (OSError,ValueError):catalog={}
+        for name in names:
+            buffs=details.get(name) or (catalog.get(name) or {}).get('buffs') or TITLE_BUFFS.get(name,{})
+            if name not in catalog and name not in TITLE_BUFFS:
+                self.driver.event('fishing_title_new',title=name,buffs=buffs,
+                                  message=f"New fishing title: {name} "+', '.join(f"{v}x {k.replace('_',' ')}" for k,v in buffs.items()))
+            catalog[name]={'buffs':buffs,'owned':name in owned,'seen':time.time()}
+        from discord_hourly import atomic_json
+        atomic_json(path,catalog)
+        return catalog
 
     def slots(self):
         rows=self.rows((1120,1070,1050,170))
@@ -71,33 +121,60 @@ class TitleManager:
         if set(slots)!=set(SLOTS):raise ValueError('Fishing title slots are not readable')
         return slots
 
-    def inspect(self,title):
+    def shows(self,rows,title):
+        header=' '.join(r['text'] for r in rows if r['center'][1]<450)
+        return normalized(title) in normalized(header) or matching_title(header)==title
+
+    def inspect(self,title,details=None):
         d=self.driver
-        title_row=self.named(self.rows((690,340,1370,260)),title)
-        d.click(*title_row['center']);d.sleep(.45)
         frame=d.capture()
         rows=d.text(frame,(1980,320,560,700))
-        header=[r['text'] for r in rows if r['center'][1]<450]
-        if not (normalized(title) in normalized(' '.join(header)) or
-                matching_title(' '.join(header))==title):
+        # Clicking the title that is already open closes its detail panel.
+        if not self.shows(rows,title):
+            title_row=self.named(self.rows((600,340,1500,300)),title)
+            d.click(*title_row['center']);d.sleep(.45)
+            frame=d.capture()
+            rows=d.text(frame,(1980,320,560,700))
+        if not self.shows(rows,title):
             raise ValueError(f'Fishing title detail changed for {title}')
         requirement=self.named(rows,'Requirements')
+        if details is not None:details[title]=parse_buffs(rows)
         return owned_check(frame,requirement['center'][1])
 
     def run(self):
         d=self.driver
-        d.key('M');d.sleep(.25)
+        d.key('M');d.sleep(.6)
         try:
-            d.click(*self.named(self.rows(),'Titles')['center'])
-            d.sleep(.45)
-            d.click(*self.named(self.rows(),'Fishing (5)')['center'])
+            # Titles moved under Progression in the menu sidebar (2026-10).
+            rows=self.rows((0,380,420,700))
+            if not any(normalized(r['text'])=='titles' for r in rows):
+                d.click(*self.named(rows,'Progression')['center'])
+                d.sleep(.45)
+                rows=self.rows((0,380,420,700))
+            titles=self.named(rows,'Titles')['center']
+            for _ in range(3):
+                d.click(*titles);d.sleep(.7)
+                categories=self.rows((360,300,460,820))
+                # The Titles screen has Combat/Ouwigahara categories; the inventory does not.
+                if any(normalized(r['text']).startswith(('combat','ouwigahara')) for r in categories):break
+            else:raise ValueError('Titles screen did not open')
+            d.click(*self.named(categories,'Fishing',r'Fishing\s*[\(\[]?\s*\d*\s*[\)\]]?')['center'])
             d.sleep(.55)
             frame=d.capture()
-            listing=d.text(frame,(700,340,1350,260))
-            if any(sum(normalized(t)==normalized(r['text']) for r in listing) != 1 for t in PRIORITY):
+            # Title pills only: left of the detail panel, not the One/Two/Three check labels.
+            listing=d.text(frame,(720,340,1300,300))
+            names=[r['text'].strip() for r in listing if r['center'][0]<2000
+                   and not any(word.startswith(normalized(r['text'])) for word in ('one','two','three','vanity'))
+                   and re.fullmatch(r"[A-Za-z' ]{5,40}",r['text'].strip())]
+            if any(sum(normalized(t)==normalized(n) for n in names) != 1 for t in PRIORITY):
                 raise ValueError('Fishing title list changed; read '+str([r['text'] for r in listing]))
-            owned={title for title in PRIORITY if self.inspect(title)}
-            chosen=desired_titles(owned)
+            details={}
+            owned={title for title in names if self.inspect(title,details)}
+            catalog=self.update_catalog(names,owned,details)
+            from app_config import load_config
+            rod=str(load_config().get('active_rod') or '')
+            priority=(load_config().get('title_priority') or {}).get(rod,'luck')
+            chosen=desired_titles(owned,priority,known_buffs(catalog))
             slots=self.slots()
             current={name for name,_ in slots.values() if name}
             d.event('fishing_titles_checked',owned=list(owned),equipped=list(current),best=list(chosen))
@@ -110,27 +187,20 @@ class TitleManager:
             if any(name is None for name,_ in slots.values()):
                 d.event('fishing_titles_kept',reason='An equipped title could not be identified')
                 return
-            for slot,(name,point) in slots.items():
-                if name in chosen:continue
-                # The slot action appears only when its title detail is open.
-                self.inspect(name)
-                point=self.slots()[slot][1]
-                d.click(*point)
-                d.sleep(.45)
-                button=self.named(self.rows((1150,1160,430,105)),'Unequip')
-                d.click(*button['center'])
-                d.sleep(.45)
-                after=self.slots()
-                if after[slot][0] is not None:
-                    raise ValueError(f'Could not free fishing title slot {slot}')
-            for title in chosen:
-                if title in current:continue
+            # Current game UI: select the wanted title, click the slot to replace,
+            # then Equip swaps it in directly (2026-10-15).
+            missing=[title for title in chosen if title not in current]
+            for slot,(name,_) in list(slots.items()):
+                if name in chosen or not missing:continue
+                title=missing.pop(0)
                 if not self.inspect(title):raise ValueError(f'{title} ownership changed during setup')
+                d.click(*self.slots()[slot][1])
+                d.sleep(.45)
                 button=self.named(self.rows((1150,1160,430,105)),'Equip')
                 d.click(*button['center'])
-                d.sleep(.45)
-                if title not in {name for name,_ in self.slots().values()}:
-                    raise ValueError(f'{title} did not equip')
+                d.sleep(.6)
+                if self.slots()[slot][0]!=title:
+                    raise ValueError(f'{title} did not equip into slot {slot}')
             d.event('fishing_titles_equipped',best=list(chosen))
         finally:
             # Menu close is always attempted so a failed optional setup cannot

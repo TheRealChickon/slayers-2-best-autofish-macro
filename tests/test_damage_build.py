@@ -56,29 +56,17 @@ class DamageBuild(unittest.TestCase):
         self.assertEqual(result['swaps'][0]['difference'], -0.83)
         self.assertEqual(result['swaps'][1]['projected_m1'], 63.32)
 
-    def test_save_mastery_preserves_calibration_and_cli_is_read_only(self):
+    def test_save_mastery_preserves_calibration(self):
         damage_build.save_mastery(190, self.root)
         self.assertEqual(damage_build.load_profile(self.root)['calibration']['mastery'], 186)
-        with patch.object(damage_build, 'data_directory', return_value=self.root), \
-             patch.object(fishing_cli.actions, 'resume') as resume, \
-             redirect_stdout(io.StringIO()) as output:
-            self.assertEqual(fishing_cli.main(['build', '--mastery', '200', '--json']), 0)
-        resume.assert_not_called()
-        self.assertEqual(json.loads(output.getvalue())['projected_m1'], 64.66)
+        self.assertEqual(damage_build.report(mastery=200, root=self.root)['projected_m1'], 64.66)
         self.assertEqual(damage_build.load_profile(self.root)['mastery'], 190)
 
-    def test_build_page_remains_navigable_in_small_terminal(self):
-        with patch.object(damage_build, 'data_directory', return_value=self.root), \
-             patch.object(terminal_app, 'snapshot', return_value={
-                 'started': 0, 'state': 'Paused', 'running': False, 'stop_requested': False,
-                 'manual_paused': True, 'mode': 'full', 'presence': 'In game'}):
-            app = terminal_app.Terminal()
-            app.switch(4)
-            app.refresh()
-            page = '\n'.join(terminal_app.ANSI.sub('', row) for row in app.render(80, 24))
-        self.assertIn('DAMAGE', page)
-        self.assertIn('Stone Haori', page)
-        self.assertIn('M set mastery', page)
+    def test_fishing_pages_have_no_combat_build(self):
+        app = terminal_app.Terminal()
+        app.switch(4)
+        self.assertEqual(app.pages[app.page], 'Predictions')
+        self.assertNotIn('Build', app.pages)
 
     def test_hosted_wiki_command_uses_local_url_without_rebuilding(self):
         (self.root/'wiki-hosted-url.txt').write_text('https://private.example.test\n', encoding='utf-8')
