@@ -30,7 +30,7 @@ class StartFlow(unittest.TestCase):
             with patch.object(start_picker,'choose',side_effect=choose),redirect_stdout(io.StringIO()):
                 self.assertEqual(fishing_cli.main(['start','--no-ui']),0)
             resume.assert_called_once_with('assist')
-        self.assertEqual([key for key,_ in choices[1][1]],['assist','spot','full','damage'])
+        self.assertEqual([key for key,_ in choices[1][1]],['assist','spot','full'])
 
     def test_cancel_either_picker_never_starts(self):
         for values in ([None],['project-slayers-2',None]):

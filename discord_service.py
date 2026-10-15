@@ -29,7 +29,7 @@ class DiscordReporter:
         except Exception as error:
             # The network and reporting data must never stop fishing.
             self._status({"state": "retrying", "updated_at": now, "error": str(error)})
-            return 300
+            return max(5,min(300,getattr(error,'retry_after',60)))
         self._status({"state": "sent" if result["sent"] else "waiting",
                       "updated_at": now, "next_due_at": result["next_due_at"],
                       **({"last_sent_at": result["at"]} if result["sent"] else {})})

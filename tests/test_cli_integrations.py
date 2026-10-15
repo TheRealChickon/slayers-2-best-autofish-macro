@@ -83,6 +83,21 @@ class CatchLifecycle(unittest.TestCase):
 
 
 class IsolatedClients(unittest.TestCase):
+    def test_cli_catches_session_defaults_and_explicit_total(self):
+        metrics.write('current-run.json',{'id':'current','started':100,'ended':200})
+        self.append([{'at':50,'event':'reward_observed','text':'Ore X3','cycle':1},
+                     {'at':110,'event':'reward_observed','text':'Coral X2','cycle':2},
+                     {'at':250,'event':'reward_observed','text':'GoldenFish X1','cycle':3}])
+        with patch('app_config.data_directory',return_value=self.root):
+            for command in ('items',):
+                with redirect_stdout(io.StringIO()) as output:
+                    fishing_cli.execute(fishing_cli.parser().parse_args([command,'--json']))
+                self.assertIn('Coral',output.getvalue())
+                self.assertNotIn('Ore',output.getvalue());self.assertNotIn('Golden',output.getvalue())
+                with redirect_stdout(io.StringIO()) as output:
+                    fishing_cli.execute(fishing_cli.parser().parse_args([command,'--json','--total']))
+                self.assertIn('Ore',output.getvalue());self.assertIn('Golden',output.getvalue())
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -97,6 +112,7 @@ class IsolatedClients(unittest.TestCase):
             p = patch.object(control_actions, name, return_value=False)
             p.start(); self.addCleanup(p.stop)
         metrics.write('totals.json', {'started': 1})
+        app_config.save_config({'spawn_gamepass': True})
 
     def append(self, rows):
         with (self.root/'events-test.jsonl').open('a', encoding='utf-8') as stream:
@@ -156,6 +172,35 @@ class IsolatedClients(unittest.TestCase):
         with patch.object(control_actions, 'stop', return_value='Stopped') as stop:
             app.key('s'); stop.assert_called_once()
         app.key('q'); self.assertFalse(app.alive)
+
+    def test_first_run_asks_about_the_spawn_gamepass(self):
+        app_config.CONFIG.unlink()
+        app = terminal_app.Terminal(); app.refresh()
+        rendered = '\n'.join(terminal_app.ANSI.sub('', line) for line in app.render(120, 35))
+        self.assertIn('Set Spawn Anywhere', rendered)
+        app.key('x')  # other keys wait for the answer
+        self.assertIsNone(app_config.load_config()['spawn_gamepass'])
+        app.key('n')
+        config = app_config.load_config()
+        self.assertFalse(config['spawn_gamepass'])
+        self.assertEqual(config['mode'], 'here')
+        labels = [row[0] for row in app.run_actions()]
+        self.assertEqual(labels[0], 'Start Farm here')
+        self.assertNotIn('Reset + start Full farmer', labels)
+        app.show_other_modes = True
+        full = [row for row in app.run_actions() if row[0].strip() == 'Full farmer'][0]
+        self.assertIn('gamepass', full[3]())
+        with self.assertRaisesRegex(ValueError, 'gamepass'):
+            control_actions.resume('full')
+        rendered = '\n'.join(terminal_app.ANSI.sub('', line) for line in app.render(120, 35))
+        self.assertNotIn('FIRST-TIME SETUP', rendered)
+
+    def test_gamepass_answer_yes_keeps_full_farmer_first(self):
+        app_config.CONFIG.unlink()
+        app = terminal_app.Terminal(); app.refresh()
+        app.key('y')
+        self.assertEqual(app_config.load_config()['mode'], 'full')
+        self.assertEqual(app.run_actions()[0][0], 'Start Full farmer')
 
     def test_terminal_transitions_respect_reduced_motion(self):
         app = terminal_app.Terminal()

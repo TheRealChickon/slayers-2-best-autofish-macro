@@ -13,6 +13,19 @@ from discord_service import DiscordReporter
 
 
 class DiscordHourlyTests(unittest.TestCase):
+    def test_inventory_quantity_is_excluded_from_interval_and_run_totals(self):
+        self.run.joinpath('current-run.json').write_text(json.dumps({'id':'run-1','started':0,'ended':None}))
+        self.rows('events-one.jsonl',
+                  {'at':10,'event':'reward_observed','cycle':1,'text':'X2964 Bait','reward_id':'bad'},
+                  {'at':20,'event':'reward_observed','cycle':2,'text':'Coral X2','reward_id':'first'},
+                  {'at':40,'event':'reward_observed','cycle':3,'text':'Golden Fish X1','reward_id':'second'})
+        before=self.run.joinpath('events-one.jsonl').read_bytes()
+        result=report.summarize(self.run,30,50,now=50)
+        self.assertEqual(result['rewards'],1)
+        self.assertEqual(result['items'],{'Golden Fish':1})
+        self.assertEqual(result['totals']['rewards'],2)
+        self.assertEqual(self.run.joinpath('events-one.jsonl').read_bytes(),before)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -49,7 +62,7 @@ class DiscordHourlyTests(unittest.TestCase):
         self.assertEqual(result["recovery_decisions"], 1)
         self.assertEqual(result["rejoins"], 1)
         self.assertEqual(len(result["mythical"]), 1)
-        self.assertEqual(report.embed(result)["embeds"][0]["title"], "✦ Mythical catch!")
+        self.assertTrue(report.embed(result)["embeds"][0]["title"].startswith("✦ Mythical catch!"))
 
     def test_prompt_is_not_a_collected_item(self):
         self.rows("events-one.jsonl",
@@ -72,23 +85,35 @@ class DiscordHourlyTests(unittest.TestCase):
         self.assertIn("72 ores/day", pace)
         self.assertIn("3 Ore confirmed", pace)
 
-    def test_send_waits_one_hour_and_uses_checkpoint(self):
-        with patch.object(report, "data_directory", return_value=self.run), patch.object(report.time, "time", return_value=100):
-            report.main(["--init"])
-        with patch.object(report, "data_directory", return_value=self.run), \
-             patch.object(report.time, "time", return_value=1000), \
-             patch.object(report, "request_webhook") as request:
-            report.main(["--send"])
-            request.assert_not_called()
-        with patch.object(report, "data_directory", return_value=self.run), \
-             patch.object(report.time, "time", return_value=3701), \
-             patch.object(report, "load_secret", return_value="redacted"), \
-             patch.object(report, "request_webhook", return_value=(200, "message-one")) as request:
-            report.main(["--send"])
-            request.assert_called_once()
-        state = report.read_json(self.run / report.STATE_FILE)
-        self.assertEqual(state["last_end_at"], 3701)
-        self.assertEqual(state["reports_sent"], 1)
+    def test_one_message_per_run_is_edited_after_the_interval(self):
+        self.run.joinpath('current-run.json').write_text(json.dumps({'id':'run-1','started':0,'ended':None}))
+        self.rows('events-20261013-000000.jsonl',{'at':10,'event':'started'},
+                  {'at':20,'event':'reward_observed','cycle':1,'text':'Coral X2','reward_id':'a'})
+        calls=[]
+        def fake(url,payload=None,attachment=None,attachments=None,message_id=None):
+            calls.append(message_id);return 200,message_id or 'live-1'
+        with patch.object(report,'load_secret',return_value='redacted'), patch.object(report,'request_webhook',side_effect=fake):
+            first=report.send_due(self.run,100)
+            early=report.send_due(self.run,100+report.EDIT_SECONDS-1)
+            later=report.send_due(self.run,100+report.EDIT_SECONDS)
+        self.assertTrue(first['created']);self.assertFalse(early['sent']);self.assertFalse(later['created'])
+        self.assertEqual(calls,[None,'live-1'])
+        state=report.read_json(self.run/report.STATE_FILE)
+        self.assertEqual((state['live_message_id'],state['reports_sent'],state['edits']),('live-1',1,1))
+
+    def test_new_run_or_deleted_message_posts_a_new_card(self):
+        self.run.joinpath('current-run.json').write_text(json.dumps({'id':'run-2','started':0,'ended':None}))
+        (self.run/report.STATE_FILE).write_text(json.dumps({'run_id':'run-2','live_run_id':'run-2',
+                                                            'live_message_id':'gone','last_edit_at':0}))
+        calls=[]
+        def fake(url,payload=None,attachment=None,attachments=None,message_id=None):
+            calls.append(message_id)
+            if message_id=='gone':raise report.WebhookError('HTTP 404',code=404)
+            return 200,'fresh'
+        with patch.object(report,'load_secret',return_value='redacted'), patch.object(report,'request_webhook',side_effect=fake):
+            self.assertTrue(report.send_due(self.run,1000)['created'])
+        self.assertEqual(calls,['gone',None])
+        self.assertEqual(report.read_json(self.run/report.STATE_FILE)['live_message_id'],'fresh')
 
     def test_supervisor_reporter_uses_due_checkpoint_without_game_input(self):
         (self.run / report.SECRET_FILE).write_bytes(b"encrypted")
@@ -109,7 +134,7 @@ class DiscordHourlyTests(unittest.TestCase):
         (self.run / report.SECRET_FILE).write_bytes(b"encrypted")
         reporter = DiscordReporter(self.run)
         with patch("discord_service.send_due", side_effect=RuntimeError("Discord connection failed")):
-            self.assertEqual(reporter.poll_once(), 300)
+            self.assertEqual(reporter.poll_once(), 60)
         self.assertEqual(report.read_json(self.run / "discord-reporter-status.json")["state"], "retrying")
 
     def test_only_discord_webhook_hosts_accepted(self):
@@ -137,15 +162,18 @@ class DiscordHourlyTests(unittest.TestCase):
         self.assertIn(b'name="files[0]"', request.data)
         self.assertIn(image, request.data)
 
-    def test_immediate_first_report_covers_prior_hour_and_moves_checkpoint(self):
-        (self.run / report.STATE_FILE).write_text(json.dumps({"last_end_at": 1000, "reports_sent": 0}))
+    def test_send_now_edits_the_live_card_immediately(self):
+        self.run.joinpath('current-run.json').write_text(json.dumps({'id':'run-3','started':500,'ended':None}))
+        (self.run / report.STATE_FILE).write_text(json.dumps({'run_id':'run-3','live_run_id':'run-3',
+                                                              'live_message_id':'card','last_edit_at':1090}))
         with patch.object(report, "data_directory", return_value=self.run), \
              patch.object(report.time, "time", return_value=1100), \
              patch.object(report, "load_secret", return_value="redacted"), \
-             patch.object(report, "request_webhook", return_value=(200, "message-now")) as send:
+             patch.object(report, "request_webhook", return_value=(200, "card")) as send:
             report.main(["--send-now"])
-            self.assertIn("<t:-2500:t>", send.call_args.args[1]["embeds"][0]["description"])
-        self.assertEqual(report.read_json(self.run / report.STATE_FILE)["last_end_at"], 1100)
+            self.assertEqual(send.call_args.kwargs["message_id"], "card")
+            self.assertIn("<t:500:R>", send.call_args.args[1]["embeds"][0]["description"])
+        self.assertEqual(report.read_json(self.run / report.STATE_FILE)["last_edit_at"], 1100)
 
     @unittest.skipUnless(os.name == "nt", "DPAPI is Windows-only")
     def test_secret_is_encrypted_for_local_user(self):

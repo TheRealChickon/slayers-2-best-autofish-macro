@@ -19,11 +19,12 @@ def snapshot(journal=None):
     totals, supervisor, worker, bait, presence, bait_observation = [read(name + '.json') for name in
         ('totals', 'supervisor', 'status', 'bait', 'presence', 'bait-observation')]
     damage = read('damage-status.json')
+    rejoin = read('rejoin-status.json')
     journal.update(totals.get('started'))
     live = actions.alive()
     starting = actions.starting() and not live
     paused, stop = (RUN / 'PAUSE').exists(), (RUN / 'STOP').exists()
-    f8_paused = live and supervisor.get('mode','full')=='full' and (RUN/'F8_PAUSE').exists()
+    f8_paused = live and supervisor.get('mode','full') in ('full','here') and (RUN/'F8_PAUSE').exists()
     stage = supervisor.get('stage', 'starting')
     if (live or starting) and stop:
         state = 'Pausing' if paused else 'Stopping'
@@ -43,13 +44,18 @@ def snapshot(journal=None):
         if f8_paused or stage == 'paused_manual': state = 'Paused — F8 to resume'
         elif stage == 'paused_focus': state = 'Waiting for Roblox'
         elif stage == 'attacking': state = 'Attacking statue'
+        elif stage == 'watching': state = 'Watching connection'
+        elif stage == 'rejoining': state = 'Rejoining Roblox'
+        elif stage == 'waiting_game': state = 'Waiting for Roblox'
         elif stage == 'blocked_scene': state = 'Close Roblox menu'
         elif stage == 'attention': state = 'Inspect statue'
+        elif stage == 'rod_wait': state = 'Waiting for rod · retrying'
         elif stage == 'fishing': state = fishing_states.get(worker.get('stage'), 'Fishing')
         else: state = stage.replace('_', ' ').title()
     else:
         state = 'Paused' if paused else 'Stopped'
     reason = worker.get('wait_reason', '') if live else worker.get('reason', '') or supervisor.get('reason', '')
+    if live and stage=='rod_wait':reason=supervisor.get('last_error','')
     if stop or paused:
         try:reason = (RUN / ('PAUSE' if paused else 'STOP')).read_text(encoding='utf-8').strip() or reason
         except OSError:pass
@@ -65,11 +71,14 @@ def snapshot(journal=None):
         remaining=max(0,bait_observation['count']-max(0,rounds-bait_observation['hooks']))
         bait_source='inventory read'
     fresh = presence.get('ok') and time.time() - presence.get('checked_at', 0) < 120
+    from run_log import current
+    log_run=current(RUN)
     unknown = sum(qty for name, qty in journal.counts.items()
                   if name == 'Unidentified item' or name.endswith('(partial)'))
     return {
         'state': state, 'mode': supervisor.get('mode','full') if live else load_config()['mode'], 'running': live, 'starting': starting, 'stop_requested': stop,
         'paused': paused, 'started': totals.get('started'), 'updated': totals.get('updated'),
+        'log_run':log_run,
         'reason': reason,
         'collections': totals.get('rewards', 0), 'items': sum(journal.counts.values()),
         'logged_collections': len(journal.items), 'unread_items': unknown,
@@ -87,6 +96,7 @@ def snapshot(journal=None):
         'spot_paused':worker.get('spot_paused',False),
         'manual_paused':f8_paused or worker.get('manual_paused',False),
         'damage': damage if (live and supervisor.get('mode')=='damage') or load_config()['mode']=='damage' else {},
+        'rejoin': rejoin if (live and supervisor.get('mode')=='rejoin') or load_config()['mode']=='rejoin' else {},
     }
 
 

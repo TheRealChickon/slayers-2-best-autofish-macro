@@ -1,4 +1,4 @@
-"""Foreground-only stationary damage mode. Attacks use C and M1 only."""
+"""Foreground-only stationary damage mode with title-verified measurements."""
 
 import argparse
 import json
@@ -11,12 +11,19 @@ import psutil
 import win32gui
 from rapidocr_onnxruntime import RapidOCR
 
-from damage_cycle import DamageCycle, ProgressGuard
-from damage_vision import SkillReady, combo_count, blocked_scene, scene_text, gauntlet_selected, hotbar_visible
+from damage_cycle import FiveHitGuard, ProgressGuard
+from damage_plan import DamageRotation
+from damage_title import DamageTitleReader
+from damage_measure import DamageMeasurements
+from damage_skill_samples import sample_skill
+from damage_vision import B_ICON_BOX, C_ICON_BOX, Z_ICON_BOX, B_READY_REFERENCE, SkillReady, combo_count, blocked_scene, scene_text, gauntlet_selected, hotbar_visible
+from inventory_watch import InventoryDriver
+from app_config import load_config
 from fishing_assistant import ROOT, USER, find_window, rectangle, move_pointer
 from metrics import RUN, read, write
 from minigame_assist import ForegroundInput, foreground, navigation_keys_down, request_hotkey_stop, stop_reason, watch_focus
 from screen_space import ScreenSpace
+from window_fit import fitted
 
 
 def press(inp, key, hold=.045):
@@ -36,6 +43,20 @@ def attack_click(inp):
     inp.hold(False)
 
 
+def hold_key(inp, key, seconds):
+    """Release a held skill even when focus or a stop changes during it."""
+    vk = ord(key.upper())
+    inp.guard_press(True)
+    USER.keybd_event(vk, USER.MapVirtualKeyW(vk, 0), 0, 0)
+    try:
+        until = time.monotonic()+seconds
+        while time.monotonic() < until:
+            inp.guard_press(True)
+            time.sleep(.025)
+    finally:
+        USER.keybd_event(vk, USER.MapVirtualKeyW(vk, 0), 2, 0)
+
+
 def wait_for_scene(inp, screen, sct, ocr, predicate, seconds=2.5):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
@@ -46,7 +67,7 @@ def wait_for_scene(inp, screen, sct, ocr, predicate, seconds=2.5):
     return False
 
 
-def reset_character(inp, screen, sct, ocr, event):
+def reset_character(inp, screen, sct, ocr, event, *, deliberate=False):
     """Use Roblox's visible reset menu; never blindly confirm a dialog."""
     inp.guard_press(True)
     inp.release()
@@ -64,7 +85,9 @@ def reset_character(inp, screen, sct, ocr, event):
         event('reset_attention', message='Reset confirmation could not be verified; attacks paused.')
         return False
     press(inp, 'enter')
-    event('damage_reset', message='Combo stalled; reset character to saved spawn.')
+    event('boss_tactical_reset' if deliberate else 'damage_reset',
+          message='Deliberate combo reset to saved spawn.' if deliberate else
+          'Combo stalled; reset character to saved spawn.')
     return True
 
 
@@ -74,6 +97,11 @@ def main(argv=None):
     parser.add_argument('--resume-counters', action='store_true')
     args = parser.parse_args(argv)
     import control_actions as controls
+
+    config = load_config()
+    if not config['damage_title']:
+        raise ValueError('Configure the exact damage title with autofish damage --title NAME --configure-only')
+    rotation = config['damage_rotation']
     RUN.mkdir(parents=True, exist_ok=True)
     with controls.guard():
         if controls.alive() or controls.alive('pid.json'):
@@ -94,7 +122,11 @@ def main(argv=None):
     done = threading.Event()
     watcher = threading.Thread(target=watch_focus, args=(inp, done), daemon=True)
     watcher.start()
-    cycle, progress, skill = DamageCycle(), ProgressGuard(), SkillReady()
+    if B_READY_REFERENCE is None:
+        raise RuntimeError('The verified ultimate icon reference is missing')
+    cycle, progress, hit_guard, ultimate_vision = (DamageRotation(rotation), ProgressGuard(), FiveHitGuard(),
+                                         SkillReady(B_ICON_BOX, B_READY_REFERENCE))
+    shock_vision, followup_vision = SkillReady(C_ICON_BOX), SkillReady(Z_ICON_BOX)
     ocr = RapidOCR()
     hwnd = screen = None
     manual_paused = False
@@ -109,24 +141,35 @@ def main(argv=None):
     last_tick = time.monotonic()
     clicks, casts, cycles, resets = (max(0, int(previous.get(name, 0))) for name in
                                      ('m1_clicks', 'c_casts', 'cycles', 'resets'))
+    move_uses = {name: max(0, int((previous.get('move_uses') or {}).get(name, 0)))
+                 for name in ('shock_wave', 'followup', 'ultimate')}
     observed_hits = max(0, int(previous.get('observed_hits', 0)))
-    estimated_damage = max(0., float(previous.get('estimated_damage', 0)))
+    measurements = DamageMeasurements(config['damage_target'],
+        previous.get('title_start', 0) if args.resume_counters else 0, active_seconds)
+    if args.resume_counters and previous.get('title_progress'):
+        measurements.total = int(previous['title_progress'])
     combo = None
-    skill_ready = False
+    ultimate_ready = False
     needs_setup = True
+    needs_calibration = True
+    last_progress_check = 0.
     next_setup = 0.
     scene_blocked = False
+    skill_samples = read('damage-skill-samples.json').get('samples', {})
     def status(running=True):
         now = time.time()
-        dps = estimated_damage/active_seconds if active_seconds >= 15 else None
+        measurements.active_seconds = active_seconds
+        measured = measurements.summary()
         payload = {'running': running, 'updated': now, 'session': session, 'mode': 'damage',
                    'stage': stage, 'wait_reason': wait_reason, 'manual_paused': manual_paused,
                    'combo': combo, 'observed_hits': observed_hits, 'm1_clicks': clicks,
-                   'c_casts': casts, 'cycles': cycles, 'resets': resets,
-                   'estimated_damage': round(estimated_damage), 'active_seconds': round(active_seconds, 1),
-                   'estimated_dps': round(dps, 1) if dps else None,
-                   'five_million_hours': round(5_000_000/dps/3600, 2) if dps else None,
-                   'estimate_note': 'Approximate: 70 per M1 hit and 38 per extra C tick; observed combo hits only.',
+                   'c_casts': casts, 'move_uses': dict(move_uses), 'cycles': cycles, 'resets': resets,
+                   'active_seconds': round(active_seconds, 1), 'title_start': measurements.starting_total,
+                   'title_name': config['damage_title'], 'rotation': rotation,
+                   'five_million_hours': measured['eta_hours'],
+                   'estimate_note': 'Verified in-game title progress; pace updates at each periodic read.',
+                   'skill_samples': skill_samples,
+                   **measured,
                    'reason': reason if not running else ''}
         write('damage-status.json', payload)
         write('supervisor.json', {'running': running, 'pid': os.getpid(), 'started': started,
@@ -135,7 +178,81 @@ def main(argv=None):
         write('status.json', {'running': running, 'pid': os.getpid(), 'updated': now,
              'session': session, 'mode': 'damage', 'stage': stage, 'manual_paused': manual_paused,
              'wait_reason': wait_reason, 'reason': reason if not running else ''})
-    event('damage_started', message='C then five M1s; Roblox focus and F8 control input.')
+
+    def guarded_wait(seconds):
+        until = time.monotonic()+seconds
+        next_status = time.monotonic()+1
+        while time.monotonic() < until:
+            inp.guard_press(True)
+            if inp.toggle_requested.is_set():
+                raise RuntimeError('F8 requested during damage measurement')
+            if stage == 'measuring_skills' and time.monotonic() >= next_status:
+                status()
+                next_status = time.monotonic()+1
+            time.sleep(.025)
+
+    def perform_move(role):
+        nonlocal casts
+        keys = rotation['keys']
+        if role == 'ultimate_pair':
+            # X is never sent alone. Release it before holding B.
+            press(inp, keys['ultimate_prep'], rotation['ultimate_prep_tap_seconds'])
+            guarded_wait(rotation['ultimate_prep_wait_seconds'])
+            hold_key(inp, keys['ultimate'], rotation['ultimate_hold_seconds'])
+        else:
+            press(inp, keys[role])
+        counted = 'ultimate' if role == 'ultimate_pair' else role
+        move_uses[counted] += 1
+        if role == 'shock_wave':
+            casts += 1
+
+    def calibrate(reader):
+        """Establish title progress without disrupting the requested rotation."""
+        baseline = reader.inspect()
+        if not args.resume_counters or not previous.get('last_verified'):
+            measurements.starting_total = baseline
+        measurements.observe(baseline, time.time())
+        event('damage_baseline', title_progress=baseline,
+              message=f'Verified starting title damage: {baseline:,}')
+
+    def measure_skills(reader):
+        nonlocal stage, wait_reason, clicks
+        stage = 'measuring_skills'
+        wait_reason = 'Letting prior damage finish before isolated samples'
+        status()
+        guarded_wait(20)
+        roles = ['m1_string'] + list(rotation['enabled'])
+        visions = {'shock_wave': shock_vision, 'followup': followup_vision,
+                   'ultimate': ultimate_vision}
+        for role in roles:
+            wait_reason = 'Measuring '+role.replace('_', ' ')
+            status()
+            if role != 'm1_string':
+                deadline = time.monotonic()+90
+                while not visions[role].observe(screen.capture(sct)):
+                    if time.monotonic() >= deadline:
+                        raise ValueError(role+' did not become ready; sample skipped')
+                    guarded_wait(.5)
+            def perform():
+                nonlocal clicks
+                if role == 'm1_string':
+                    for index in range(5):
+                        attack_click(inp)
+                        clicks += 1
+                        if index < 4:
+                            guarded_wait(rotation['m1_interval'])
+                else:
+                    perform_move('ultimate_pair' if role == 'ultimate' else role)
+            result = sample_skill(reader.inspect, guarded_wait, perform,
+                                  20 if role == 'ultimate' else 15)
+            result['at'] = time.time()
+            skill_samples[role] = result
+            measurements.observe(result['after'], result['at'])
+            write('damage-skill-samples.json', {'samples': skill_samples})
+            event('damage_skill_sample', role=role, **result,
+                  message=f"Isolated {role}: {result['damage']:,} damage")
+            status()
+    event('damage_started', message='Measured five-M1, Shock Wave, follow-up and conditional ultimate rotation; F8 controls input.')
     status()
     try:
         with mss.MSS() as sct:
@@ -156,6 +273,7 @@ def main(argv=None):
                         inp.toggle_requested.clear()
                         manual_paused = not manual_paused
                         inp.suspend_input()
+                        hit_guard.cancel()
                         cycle.resync(tick)
                         event('damage_paused' if manual_paused else 'damage_resumed',
                               message='F8 paused attacks.' if manual_paused else 'F8 resumed attacks.')
@@ -164,24 +282,33 @@ def main(argv=None):
                         wait_reason = 'Return to Roblox; attacks resume automatically'
                         needs_setup = True
                         last_scan = 0.
+                        hit_guard.cancel()
                         cycle.resync(tick)
                         time.sleep(.05)
                         continue
                     rect = rectangle(selected)
                     if selected != hwnd or screen is None or screen.rect != rect:
                         hwnd = selected
-                        screen = ScreenSpace(rect)
+                        screen = ScreenSpace(fitted(selected, rect))
                         needs_setup = True
+                        hit_guard.cancel()
                         cycle.resync(tick)
                     if manual_paused:
                         stage = 'paused_manual'
                         wait_reason = 'F8 resumes attacks'
                         time.sleep(.05)
                         continue
+                    if measurements.last_verified is not None and measurements.total >= measurements.target:
+                        manual_paused = True
+                        stage = 'title_complete'
+                        wait_reason = 'Configured damage title is complete; stop this mode'
+                        time.sleep(.05)
+                        continue
                     if inp.interrupted.is_set():
                         inp.interrupted.clear()
                         needs_setup = True
                         last_scan = 0.
+                        hit_guard.cancel()
                         cycle.resync(tick)
                     if tick-last_scan >= 2.:
                         frame = screen.capture(sct)
@@ -190,6 +317,7 @@ def main(argv=None):
                         scene_blocked = blocked_scene(frame, ocr)
                         if was_blocked and not scene_blocked:
                             needs_setup = True
+                            hit_guard.cancel()
                             cycle.resync(tick)
                     if scene_blocked:
                         stage = 'blocked_scene'
@@ -219,54 +347,186 @@ def main(argv=None):
                                 wait_reason = 'Gauntlet slot 1 did not equip; inspect the hotbar and press F8'
                                 event('damage_attention', message=wait_reason)
                                 continue
+                        ultimate_ready = ultimate_vision.observe(setup_frame)
                         cycle.resync(time.monotonic())
                         needs_setup = False
                         next_setup = tick+2.
                         event('damage_ready', message='Gauntlet slot 1 selected; statue attack position ready.')
+                        if needs_calibration:
+                            stage = 'calibrating'
+                            wait_reason = 'Reading the starting title damage'
+                            status()
+                            driver = InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer)
+                            reader = DamageTitleReader(driver, config['damage_title'],
+                                                       config['damage_target'], config['damage_title_category'])
+                            try:
+                                calibrate(reader)
+                            except (RuntimeError, ValueError) as error:
+                                manual_paused = True
+                                needs_setup = True
+                                stage = 'attention'
+                                wait_reason = 'Damage calibration needs a manual check: '+str(error)
+                                event('damage_attention', message=wait_reason)
+                                continue
+                            needs_calibration = False
+                            last_progress_check = time.monotonic()
+                            hit_guard.cancel()
+                            cycle.resync(last_progress_check)
                     frame = screen.capture(sct) if tick-last_frame >= .18 else None
+                    request = read('damage-sample-request.json') if cycle.m1_index == 0 else {}
+                    if request and cycle.phase == 'm1' and tick-cycle.last_ultimate >= 15:
+                        write('damage-sample-request.json', {})
+                        hit_guard.cancel()
+                        driver = InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer)
+                        reader = DamageTitleReader(driver, config['damage_title'],
+                            config['damage_target'], config['damage_title_category'])
+                        try:
+                            measure_skills(reader)
+                        except ValueError as error:
+                            event('damage_sample_failed', message=str(error))
+                            if not hotbar_visible(screen.capture(sct)):
+                                raise
+                        finally:
+                            measurements.samples.clear()
+                            cycle.resync(time.monotonic())
+                            hit_guard.cancel()
+                        stage, wait_reason = 'attacking', ''
+                        last_progress_check = time.monotonic()-config['damage_check_seconds']
+                        continue
                     if frame is not None:
                         last_frame = tick
                         combo = combo_count(frame, ocr)
                         gain = progress.observe(combo)
                         observed_hits += gain
-                        skill_ready = skill.observe(frame)
+                        ultimate_ready = ultimate_vision.observe(frame)
+                    if (tick-last_progress_check >= config['damage_check_seconds'] and
+                            cycle.phase == 'm1' and cycle.m1_index == 0 and
+                            tick-cycle.last_ultimate >= 15 and hotbar_visible(screen.capture(sct))):
+                        stage = 'checking_damage'
+                        driver = InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer)
+                        reader = DamageTitleReader(driver, config['damage_title'],
+                                                   config['damage_target'], config['damage_title_category'])
+                        try:
+                            measurements.observe(reader.inspect(), time.time())
+                        except (RuntimeError, ValueError) as error:
+                            # A title read is telemetry, not evidence that
+                            # healthy attacks are stuck. Retry it later only
+                            # when cleanup has returned to verified gameplay.
+                            retry_frame = screen.capture(sct)
+                            if isinstance(error, ValueError) and hotbar_visible(retry_frame) and not blocked_scene(retry_frame, ocr):
+                                last_progress_check = time.monotonic()-config['damage_check_seconds']+30
+                                hit_guard.cancel()
+                                cycle.resync(time.monotonic())
+                                event('damage_title_retry', message='Title read deferred; gameplay verified and no reset: '+str(error))
+                                continue
+                            manual_paused = True
+                            needs_setup = True
+                            last_progress_check = 0.
+                            stage = 'attention'
+                            wait_reason = 'Damage progress needs a manual check: '+str(error)
+                            event('damage_attention', message=wait_reason)
+                            continue
+                        last_progress_check = time.monotonic()
+                        hit_guard.cancel()
+                        cycle.resync(last_progress_check)
+                        event('damage_progress', message=f"Verified {measurements.total:,}/{measurements.target:,} title damage")
+                        if measurements.total >= measurements.target:
+                            manual_paused = True
+                            stage = 'title_complete'
+                            wait_reason = 'Configured damage title is complete'
+                            event('damage_title_complete', message=wait_reason)
+                            continue
                     # OCR can take longer than a frame; schedule from the actual
                     # press time so the fifth M1 is never squeezed by scan delay.
                     action_at = time.monotonic()
-                    action = cycle.due(action_at, skill_ready)
-                    if action == 'c':
-                        press(inp, 'c')
-                        casts += 1
-                        skill_ready = False
-                        event('damage_skill', message=f'C cast {casts}; five M1s follow.')
-                    elif action == 'm1':
-                        attack_click(inp)
-                        clicks += 1
-                    elif action == 'cycle_end':
-                        cycles += 1
-                        hits = progress.cycle_hits
-                        if cycle.skill_this_cycle:
-                            estimated_damage += min(5, hits)*70 + max(0, hits-5)*38
-                        else:
-                            estimated_damage += min(5, hits)*70
-                        stalled = progress.finish_cycle(cycle.skill_this_cycle)
-                        if cycles % 5 == 0:
-                            event('damage_progress', message=f'Combo {combo or "—"} · {clicks} M1 · {casts} C · {resets} respawns.')
-                        if stalled:
-                            if not progress.reset_allowed(action_at):
+                    readiness_frame = screen.capture(sct)
+                    if not hotbar_visible(readiness_frame):
+                        # Ultimate cinematics hide the HUD. Do not send clicks
+                        # or count that interval as a failed attack string.
+                        stage = 'waiting_animation'
+                        wait_reason = 'Waiting for the skill animation to finish'
+                        hit_guard.cancel()
+                        cycle.resync(time.monotonic())
+                        time.sleep(.1)
+                        continue
+                    due = cycle.due(action_at, ultimate_vision.observe(readiness_frame),
+                                    shock_vision.observe(readiness_frame),
+                                    followup_vision.observe(readiness_frame))
+                    action = due[0] if due else None
+                    if action in ('shock_wave', 'skip_shock_wave'):
+                        # Check after the fifth click but before any skill can
+                        # add combo ticks. Two stable reads are required.
+                        first_post = combo_count(screen.capture(sct), ocr)
+                        observed_hits += progress.observe(first_post)
+                        guarded_wait(.18)
+                        second_post = combo_count(screen.capture(sct), ocr)
+                        observed_hits += progress.observe(second_post)
+                        combo = second_post if second_post is not None else first_post
+                        baseline_combo = hit_guard.start_combo
+                        result = hit_guard.check(observed_hits, first_post, second_post)
+                        event('damage_five_hit_check', result=result, baseline=baseline_combo,
+                              first_post=first_post, second_post=second_post, clicks=5,
+                              message=f'Five M1s: {baseline_combo} -> {first_post}/{second_post}; {result}')
+                        if result == 'investigate':
+                            stage = 'checking_damage'
+                            wait_reason = 'Two five-hit strings lacked confirmed combo growth; checking title'
+                            status()
+                            prior_title = measurements.total
+                            driver = InventoryDriver(hwnd,screen,sct,inp,ocr,USER,move_pointer)
+                            reader = DamageTitleReader(driver, config['damage_title'],
+                                config['damage_target'], config['damage_title_category'])
+                            try:
+                                measurements.observe(reader.inspect(), time.time())
+                            except (RuntimeError, ValueError) as error:
                                 manual_paused = True
                                 stage = 'attention'
-                                wait_reason = 'Repeated resets did not restore combo; inspect statue position and press F8'
+                                wait_reason = 'Combo uncertain and title unreadable; reset withheld: '+str(error)
+                                event('damage_attention', message=wait_reason)
+                                continue
+                            last_progress_check = time.monotonic()
+                            hit_guard.title_progressed()
+                            if measurements.total > prior_title:
+                                event('damage_stall_cleared', message='Title increased despite uncertain combo; no reset.')
+                            elif not progress.reset_allowed(action_at):
+                                manual_paused = True
+                                stage = 'attention'
+                                wait_reason = 'Repeated verified stalls; reset limit reached'
                                 event('damage_attention', message=wait_reason)
                             elif reset_character(inp, screen, sct, ocr, event):
                                 resets += 1
                                 needs_setup = True
                                 next_setup = time.monotonic()+7.
-                                cycle.resync(next_setup)
                             else:
                                 manual_paused = True
                                 stage = 'attention'
-                                wait_reason = 'Reset UI was uncertain; inspect Roblox and press F8'
+                                wait_reason = 'Reset UI uncertain after verified stall'
+                            cycle.resync(time.monotonic())
+                            continue
+                        if result != 'healthy':
+                            event('damage_combo_uncertain', message=f'Five-hit result: {result}; reset withheld.')
+                    if action == 'shock_wave':
+                        perform_move('shock_wave')
+                        event('damage_skill', message=f"{rotation['names']['shock_wave']} used after five M1s")
+                    elif action == 'followup':
+                        perform_move('followup')
+                        event('damage_skill', message=f"{rotation['names']['followup']} used")
+                    elif action == 'ultimate_pair':
+                        perform_move('ultimate_pair')
+                        ultimate_ready = False
+                        event('damage_skill', message='Quick prep tap and held ultimate used together')
+                    elif action == 'm1':
+                        if due[1] == 1:
+                            # Read immediately before this string, after prior skill ticks.
+                            combo = combo_count(screen.capture(sct), ocr)
+                            observed_hits += progress.observe(combo)
+                            hit_guard.begin(observed_hits, combo)
+                        attack_click(inp)
+                        clicks += 1
+                    elif action == 'cycle_end':
+                        cycles += 1
+                        progress.finish_cycle(True)
+                        if cycles % 5 == 0:
+                            event('damage_progress', message=f'Combo {combo or "—"} · {clicks} M1 · {casts} C · {resets} respawns.')
                     active_seconds += delta
                     if not manual_paused:
                         stage = 'attacking'
@@ -277,6 +537,7 @@ def main(argv=None):
                     stage = 'paused_focus' if 'focus' in str(error).lower() or 'Roblox' in str(error) else 'attention'
                     wait_reason = str(error)
                     needs_setup = True
+                    hit_guard.cancel()
                     cycle.resync(tick)
                     time.sleep(.2)
                 finally:

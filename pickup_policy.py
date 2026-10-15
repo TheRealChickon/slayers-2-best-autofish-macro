@@ -2,6 +2,18 @@
 import math
 import re
 from dataclasses import dataclass
+from reward_evidence import reward_quantity
+
+FIRST_COLLECT_HOLD_GRACE_SECONDS = .25
+
+
+# All 404 successful holds on 2026-10-14 claimed within 2.72 s of T-down (2 s game hold
+# plus toast confirmation); a hold still unclaimed past ~3 s is on a replaced prompt.
+COLLECT_HOLD_SECONDS = 2.75
+
+
+def collect_hold_timeout(attempt):
+    return COLLECT_HOLD_SECONDS+(FIRST_COLLECT_HOLD_GRACE_SECONDS if attempt==1 else 0)
 
 
 @dataclass(frozen=True)
@@ -9,6 +21,7 @@ class Pickup:
     kind: str
     text: str = ''
     center: tuple = (0, 0)
+    key_center: tuple | None = None
 
 
 def same_reward(first, second):
@@ -24,6 +37,11 @@ def classify(rows):
     # name and the caller's repeated-observation gate are still required.
     rows = [r for r in rows if r.get('score', 0) >= .80 or
             (r.get('score',0)>=.70 and re.fullmatch(r'x\s*\d{1,3}',r['text'].strip(),re.I))]
+    # Inventory headers identify a menu, even when its item quantities and
+    # tooltips occupy the same screen region as a fishing reward.
+    if any(re.fullmatch(r'(?:all(?: classes)?|equipped|fishing)\s*\(\s*\d+\s*\)',
+                        r['text'].strip(),re.I) for r in rows):
+        return Pickup('empty')
     def cluster(anchor):
         x,y=anchor['center']
         close=[r for r in rows if abs(r['center'][0]-x)<180 and abs(r['center'][1]-y)<65]
@@ -35,6 +53,7 @@ def classify(rows):
     other = [r for r in rows if re.search(r'\bwall\b|climb|\bpurchase\b|would you like', r['text'], re.I)]
     # Quantity labels need an item name, not a lone X1 elsewhere in the scene.
     rewards = [r for r in rows if re.search(r'\b(?:x\s*\d+|new)\b', r['text'], re.I)
+               and reward_quantity(cluster(r)) is not None
                and len(re.sub(r'\b(?:x\s*\d+|new)\b|[^a-z]', '', cluster(r).lower())) >= 3
                and r not in collect and r not in other]
     if collect and other:
@@ -43,10 +62,13 @@ def classify(rows):
     if not candidates:
         return Pickup('empty')
     row = max(candidates, key=lambda r: r['score'])
-    return Pickup(kind, cluster(row), tuple(row['center']))
+    keys=[r for r in rows if kind=='collect' and r.get('score',0)>=.90
+          and r['text'].strip().upper()=='T' and math.dist(r['center'],row['center'])<150]
+    return Pickup(kind, cluster(row), tuple(row['center']),
+                  tuple(keys[0]['center']) if len(keys)==1 else None)
 
 
-def classify_toast(rows):
+def classify_toast(rows,require_x=False):
     """Read the small reward toast after T without authorizing any game input."""
     if any(re.search(r'collect|climb|wall|purchase', row['text'], re.I) for row in rows):
         return Pickup('empty')
@@ -57,7 +79,9 @@ def classify_toast(rows):
     amounts = []
     for row in rows:
         token = re.sub(r'\s+', '', row['text']).lower()
-        match = re.fullmatch(r'(?:x|\?)?(\d{1,3})', token)
+        # A dropped item shows a bare despawn countdown (20, 19, ...) beside its
+        # name; only the real receipt carries the X quantity prefix.
+        match =re.fullmatch(r'x(\d{1,3})' if require_x else r'(?:x|\?)?(\d{1,3})', token)
         threshold = .85 if token.isdigit() else .65 if token.startswith('?') else .60
         if match and row.get('score', 0) >= threshold:
             amounts.append((row, int(match.group(1))))
@@ -70,15 +94,125 @@ def classify_toast(rows):
     return Pickup('reward', f"{name['text'].strip()} X{quantity}", tuple(name['center']))
 
 
+def clear_collect(rows,after_minigame=False):
+    """An explicit T beside a strong Collect label supplies two visual cues."""
+    if classify(rows).kind!='collect':return False
+    keys=[r for r in rows if r.get('score',0)>=.90 and r['text'].strip().upper()=='T']
+    labels=[r for r in rows if r.get('score',0)>=.94 and re.fullmatch('collect',r['text'].strip(),re.I)]
+    return (len(keys)==len(labels)==1 and math.dist(keys[0]['center'],labels[0]['center'])<150
+            or after_minigame and len(labels)==1 and labels[0]['score']>=.97)
+
+
+class RewardGate:
+    def __init__(self):self.confirmed=set()
+    def accept(self,cycle):
+        if cycle in self.confirmed:return False
+        self.confirmed.add(cycle);return True
+
+
+# Across 12,290 logged prompts the Collect label was readable 0.75 s (median)
+# and 1.36 s (99.5th percentile) after the minigame closed. Waiting 10 s on a
+# completed round without loot cost ~8 s per empty round. A rare later drop is
+# still collected by the scene check that runs before every cast. On 2026-10-14
+# the latest of 85 prompts came 1.04 s after the end; 1.6 s keeps a margin over
+# the 1.36 s p99.5 and saves ~0.4 s per empty round over the earlier 2.0 s.
+EMPTY_AFTER_COMPLETE_SECONDS = 1.6
+EMPTY_AFTER_FAILED_SECONDS = 1.5
+
+
+def waiting_decision(evidence,stable,elapsed,fresh_round=False,percent=None):
+    """A completed catch may render its loot later than the result percentage."""
+    if stable and evidence.kind in ('collect','reward'):return evidence.kind
+    empty_limit=EMPTY_AFTER_COMPLETE_SECONDS if fresh_round and percent==100 else EMPTY_AFTER_FAILED_SECONDS
+    if evidence.kind=='empty' and elapsed>(empty_limit if stable else empty_limit+.5):return 'empty'
+    if evidence.kind=='other' and elapsed>4:return 'empty'
+    if elapsed>max(7,empty_limit+2):return 'timeout'
+    return 'wait'
+
+
+def before_cast_decision(evidence,stable,elapsed,confirmed_reward=None,full_scene=False):
+    """Reconcile ground loot before casting; a toast alone is not a new catch."""
+    if stable and evidence.kind=='collect':return 'collect'
+    # A receipt already confirmed across frames does not need another generic
+    # dwell and two more OCR passes. Require the exact same receipt in a fresh
+    # full scene so a Collect/other interaction outside the toast crop wins.
+    if full_scene and confirmed_reward is not None and same_reward(evidence,confirmed_reward):return 'clear'
+    # Once the receipt is confirmed, a fresh full scene with repeated clear
+    # evidence is sufficient even when the toast has faded. Keep the gate's
+    # multi-frame stability requirement, without another generic clear dwell.
+    if full_scene and confirmed_reward is not None and stable and evidence.kind=='empty':return 'clear'
+    if stable and evidence.kind in ('empty','reward') and elapsed>=.35:return 'clear'
+    if elapsed>7:return 'timeout'
+    return 'wait'
+
+
+def retain_collect_hold(evidence,elapsed,confirmed_reward=False,attempt=0):
+    """An OCR miss can hide a prompt during its already-authorized hold."""
+    return not confirmed_reward and evidence.kind not in ('other','ambiguous') and elapsed<collect_hold_timeout(attempt)
+
+
+class CollectHoldMotion:
+    """One fresh retry when an airborne collect target has moved and settled."""
+    def __init__(self):
+        self.origin=None;self.key_origin=None;self.previous=None;self.started=0;self.at=0
+        self.retry_ready_at=None
+
+    def start(self,evidence,now):
+        self.key_origin=evidence.key_center
+        self.origin=evidence.key_center or evidence.center;self.previous=None;self.started=self.at=now
+        self.retry_ready_at=None
+
+    def observe(self,evidence,stable,now,attempt):
+        previous=self.previous;age=now-self.at
+        self.previous=evidence;self.at=now
+        keyed=self.key_origin is not None and evidence.key_center is not None and previous is not None and previous.key_center is not None
+        position=evidence.key_center if keyed else evidence.center
+        prior_position=previous.key_center if keyed else previous.center if previous is not None else None
+        new_key=(self.key_origin is None and evidence.key_center is not None
+                 and previous is not None and previous.key_center is not None
+                 and math.dist(evidence.key_center,previous.key_center)<=25)
+        ready=(self.origin is not None and (self.key_origin is None or keyed) and attempt==1 and stable
+                and evidence.kind=='collect' and previous is not None and previous.kind=='collect'
+                and now-self.started>=.65 and age<=1.5
+                and (new_key or math.dist(self.origin,position)>(65 if keyed else 180)
+                     and math.dist(prior_position,position)<=25))
+        if not ready:
+            self.retry_ready_at=None;return False
+        # A moving/changing Collect prompt often settles before its original
+        # hold completes. Give that first hold a short grace while fresh settled
+        # evidence continues; a reward can still finish it immediately.
+        if self.retry_ready_at is None:self.retry_ready_at=now
+        return now>=self.retry_ready_at+(.12 if keyed or new_key else FIRST_COLLECT_HOLD_GRACE_SECONDS)
+
+
+class CollectReadyGate:
+    """Avoid pressing into the airborne prompt that Roblox replaces on landing."""
+    def __init__(self):self.previous=None;self.at=0;self.first_seen=None
+
+    def observe(self,evidence,stable,now):
+        previous=self.previous;age=now-self.at
+        self.previous=evidence;self.at=now
+        if evidence.kind!='collect':self.first_seen=None;return False
+        if self.first_seen is None:self.first_seen=now
+        # Stable Collect plus a nearby confident T is already two independent
+        # visual cues. Start now; the motion gate can rebind a replaced prompt.
+        if stable and evidence.key_center is not None:return True
+        if not stable or previous is None or previous.kind!='collect' or age>1.5:return False
+        # Some prompt text occludes T. Retain a bounded, repeated-label fallback.
+        return now-self.first_seen>=.12 and (math.dist(evidence.center,previous.center)<=25
+                                          or now-self.first_seen>=.3)
+
+
 class PickupGate:
     def __init__(self):
         self.previous = None
         self.at = 0
         self.count = 0
 
-    def observe(self, evidence, now):
+    def observe(self, evidence, now, scan_seconds=0):
         same = (self.previous is not None and self.previous.kind == evidence.kind
-                and math.dist(self.previous.center, evidence.center) < 180 and now-self.at < 1.5)
+                and math.dist(self.previous.center, evidence.center) < 180
+                and now-self.at < max(1.5, scan_seconds+.75))
         self.count = self.count+1 if same else 1
         self.previous, self.at = evidence, now
         return self.count >= 2

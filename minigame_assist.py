@@ -13,8 +13,10 @@ import win32gui
 import numpy as np
 
 from fishing_assistant import ROOT, USER, Input, detect, find_window, rectangle
+from fishing_vision import SceneColors
 from metrics import RUN, Ledger, read, write
 from screen_space import ScreenSpace
+from window_fit import fitted
 from fishing_vision import ui_visible
 from pickup_policy import classify, PickupGate, Pickup, same_reward
 from spot_fishing import SpotCycle
@@ -204,6 +206,8 @@ def main(argv=None):
     import control_actions as controls
     RUN.mkdir(parents=True,exist_ok=True)
     with controls.guard():
+        if controls.alive('route-recorder-pid.json'):
+            raise RuntimeError('Bait route recorder is open; close it before starting Fishing')
         if controls.alive() or controls.alive('pid.json'):
             raise RuntimeError('A fishing controller is already running')
         if (RUN/'STOP').exists() or (RUN/'PAUSE').exists():
@@ -212,6 +216,7 @@ def main(argv=None):
         write('supervisor-pid.json',record);write('pid.json',record)
     started = time.time();monotonic_started=time.monotonic();session=time.strftime('%Y%m%d-%H%M%S')+'-'+str(os.getpid())
     ledger=Ledger();tracker=TrackingAssist();inp=ForegroundInput();next_state=0;hwnd=None;screen=None;last_activity=0
+    colors=SceneColors(lambda kind,**kw:event(kind,**kw),detector=lambda roi:detect(roi))
     reason='session_limit';stage='assist_waiting';last_count=0;wait_reason=''
     log=(RUN/f'events-{session}.jsonl').open('a',buffering=1)
     def event(kind,**kw):
@@ -222,7 +227,7 @@ def main(argv=None):
     assist_paused=False
     ocr=None
     if spot:
-        from rapidocr_onnxruntime import RapidOCR
+        from ocr_engine import RapidOCR
         ocr=RapidOCR()
     gate=PickupGate();rod_gate=RodReady();rod_ready=False;evidence=Pickup('empty');stable=False;world=False;rod=None
     active_time=0.;last_tick=time.monotonic();last_scan=-10.;last_rod_scan=-10.;scan_ms=None;resuming=True
@@ -285,7 +290,7 @@ def main(argv=None):
                         if hwnd is not None and hwnd!=selected and spot:
                             spot.armed=False  # A new Roblox process needs the player to rearm.
                             spot.paused=True
-                        inp.release();tracker.suspend();screen=ScreenSpace(rect);hwnd=selected;inp.hwnd=hwnd
+                        inp.release();tracker.suspend();screen=ScreenSpace(fitted(selected,rect));hwnd=selected;inp.hwnd=hwnd
                         resuming=True
                     if (spot and (not spot.armed or spot.paused)) or (not spot and assist_paused):
                         inp.release()
@@ -303,7 +308,7 @@ def main(argv=None):
                     else:active_time+=delta
                     wait_reason=''
                     roi=screen.capture(sct,(1850,400,140,600))
-                    detection=detect(roi)
+                    detection=colors.detect(roi)
                     ui=screen.capture(sct,(1190,1360,180,70))
                     visible=ui_visible(ui,template)
                     was_active=tracker.active

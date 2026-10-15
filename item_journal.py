@@ -9,10 +9,12 @@ class Journal:
     def __init__(self):
         self.started=None;self.offsets={};self.prompts={};self.cycles={};self.items=[];self.activity=[];self.counts=collections.Counter();self.launches=0;self.joins=0;self.version=0;self.by_id={};self.corrections={}
         self.join_pending=False
+        self.seen_banners=set()
+        self.ended=None
 
-    def update(self,started):
-        if started!=self.started:
-            self.__init__();self.started=started
+    def update(self,started,ended=None):
+        if (started,ended)!=(self.started,self.ended):
+            self.__init__();self.started=started;self.ended=ended
         paths=sorted(RUN.glob('events-*.jsonl'))+[RUN/'recovery.jsonl',RUN/'controls.jsonl']
         changed=False
         for path in paths:
@@ -27,11 +29,15 @@ class Journal:
                     try:row=json.loads(line)
                     except ValueError:continue
                     if row.get('at',0)<(started or 0):continue
+                    if ended is not None and row.get('at',0)>ended:continue
                     kind=row.get('event','')
                     if kind=='minigame':self.cycles[key]=row.get('cycle')
                     cycle=(key,row.get('cycle',self.cycles.get(key)))
                     if kind=='pickup_hold':self.prompts[cycle]=row.get('text','')
                     if kind=='reward_observed' and is_reward_banner(row.get('text','')):
+                        banner=(key,row.get('cycle'),re.sub(r'[^a-z0-9]','',row.get('text','').casefold()))
+                        if row.get('cycle') is not None and banner in self.seen_banners:continue
+                        self.seen_banners.add(banner)
                         raw=row.get('text','');m=re.search(r'\bx\s*(\d+)\b',raw,re.I);qty=int(m[1]) if m else 1
                         item={'at':row['at'],'item':item_name(raw,self.prompts.get(cycle,'')),'quantity':qty,'raw':raw,'session':path.stem.removeprefix('events-'),'reward_id':row.get('reward_id')}
                         self.items.append(item);self.counts[item['item']]+=qty;changed=True
@@ -52,10 +58,10 @@ class Journal:
                         if kind=='equipped_rod':
                             if self.joins==0 or self.join_pending:self.joins+=1;changed=True
                             self.join_pending=False
-                    if (path.name in ('recovery.jsonl','controls.jsonl') or path.name.startswith('events-damage-')) and kind not in ('screen','disconnect_observed'):
+                    if (path.name in ('recovery.jsonl','controls.jsonl') or path.name.startswith(('events-damage-','events-rejoin-'))) and kind not in ('screen','disconnect_observed'):
                         message=row.get('message') or row.get('reason') or kind.replace('_',' ')
                         self.activity.append({'at':row['at'],'kind':kind,'message':message,
-                            'group':'recovery' if path.name=='recovery.jsonl' or kind=='damage_reset' else
+                            'group':'recovery' if path.name=='recovery.jsonl' or path.name.startswith('events-rejoin-') or kind=='damage_reset' else
                                     'damage' if path.name.startswith('events-damage-') else 'controls'});changed=True
                 self.offsets[key]=f.tell()
         if changed:

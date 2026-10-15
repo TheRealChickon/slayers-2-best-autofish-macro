@@ -45,6 +45,14 @@ class RodVariants(unittest.TestCase):
             self.assertEqual(rod['name'],'rare')
             self.assertEqual(selected_rod(rod),selected)
 
+    def test_maximized_1440p_client_vertical_normalization_preserves_selection(self):
+        for selected in (False,True):
+            frame=np.full((1369,2560,3),(30,20,10),np.uint8)
+            icon=cv2.imread(str(ROOT/('assets/rare-rod-equipped.png' if selected else 'assets/rare-rod-unequipped.png')))
+            if selected:cv2.circle(frame,(1586,1314),39,(170,170,170),2)
+            frame[1280:1280+icon.shape[0],1550:1550+icon.shape[1]]=icon
+            self.assertEqual(selected_rod(locate_rod(cv2.resize(frame,(2560,1440)))),selected)
+
     def test_tinted_or_dim_selected_ring_still_requires_circle_geometry(self):
         for selected in (True,False):
             for tint in ((40,0,-10),(-10,10,20),(-20,-20,-20)):
