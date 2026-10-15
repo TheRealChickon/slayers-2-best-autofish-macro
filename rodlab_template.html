@@ -52,6 +52,12 @@ body{background:var(--bg);color:var(--text-1);font:14px/1.5 var(--sans);margin:0
 .seg button:hover{color:var(--text-1)}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--text-1);box-shadow:var(--shadow),0 0 0 1px var(--border)}
 .seg .sw{width:8px;height:8px;border-radius:2px}
+.topctl{display:flex;flex-wrap:wrap;gap:8px}
+.seg .pre{font:500 12px var(--sans);color:var(--text-3);padding:6px 4px 6px 8px;display:inline-flex;align-items:center}
+.checks{display:grid;gap:8px}
+.checks label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-1);cursor:pointer}
+.checks small{color:var(--text-3);margin-left:auto;font:400 12px var(--mono)}
+.checks input{accent-color:var(--accent);width:15px;height:15px}
 button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* kpis */
@@ -159,7 +165,10 @@ footer{color:var(--text-3);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 18
       <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="var(--bg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 18 4"/><path d="M18 4v9a3 3 0 0 1-6 0"/><circle cx="12" cy="17" r="1.6"/></svg></div>
       <div><h1>Rod Lab</h1><p><span class="live"><i></i><span id="asof"></span></span></p></div>
     </div>
-    <div class="seg" id="rodSeg" role="group" aria-label="Show rod"></div>
+    <div class="topctl">
+      <div class="seg" id="boostSeg" role="group" aria-label="2x money boost"></div>
+      <div class="seg" id="rodSeg" role="group" aria-label="Show rod"></div>
+    </div>
   </div>
 
   <section class="kpis" id="kpis"></section>
@@ -176,8 +185,8 @@ footer{color:var(--text-3);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 18
       <div class="body"><div class="rows" id="gold"></div><div class="axis" id="goldAxis" style="margin-top:10px"></div></div>
     </article>
     <article class="card">
-      <header><div><h2>Crate B per hour</h2><p class="cap">2 each of OuwFish, Sea Horse, Coral, OuwFwesh → 1,580 gold</p></div></header>
-      <div class="body"><div class="rows" id="crates"></div></div>
+      <header><div><h2>Crate B per hour</h2><p class="cap" id="crateCap"></p></div></header>
+      <div class="body"><div class="rows" id="crates"></div><p class="note" id="oreNote" style="margin-top:14px"></p></div>
     </article>
     <article class="card">
       <header><div><h2>Fish per hour</h2><p class="cap">Crate commons marked; the scarcest one caps crates</p></div></header>
@@ -195,6 +204,7 @@ footer{color:var(--text-3);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 18
           <input id="pLvl" type="range" min="0" max="10" step="1" value="0">
           <div class="ticks11"><span>+0</span><span>+2</span><span>+4</span><span>+6</span><span>+8</span><span>+10</span></div>
         </div>
+        <div class="field"><div class="lab">Titles</div><div class="checks" id="pTitles"></div></div>
         <div id="pBadge"></div>
         <p class="note" id="pLuck"></p>
       </div>
@@ -226,34 +236,49 @@ const ORDER = ['Legendary','Rare','Common'];
 const MIN_FISH = 150;
 
 const direct = c => Object.entries(c).reduce((s,[k,v])=>s+(DATA.prices[k]||0)*v,0);
-function bestCrates(counts){
+let boostMode = DATA.boost && DATA.boost.on ? 'on' : 'off';
+function crateMult(r){                 // r: {ores, hours, cratesPerH} or null for a flat toggle
+  if(boostMode==='off')return 1;
+  if(boostMode==='on'||!r)return DATA.boost.multiplier;
+  // Own ores: 1 ore = 1 boosted minute; crates are stockpiled and turned in while boosted.
+  const oreH=r.hours?(r.ores||0)/r.hours:0, need=r.cratesPerH/(DATA.boost.crates_per_minute*DATA.boost.ore_minutes);
+  const covered=need>0?Math.min(1,oreH/need):1;
+  return 1+(DATA.boost.multiplier-1)*covered;
+}
+function bestCrates(counts,mult=1){
   const N=DATA.crates; let best=null;
   const limA=Math.min(...Object.entries(N.A.needs).map(([k,n])=>Math.floor((counts[k]||0)/n)));
   for(let a=0;a<=limA;a++){
     const left={...counts}; for(const[k,n]of Object.entries(N.A.needs))left[k]=(left[k]||0)-a*n;
     const b=Math.min(...Object.entries(N.B.needs).map(([k,n])=>Math.floor((left[k]||0)/n)));
     for(const[k,n]of Object.entries(N.B.needs))left[k]-=b*n;
-    const crate=a*N.A.gold+b*N.B.gold, rest=direct(left);
+    const crate=mult*(a*N.A.gold+b*N.B.gold), rest=direct(left);
     if(!best||crate+rest>best.total)best={a,b,crate,rest,total:crate+rest};
   }
   best.limit=COMMONS.reduce((m,x)=>(counts[x]||0)<(counts[m]||0)?x:m,COMMONS[0]);
   return best;
 }
-function hourly(perHour){
+function hourly(perHour,mult=1){
   const b=Math.min(...COMMONS.map(x=>(perHour[x]||0)/2)), left={...perHour};
   COMMONS.forEach(x=>left[x]-=2*b);
-  return {b,crate:b*DATA.crates.B.gold,rest:direct(left)};
+  return {b,crate:mult*b*DATA.crates.B.gold,rest:direct(left)};
 }
+const oreOf = r => (r.ores&&r.ores.ore)||0;
+const TITLE_LUCK = t => (DATA.title_buffs[t]||{}).fishing_luck||1;
+const luckOfTitles = list => (list||[]).reduce((m,t)=>m*TITLE_LUCK(t),1);
 const rarityOf = c => { const o={Common:0,Uncommon:0,Legendary:0}; for(const[x,v]of Object.entries(c))o[DATA.rarity[x]]+=v; return o; };
 function wilson(x,n,z=1.96){if(!n)return[0,0];const p=x/n,d=1+z*z/n,c=p+z*z/(2*n),h=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n));return[Math.max(0,(c-h)/d),Math.min(1,(c+h)/d)]}
 
-const rods = DATA.rods.map(r=>{
-  const h=r.active_hours, c=bestCrates(r.counts), per={};
+function derive(r){
+  const h=r.active_hours, c0=bestCrates(r.counts,1), per={};
   for(const[x,v]of Object.entries(r.counts))per[x]=h?v/h:0;
-  return {...r,c,per,rc:rarityOf(r.counts),hpm:h?r.hooks/(h*60):null,
+  const crPerH=h?(c0.a+c0.b)/h:null, mult=crateMult({ores:oreOf(r),hours:h,cratesPerH:crPerH||0});
+  const c=bestCrates(r.counts,mult);
+  return {...r,c,per,mult,rc:rarityOf(r.counts),hpm:h?r.hooks/(h*60):null,oreH:h?oreOf(r)/h:null,
     directH:h?direct(r.counts)/h:null,crateH:h?c.crate/h:null,restH:h?c.rest/h:null,totalH:h?c.total/h:null,
     crPerH:h?(c.a+c.b)/h:null,small:r.fish<MIN_FISH};
-}).sort((a,b)=>ORDER.indexOf(a.rod)-ORDER.indexOf(b.rod));
+}
+let rods = DATA.rods.map(derive).sort((a,b)=>ORDER.indexOf(a.rod)-ORDER.indexOf(b.rod));
 const ROD_SW = {Legendary:'var(--legendary)',Rare:'var(--uncommon)',Common:'var(--common)'};
 let view = 'All';
 
@@ -276,7 +301,11 @@ function seg(el,items,current,onPick){
     b.setAttribute('aria-pressed',val===current); b.onclick=()=>onPick(val); el.appendChild(b);
   });
 }
-function drawSeg(){seg($('rodSeg'),[['All','All rods'],...rods.map(r=>[r.rod,r.rod,ROD_SW[r.rod]])],view,v=>{view=v;drawSeg();render()})}
+function drawSeg(){
+  seg($('rodSeg'),[['All','All rods'],...rods.map(r=>[r.rod,r.rod,ROD_SW[r.rod]])],view,v=>{view=v;drawSeg();render()});
+  seg($('boostSeg'),[['on','2× on'],['ores','Own ores'],['off','No boost']],boostMode,v=>{boostMode=v;rods=DATA.rods.map(derive).sort((a,b)=>ORDER.indexOf(a.rod)-ORDER.indexOf(b.rod));drawSeg();render();predict()});
+  const pre=document.createElement('span');pre.className='pre';pre.textContent='Crate cash';$('boostSeg').prepend(pre);
+}
 
 /* count-up for KPI values */
 function countUp(el,to,format){
@@ -327,14 +356,18 @@ function render(){
   $('goldAxis').innerHTML = `<span></span><div class="ticks">${Array.from({length:Math.round(top/nice)+1},(_,i)=>`<span>${i?k(i*nice):'0'}</span>`).join('')}</div><span class="pad"></span>`;
 
   /* crates */
+  $('crateCap').textContent = `2 each of OuwFish, Sea Horse, Coral, OuwFwesh → ${fmt(DATA.crates.B.gold*(boostMode==='off'?1:DATA.boost.multiplier))} gold`+
+    (boostMode==='ores'?' with 2× while your own ores last':boostMode==='on'?' with 2×':' without boost');
   const cmax = Math.max(1,...shown.map(r=>r.crPerH||0))*1.1;
   $('crates').innerHTML = shown.map(r=>{
     const w=100*(r.crPerH||0)/cmax;
     return `<div class="row${r.small?' dim':''}"><div class="name">${r.rod}<small>${DATA.names[r.c.limit]} limits</small></div>
-      <div class="track"><div class="stack" style="width:${w}%"><div class="seg-fill" style="flex:1;background:var(--crate)" data-tip="${r.rod}<br><b>${fmt(r.crPerH,1)}</b> crates/h · ${fmt(r.c.a+r.c.b)} total<br>scarcest: ${DATA.names[r.c.limit]} (${fmt(r.counts[r.c.limit]||0)})"></div></div></div>
+      <div class="track"><div class="stack" style="width:${w}%"><div class="seg-fill" style="flex:1;background:var(--crate)" data-tip="${r.rod}<br><b>${fmt(r.crPerH,1)}</b> crates/h · ${fmt(r.c.a+r.c.b)} total<br>scarcest: ${DATA.names[r.c.limit]} (${fmt(r.counts[r.c.limit]||0)})<br>Ores: <b>${fmt(r.oreH,1)}</b>/h (${fmt(oreOf(r))} caught) · crate cash ×${r.mult.toFixed(2)}"></div></div></div>
       <div class="val">${fmt(r.crPerH,1)}</div></div>`;
   }).join('');
 
+  $('oreNote').innerHTML = shown.map(r=>`<b>${r.rod}</b>: ${fmt(r.oreH,1)} ores/h`).join(' · ')+
+    ` — 1 ore = 1 minute of 2× crate cash; stockpiled crates are turned in at about ${DATA.boost.crates_per_minute}/min (estimate).`;
   /* species matrix */
   const species = Object.keys(DATA.rarity).sort((a,b)=>RAR.indexOf(DATA.rarity[a])-RAR.indexOf(DATA.rarity[b]));
   const smax = Math.max(1,...shown.flatMap(r=>species.map(x=>r.per[x]||0)));
@@ -345,9 +378,9 @@ function render(){
 
   /* runs */
   const list = DATA.runs.filter(r=>view==='All'||r.rod===view).slice().reverse();
-  $('runs').innerHTML = '<thead><tr><th>Run</th><th>Started</th><th>Fished</th><th>Hooks</th><th>Fish</th><th>Crates</th><th>Crate gold</th><th>Leftovers</th><th>Combined</th><th>Per hour</th></tr></thead><tbody>'+
-    list.map(r=>{const c=bestCrates(r.counts),h=r.active_hours,d=new Date(r.started*1000);
-      return `<tr><td><span class="chip"><i style="background:${ROD_SW[r.rod]||'var(--text-3)'}"></i>${r.rod}</span></td><td class="mono">${d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})} ${d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</td><td class="num">${fmt(h,1)}h</td><td class="num">${fmt(r.hooks)}</td><td class="num">${fmt(r.fish)}</td><td class="num">${c.b} B${c.a?' + '+c.a+' A':''}</td><td class="num">${fmt(c.crate)}</td><td class="num">${fmt(c.rest)}</td><td class="num"><b>${fmt(c.total)}</b></td><td class="num">${h>=.05?fmt(c.total/h):'—'}</td></tr>`}).join('')+'</tbody>';
+  $('runs').innerHTML = '<thead><tr><th>Run</th><th>Started</th><th>Fished</th><th>Hooks</th><th>Fish</th><th>Crates</th><th>Crate gold</th><th>Leftovers</th><th>Combined</th><th>Per hour</th><th>Ores</th><th>Titles</th></tr></thead><tbody>'+
+    list.map(r=>{const h=r.active_hours,c0=bestCrates(r.counts,1),c=bestCrates(r.counts,crateMult({ores:oreOf(r),hours:h,cratesPerH:h?(c0.a+c0.b)/h:0})),d=new Date(r.started*1000);
+      return `<tr><td><span class="chip"><i style="background:${ROD_SW[r.rod]||'var(--text-3)'}"></i>${r.rod}</span></td><td class="mono">${d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})} ${d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</td><td class="num">${fmt(h,1)}h</td><td class="num">${fmt(r.hooks)}</td><td class="num">${fmt(r.fish)}</td><td class="num">${c.b} B${c.a?' + '+c.a+' A':''}</td><td class="num">${fmt(c.crate)}</td><td class="num">${fmt(c.rest)}</td><td class="num"><b>${fmt(c.total)}</b></td><td class="num">${h>=.05?fmt(c.total/h):'—'}</td><td class="num">${fmt(oreOf(r))}</td><td style="color:var(--text-2)">${(r.titles||[]).map(t=>t.split(' ').map(w=>w[0]).join('')).join(' · ')||'—'}</td></tr>`}).join('')+'</tbody>';
   if(view!=='All'&&pick!==view&&rods.some(r=>r.rod===view)){pick=view;lvl=rods.find(r=>r.rod===view).enchant_level;drawPredictor()}
 }
 
@@ -360,8 +393,15 @@ function luckAt(level){
   return{v:LUCK[lo]+(LUCK[hi]-LUCK[lo])*(level-lo)/(hi-lo),exact:false};
 }
 let pick = rods.find(r=>!r.small)?.rod || rods[0]?.rod, lvl = rods.find(r=>r.rod===pick)?.enchant_level||0;
+let titlesPick = null;
 function drawPredictor(){
-  seg($('pRod'),rods.map(r=>[r.rod,r.rod,ROD_SW[r.rod]]),pick,v=>{pick=v;lvl=rods.find(r=>r.rod===v).enchant_level;drawPredictor()});
+  seg($('pRod'),rods.map(r=>[r.rod,r.rod,ROD_SW[r.rod]]),pick,v=>{pick=v;lvl=rods.find(r=>r.rod===v).enchant_level;titlesPick=null;drawPredictor()});
+  const r=rods.find(x=>x.rod===pick); if(titlesPick==null)titlesPick=new Set(r&&r.titles||[]);
+  $('pTitles').innerHTML=Object.entries(DATA.title_buffs).sort((a,b)=>(b[1].fishing_luck||1)-(a[1].fishing_luck||1)).map(([t,b],i)=>
+    `<label><input type="checkbox" id="pt${i}" data-t="${t}" ${titlesPick.has(t)?'checked':''}>${t}<small>${b.fishing_luck?b.fishing_luck+'× luck':''}${b.fishing_luck&&b.bite_speed?' · ':''}${b.bite_speed?b.bite_speed+'× bite':''}</small></label>`).join('');
+  $('pTitles').querySelectorAll('input').forEach(el=>el.onchange=()=>{
+    if(el.checked&&titlesPick.size>=3){el.checked=false;return}
+    el.checked?titlesPick.add(el.dataset.t):titlesPick.delete(el.dataset.t);predict()});
   const sl=$('pLvl'); sl.value=lvl; sl.style.setProperty('--fill',(lvl*10)+'%');
   predict();
 }
@@ -369,13 +409,17 @@ $('pLvl').addEventListener('input',e=>{lvl=+e.target.value;e.target.style.setPro
 function predict(){
   const r=rods.find(x=>x.rod===pick); if(!r)return;
   $('pLvlOut').textContent='+'+lvl;
-  const base=luckAt(r.enchant_level), tgt=luckAt(lvl), f=tgt.v/base.v, real=lvl===r.enchant_level;
+  const base=luckAt(r.enchant_level), tgt=luckAt(lvl);
+  const tBase=luckOfTitles(r.titles), tNow=luckOfTitles([...(titlesPick||[])]);
+  const f=(tgt.v*tNow)/(base.v*tBase);
+  const sameTitles=[...(titlesPick||[])].sort().join()===(r.titles||[]).slice().sort().join();
+  const real=lvl===r.enchant_level&&sameTitles;
   const w={Common:r.rc.Common,Uncommon:r.rc.Uncommon*f,Legendary:r.rc.Legendary*f}, W=(w.Common+w.Uncommon+w.Legendary)||1;
   const fph=r.active_hours?r.fish/r.active_hours:0, per={};
   for(const[x,v]of Object.entries(r.counts)){const rr=DATA.rarity[x];per[x]=r.rc[rr]?fph*(w[rr]/W)*(v/r.rc[rr]):0}
-  const hc=hourly(per), total=hc.crate+hc.rest;
+  const hc=hourly(per,crateMult({ores:oreOf(r),hours:r.active_hours,cratesPerH:Math.min(...COMMONS.map(x=>(per[x]||0)/2))})), total=hc.crate+hc.rest;
   $('pBadge').innerHTML = real?'<span class="badge meas"><i></i>Measured</span>':'<span class="badge est"><i></i>Model estimate</span>';
-  $('pLuck').textContent = `Luck ×${tgt.v.toFixed(2)} at +${lvl}, against ×${base.v.toFixed(2)} at the measured +${r.enchant_level}. `+(tgt.exact?'':'This level is interpolated until the exact table is in. ')+(r.small?`Only ${fmt(r.fish)} fish so far, so treat this as rough.`:'');
+  $('pLuck').textContent = `Enchant luck ×${tgt.v.toFixed(2)} at +${lvl} (measured at +${r.enchant_level}); titles ×${tNow.toFixed(3)} (measured with ×${tBase.toFixed(3)}). `+(tgt.exact?'':'This level is interpolated until the exact table is in. ')+(r.small?`Only ${fmt(r.fish)} fish so far, so treat this as rough.`:'');
   const st=(l,v,d,id)=>`<div><div class="l">${l}</div><div class="v num" id="${id}"></div><div class="d">${d}</div></div>`;
   $('pStats').innerHTML = st('Combined gold / h','',`${k(hc.crate)} crates + ${k(hc.rest)} leftovers`,'ps0')+st('Crate B / h','',`${fmt(fph)} fish per hour`,'ps1')+st('Hooks / min','','Enchant does not change bite speed','ps2');
   countUp($('ps0'),total,v=>fmt(v)); countUp($('ps1'),hc.b,v=>fmt(v,1)); countUp($('ps2'),r.hpm,v=>fmt(v,2));
@@ -389,6 +433,6 @@ function predict(){
 }
 
 $('asof').textContent = `Data as of ${DATA.generated}`;
-$('foot').innerHTML = `<span>Prices: Common 33 · Uncommon 66 · Legendary 165</span><span>Crate A: 3 of each common + Clown Fish + Zebra Fish → ${fmt(DATA.crates.A.gold)}</span><span>Enchant luck: +9 = 2× · +10 = 3× · others interpolated</span><span>Range bars: shaded = measured 95% range, tick = predicted chance</span>`;
+$('foot').innerHTML = `<span>Prices: Common 33 · Uncommon 66 · Legendary 165</span><span>Crate base gold: B ${fmt(DATA.crates.B.gold)} · A ${fmt(DATA.crates.A.gold)} (2× boost doubles crates only)</span><span>Enchant luck: +9 = 2× · +10 = 3× · others interpolated</span><span>Range bars: shaded = measured 95% range, tick = predicted chance</span>`;
 drawSeg(); render(); drawPredictor();
 </script>
