@@ -16,7 +16,7 @@
   --shadow:0 1px 2px rgba(17,17,16,.04),0 1px 1px rgba(17,17,16,.03);
   --sans:'Geist',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
   --mono:'Geist Mono',ui-monospace,'SFMono-Regular',Consolas,monospace;
-  --r:10px; --ease:cubic-bezier(.2,.8,.2,1);
+  --r:10px; --ease:cubic-bezier(.2,.8,.2,1); --spring:cubic-bezier(.34,1.56,.64,1); --squish:cubic-bezier(.5,1.8,.4,.8);
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0f0f0e; --surface:#171716; --raised:#1c1c1b; --border:#2a2a28; --border-strong:#383835;
@@ -238,6 +238,59 @@ footer a{color:inherit}
 .choice{justify-items:center;text-align:center;padding:18px 14px}
 .choice .i{width:24px;height:24px;color:var(--accent);margin-bottom:4px}
 .sheet .btns{justify-content:center}
+
+/* motion: springy, a little bouncy, never slow */
+.seg{position:relative;isolation:isolate}
+.seg .glide{position:absolute;z-index:-1;border-radius:6px;background:var(--surface);box-shadow:var(--shadow),0 0 0 1px var(--border);pointer-events:none;transition:left .5s var(--spring),top .5s var(--spring),width .5s var(--spring),height .5s var(--spring),opacity .2s}
+.seg .glide.now{transition:none}
+.seg:has(.glide) button[aria-pressed="true"]{background:transparent;box-shadow:none}
+.seg button{transition:color .15s,transform .35s var(--spring)}
+.seg button:active:not(:disabled){transform:scale(.9)}
+.seg button .i{transition:transform .45s var(--spring)}
+.seg button:hover:not(:disabled) .i{transform:translateY(-1px) rotate(-8deg) scale(1.12)}
+.seg button[aria-pressed="true"] .i{color:var(--accent)}
+.btn{transition:transform .4s var(--spring),box-shadow .25s,background-color .15s,border-color .15s,opacity .15s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(17,17,16,.08)}
+.btn:active{transform:translateY(0) scale(.93);transition-duration:.12s}
+.btn .i{transition:transform .45s var(--spring)}
+.btn:hover .i{transform:scale(1.18)}
+.btn.primary{animation:breathe 3.2s ease-in-out infinite}
+@keyframes breathe{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--text-1) 0%,transparent)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--text-1) 8%,transparent)}}
+.switch{transition:background-color .25s}
+.switch::after{transition:transform .45s var(--spring),width .25s var(--ease)}
+.switch:active::after{width:22px}
+.switch[aria-checked="true"]:active::after{transform:translateX(10px)}
+.kpi{transition:background-color .2s}
+.kpi .l .i{transition:transform .5s var(--spring)}
+.kpi:hover .l .i{transform:scale(1.25) rotate(-10deg);color:var(--accent)}
+.pill{transition:transform .4s var(--spring),border-color .2s}
+.pill:hover{transform:translateY(-2px) scale(1.04);border-color:var(--border-strong)}
+.card{transition:transform .45s var(--spring),box-shadow .3s}
+.grid>.card:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(17,17,16,.06)}
+.set .ic{transition:transform .45s var(--spring),color .2s,background-color .2s}
+.set:hover .ic{transform:scale(1.12) rotate(-6deg);color:var(--accent);background:var(--accent-soft)}
+.choice{transition:transform .45s var(--spring),border-color .15s,background-color .15s}
+.choice:hover{transform:translateY(-3px) scale(1.02)}
+.choice:active{transform:scale(.96);transition-duration:.1s}
+.choice .i{transition:transform .5s var(--spring)}
+.choice:hover .i{transform:scale(1.25)}
+.stepper output.bump{animation:bump .4s var(--spring)}
+@keyframes bump{0%{transform:scale(1)}40%{transform:scale(1.45)}100%{transform:scale(1)}}
+.view.on>*{animation:rise .6s var(--spring) backwards}
+.view.on>*:nth-child(2){animation-delay:.05s}.view.on>*:nth-child(3){animation-delay:.1s}.view.on>*:nth-child(4){animation-delay:.15s}
+@keyframes rise{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+.view.on{animation:none}
+.ev.fresh{animation:pop .55s var(--spring)}
+@keyframes pop{from{opacity:0;transform:translateX(-10px) scale(.97)}to{opacity:1;transform:none}}
+.toast{transition:opacity .2s,transform .45s var(--spring)}
+.veil.on .sheet{animation:sheet .55s var(--spring)}
+@keyframes sheet{from{opacity:0;transform:translateY(18px) scale(.94)}to{opacity:1;transform:none}}
+.sheet .badge{animation:wiggle 2.8s var(--ease) infinite}
+@keyframes wiggle{0%,80%,100%{transform:none}86%{transform:rotate(-8deg) scale(1.06)}92%{transform:rotate(6deg) scale(1.06)}}
+.state h2{transition:color .2s}
+.state h2.swap{animation:swap .5s var(--spring)}
+@keyframes swap{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.fill{transition:width .9s var(--spring)}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -401,6 +454,16 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const fmt = (v, d=0) => v == null || !isFinite(v) ? '—' : Number(v).toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d});
 const dur = s => { s = Math.max(0, s|0); const h = s/3600|0, m = (s%3600)/60|0; return h ? `${h}h ${String(m).padStart(2,'0')}m` : `${m}m`; };
 const clock = t => new Date(t*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hourCycle:'h23'});
+function glide(seg){
+  let g = seg.querySelector('.glide'); const fresh = !g;
+  if (fresh) { g = document.createElement('i'); g.className = 'glide now'; seg.prepend(g); if (seg._pos) g.style.cssText = seg._pos; }
+  const b = seg.querySelector('button[aria-pressed="true"]');
+  if (!b) { g.style.opacity = 0; return; }
+  if (fresh) { void g.offsetWidth; g.classList.remove('now'); if (!seg._pos) g.classList.add('now'); }
+  const pos = `left:${b.offsetLeft}px;top:${b.offsetTop}px;width:${b.offsetWidth}px;height:${b.offsetHeight}px;opacity:1`;
+  requestAnimationFrame(() => { g.style.cssText = pos; seg._pos = pos; requestAnimationFrame(() => g.classList.remove('now')); });
+}
+function segHtml(seg, html){ if (seg._html !== html) { seg._html = html; seg.innerHTML = html; } glide(seg); }
 const ico = (name, cls='') => `<svg class="i ${cls}"><use href="#i-${name}"/></svg>`;
 const MODES = [['full','Full farmer','loop'],['here','Farm here','pin'],['assist','Minigame','pad'],['spot','Fish here','target']];
 const RVAR = {Common:'var(--common)', Uncommon:'var(--uncommon)', Legendary:'var(--legendary)'};
@@ -408,7 +471,7 @@ let S = null, view = 'farm', pickMode = null, logKind = 'all', seen = new Set(),
 
 /* --- server --- */
 async function api(path, body){
-  if (BOOT.sample) return BOOT.sample;
+  if (BOOT.sample) return body ? {message: 'Saved'} : BOOT.sample;
   const r = await fetch(path, {method: body ? 'POST' : 'GET', cache:'no-store',
     headers: {'X-Autofish-Token': BOOT.token, 'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined});
   const data = await r.json(); if (!r.ok) throw new Error(data.error || 'Request failed'); return data;
@@ -440,7 +503,7 @@ function tone(s){
 function drawHero(s){
   const hero = $('hero'), live = s.running || s.starting;
   hero.style.setProperty('--tone', tone(s)); hero.classList.toggle('on', live && !s.paused);
-  $('state').textContent = s.state;
+  const h = $('state'); if (h.textContent !== s.state) { h.textContent = s.state; h.classList.remove('swap'); void h.offsetWidth; h.classList.add('swap'); }
   const mode = MODES.find(m => m[0] === s.mode);
   const parts = [mode ? ico(mode[2]) + mode[1] : esc(s.mode)];
   if (s.active_seconds) parts.push(ico('gauge') + dur(s.active_seconds));
@@ -448,7 +511,7 @@ function drawHero(s){
   $('meta').innerHTML = parts.map(p => `<span>${p}</span>`).join('');
   const r = $('reason'); r.innerHTML = s.reason && !s.running ? ico('alert') + esc(s.reason) : ''; r.classList.toggle('show', !!s.reason && !s.running);
   if (pickMode == null || live) pickMode = s.mode;
-  $('modes').innerHTML = MODES.map(([k, l, i]) => `<button data-m="${k}" aria-pressed="${k === pickMode}" ${live ? 'disabled' : ''}>${ico(i)}${l}</button>`).join('');
+  segHtml($('modes'), MODES.map(([k, l, i]) => `<button data-m="${k}" aria-pressed="${k === pickMode}" ${live ? 'disabled' : ''}>${ico(i)}${l}</button>`).join(''));
   $('bStart').hidden = live || s.paused; $('bResume').hidden = !s.paused || s.running;
   $('bPause').hidden = !live; $('bStop').hidden = !live && !s.paused;
 }
@@ -516,7 +579,7 @@ function drawItems(s){
 }
 const KINDS = [['all','All','list'],['catch','Catches','fish'],['recovery','Fixes','refresh'],['problem','Problems','alert']];
 function drawLog(s){
-  $('logFilter').innerHTML = KINDS.map(([k, l, i]) => `<button data-k="${k}" aria-pressed="${k === logKind}">${ico(i)}${l}</button>`).join('');
+  segHtml($('logFilter'), KINDS.map(([k, l, i]) => `<button data-k="${k}" aria-pressed="${k === logKind}">${ico(i)}${l}</button>`).join(''));
   const ev = (s.events || []).slice().reverse().filter(e => logKind === 'all' || (logKind === 'catch' ? e.group === 'catches'
     : logKind === 'problem' ? ['warn','error'].includes(e.level) : e.group === 'recovery'));
   $('log').innerHTML = ev.length ? feedHtml(ev) : `<div class="empty">${ico('list', 'big')}</div>`;
@@ -558,6 +621,7 @@ $('tabs').addEventListener('click', e => { const b = e.target.closest('button');
 function show(v){
   view = v; document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v));
   document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === 'v-' + v));
+  glide($('tabs'));
   if (v === 'lab' && !$('labFrame').src) $('labFrame').src = BOOT.sample ? (BOOT.labSrc || 'about:blank') : '/rodlab?t=' + encodeURIComponent(BOOT.token);
   if (S) draw(S);
 }
@@ -573,7 +637,7 @@ $('logFilter').addEventListener('click', e => { const b = e.target.closest('butt
 async function setting(key, value){ try { const r = await api('/api/settings', {[key]: value}); if (r.state) draw(r.state); toast('Saved'); } catch (e) { toast(e.message); } }
 document.querySelectorAll('.switch').forEach(sw => sw.onclick = () => { const v = sw.getAttribute('aria-checked') !== 'true'; sw.setAttribute('aria-checked', v); setting(sw.dataset.key, v); });
 $('sUser').addEventListener('change', e => setting('account_username', e.target.value.trim()));
-document.querySelectorAll('.stepper button').forEach(b => b.onclick = () => { const v = Math.min(9, Math.max(1, (+$('sSlot').value || 5) + +b.dataset.step)); $('sSlot').value = v; setting('rod_slot', v); });
+document.querySelectorAll('.stepper button').forEach(b => b.onclick = () => { const v = Math.min(9, Math.max(1, (+$('sSlot').value || 5) + +b.dataset.step)); $('sSlot').value = v; const o = $('sSlot'); o.classList.remove('bump'); void o.offsetWidth; o.classList.add('bump'); setting('rod_slot', v); });
 $('sheet').addEventListener('click', async e => {
   const gp = e.target.closest('[data-gp]'); if (gp) return setting('spawn_gamepass', gp.dataset.gp === '1');
   if (e.target.closest('#obSkip')) { drawOnboarding.skipped = true; toast('Add it later in Settings'); return drawOnboarding(S); }
@@ -582,7 +646,7 @@ $('sheet').addEventListener('click', async e => {
 $('sheet').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'obUser') $('obSave').click(); });
 
 async function poll(){ try { draw(await api('/api/state')); } catch (e) { $('foot').textContent = 'Reconnecting…'; } }
-if (BOOT.view) show(BOOT.view);
+show(BOOT.view || 'farm'); addEventListener('resize', () => document.querySelectorAll('.seg').forEach(s => s.querySelector('.glide') && glide(s)));
 poll(); if (!BOOT.sample) setInterval(poll, 2000);
 </script>
 </body>
