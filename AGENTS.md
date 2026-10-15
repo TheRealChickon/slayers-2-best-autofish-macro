@@ -91,3 +91,9 @@ lock. Keep file offsets across polls and reset them on a new run. Do not constru
 fresh history readers per request or overlap browser polling: long histories can
 otherwise stall overlay and control responses. Status and foreground ownership
 must still be read fresh on each request; never cache the active-fishing gate.
+
+The dashboard visual styling is restored to the Claude release (14da711). Keep
+its white session clock and muted seconds. Overlay-only colors must not leak into
+the dashboard. Backdrop blur uses native composition on the existing layered
+window; never capture game frames for it. The Pillow content retains its rounded
+translucent surface and opaque text.

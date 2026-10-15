@@ -1,7 +1,8 @@
-"""Native, per-pixel translucent overlay. It never activates or handles game input.
+"""Native, per-pixel translucent overlay with compositor backdrop blur. It never activates or handles game input.
 
 Only a matching foreground Roblox window makes it visible. Pillow draws opaque
 text on a translucent surface; UpdateLayeredWindow preserves both alpha levels.
+The Windows compositor blurs the live backdrop without screen capture.
 No browser window is restyled and no focus-restoration call is needed.
 """
 import json
@@ -193,6 +194,34 @@ def paint(hwnd, surface, position):
         win32gui.ReleaseDC(0, screen)
 
 
+def enable_blur(hwnd):
+    """Blur the live backdrop while keeping the layered text fully opaque.
+
+    DWMWA_SYSTEMBACKDROP_TYPE produces an opaque inactive surface on this
+    no-activate layered window. WCA_ACCENT_POLICY applies blur to its backdrop
+    without changing activation, input handling, or the uploaded alpha surface.
+    """
+    import ctypes
+    from ctypes import wintypes
+    class AccentPolicy(ctypes.Structure):
+        _fields_ = [('state', wintypes.DWORD), ('flags', wintypes.DWORD),
+                    ('color', wintypes.DWORD), ('animation', wintypes.DWORD)]
+    class CompositionData(ctypes.Structure):
+        _fields_ = [('attribute', wintypes.DWORD), ('data', ctypes.c_void_p),
+                    ('size', ctypes.c_size_t)]
+    policy = AccentPolicy(3, 0, 0, 0)  # ACCENT_ENABLE_BLURBEHIND; tint comes from Pillow.
+    data = CompositionData(19, ctypes.addressof(policy), ctypes.sizeof(policy))
+    try:
+        apply = ctypes.windll.user32.SetWindowCompositionAttribute
+    except AttributeError as error:
+        raise OSError('Windows backdrop blur is unavailable') from error
+    apply.argtypes = [wintypes.HWND, ctypes.POINTER(CompositionData)]
+    apply.restype = wintypes.BOOL
+    if not apply(hwnd, ctypes.byref(data)):
+        raise OSError('Windows could not enable overlay backdrop blur')
+
+
+
 class Overlay:
     def __init__(self, browser_path=None):
         self.thread = None
@@ -249,6 +278,7 @@ class Overlay:
                 with urllib.request.urlopen(req, timeout=1) as response: return json.load(response)
             # Paint once while hidden, catching native setup errors before reporting On.
             paint(self.hwnd, render({'state': 'Loading'}), (0, 0))
+            enable_blur(self.hwnd)
             self._ready.set()
             state, gear, next_poll, next_gear, last = {}, {}, 0., 0., None
             while not self._stop.is_set():
