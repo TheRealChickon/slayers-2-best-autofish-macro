@@ -88,7 +88,7 @@ Then go to **Settings** with the arrow keys and set these three things:
 | **Rod slot** | The hotbar number (1 – 9) your fishing rod is in. |
 | **Cast point** | Pick **Capture pointer**, then within 4 seconds hover your mouse over the water where you want to cast. |
 
-<img src="docs/images/cli-settings.png" alt="Settings page with Username, Rod slot and Cast point" width="640">
+<img src="docs/images/cli-setup.png" alt="Settings page with Username, Rod slot and Cast point" width="640">
 
 ### 5. Start fishing
 
