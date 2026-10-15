@@ -85,3 +85,9 @@ create only a hidden window and do not interact with Roblox. UI fixtures must
 use demonstration data; package checks and window flags do not prove live catches.
 Mode-card selection alone never starts a worker. The explicit Switch action waits
 for controller exit and preserves counters plus any newer Stop/Pause/F8 request.
+
+Dashboard state uses one incremental Journal/LiveFeed pair per app server, under a
+lock. Keep file offsets across polls and reset them on a new run. Do not construct
+fresh history readers per request or overlap browser polling: long histories can
+otherwise stall overlay and control responses. Status and foreground ownership
+must still be read fresh on each request; never cache the active-fishing gate.

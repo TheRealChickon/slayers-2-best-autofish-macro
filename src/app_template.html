@@ -1299,7 +1299,13 @@ $('sheet').addEventListener('click', e => {
 });
 $('sheet').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'obIn') $('obNext').click(); });
 
-async function poll(){ try { draw(await api('/api/state')); } catch (e) { $('foot').textContent = 'Reconnecting…'; } }
+let polling = false;
+async function poll(){
+  if (polling) return;
+  polling = true;
+  try { draw(await api('/api/state')); } catch (e) { $('foot').textContent = 'Reconnecting…'; }
+  finally { polling = false; }
+}
 show(BOOT.view || 'farm'); addEventListener('resize', () => document.querySelectorAll('.seg').forEach(s => s.querySelector('.glide') && glide(s)));
 poll(); if (!BOOT.sample) setInterval(poll, 2000);
 </script>
