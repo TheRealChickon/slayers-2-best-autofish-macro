@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch, call
 import numpy as np
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 import full_pause
 import fishing_assistant as fishing
 import presence_watch

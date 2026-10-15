@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import Mock,patch
 import cv2
 import numpy as np
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 from app_config import ROOT
 from rod_detector import locate_rod,selected_rod,unselected_rod
 from rod_recovery import RodRecovery

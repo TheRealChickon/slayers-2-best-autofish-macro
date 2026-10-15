@@ -1,0 +1,532 @@
+<title>Rod Lab</title>
+<style>
+/*FONTS*/
+/* Layout: product dashboard. Top bar with rod switcher, KPI strip, 2-column chart grid,
+   predictor bench, run log. 8px spacing grid; one accent; rarity hues carry data only. */
+:root{
+  --bg:#f7f7f5; --surface:#ffffff; --raised:#fbfbfa; --border:#e6e5e1; --border-strong:#d4d3ce;
+  --text-1:#111110; --text-2:#55544f; --text-3:#8a8983;
+  --accent:#2a78d6; --accent-soft:#e8f0fb;
+  --common:#8d8c86; --uncommon:#2a78d6; --rare:#0f9fb5; --legendary:#eda100; --mythic:#9b4fe0; --impossible:#e5336b;
+  --crate:#4a3aa7; --leftover:#8a94a3;
+  --good:#0ca30c; --warn:#c98500;
+  --shadow:0 1px 2px rgba(17,17,16,.04),0 1px 1px rgba(17,17,16,.03);
+  --sans:'Geist',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'Geist Mono',ui-monospace,'SFMono-Regular',Consolas,monospace;
+  --r:18px; --spring:cubic-bezier(.34,1.56,.64,1);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f0f0e; --surface:#171716; --raised:#1c1c1b; --border:#2a2a28; --border-strong:#383835;
+  --text-1:#f2f2ef; --text-2:#b4b3ac; --text-3:#7d7c76;
+  --accent:#3987e5; --accent-soft:#1a2738;
+  --common:#9c9b95; --uncommon:#3987e5; --rare:#22b5c9; --legendary:#d69a12; --mythic:#b47cf2; --impossible:#ff5a8a;
+  --crate:#9085e9; --leftover:#7d8899;
+  --shadow:none; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f0f0e; --surface:#171716; --raised:#1c1c1b; --border:#2a2a28; --border-strong:#383835;
+  --text-1:#f2f2ef; --text-2:#b4b3ac; --text-3:#7d7c76;
+  --accent:#3987e5; --accent-soft:#1a2738;
+  --common:#9c9b95; --uncommon:#3987e5; --rare:#22b5c9; --legendary:#d69a12; --mythic:#b47cf2; --impossible:#ff5a8a;
+  --crate:#9085e9; --leftover:#7d8899;
+  --shadow:none; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text-1);font:14px/1.5 var(--sans);margin:0;-webkit-font-smoothing:antialiased}
+.page{max-width:1200px;margin:0 auto;padding-inline:16px;padding-block:24px 64px;display:grid;gap:16px}
+@media (min-width:720px){.page{padding-inline:32px}}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono)}
+
+/* top bar */
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 24px;padding-bottom:8px}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.mark{width:32px;height:32px;border-radius:8px;background:var(--text-1);display:grid;place-items:center;flex:none}
+.mark svg{width:18px;height:18px}
+.brand h1{font:600 18px/1.2 var(--sans);margin:0;letter-spacing:-.01em}
+.brand p{margin:0;color:var(--text-3);font-size:12.5px}
+.live{display:inline-flex;align-items:center;gap:6px}
+.live i{width:6px;height:6px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px color-mix(in srgb,var(--good) 20%,transparent)}
+.seg{display:inline-flex;background:var(--raised);border:1px solid var(--border);border-radius:9px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{font:500 13px var(--sans);color:var(--text-2);background:transparent;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.seg button:hover{color:var(--text-1)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--text-1);box-shadow:var(--shadow),0 0 0 1px var(--border)}
+.seg .sw{width:8px;height:8px;border-radius:2px}
+.topctl{display:flex;flex-wrap:wrap;gap:8px}
+.seg .pre{font:500 12px var(--sans);color:var(--text-3);padding:6px 4px 6px 8px;display:inline-flex;align-items:center}
+.checks{display:grid;gap:6px}
+.checks label{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--raised);font-size:13px;color:var(--text-1);cursor:pointer;user-select:none;transition:border-color .15s,background-color .15s,opacity .15s}
+.checks label:hover{border-color:var(--border-strong)}
+.checks label:has(input:checked){border-color:color-mix(in srgb,var(--accent) 50%,transparent);background:var(--accent-soft)}
+.checks.full label:not(:has(input:checked)){opacity:.45;cursor:not-allowed}
+.checks small{color:var(--text-3);margin-left:auto;padding-left:8px;font:400 12px var(--mono);text-align:right;flex:none;max-width:52%}
+.checks label:has(input:checked) small{color:var(--text-2)}
+.checks input{-webkit-appearance:none;appearance:none;margin:0;flex:none;width:18px;height:18px;border-radius:5px;border:1.5px solid var(--border-strong);background:var(--surface) center/12px 12px no-repeat;cursor:inherit;transition:background-color .15s,border-color .15s}
+.checks input:checked{background-color:var(--accent);border-color:var(--accent);animation:tick .38s cubic-bezier(.34,1.56,.64,1);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2 5 8.6 9.6 3.6'/%3E%3C/svg%3E")}
+@keyframes tick{0%{transform:scale(.6)}55%{transform:scale(1.2)}80%{transform:scale(.95)}100%{transform:none}}
+.checks label:hover input:not(:checked){border-color:var(--text-3)}
+.checks label{transition:border-color .15s,background-color .15s,opacity .15s,transform .4s cubic-bezier(.34,1.56,.64,1)}
+.checks label:active{transform:scale(.97)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* titles: rows that fill left to right, the tick draws itself */
+.checks label{position:relative;isolation:isolate;overflow:hidden;background:var(--raised);gap:12px;padding:10px 13px;border-radius:12px}
+.checks label::before{content:'';position:absolute;inset:0;z-index:-1;background:var(--accent-soft);transform:scaleX(0);transform-origin:left;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+.checks label:has(input:checked){background:var(--raised);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.checks label:has(input:checked)::before{transform:none}
+.checks input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}
+.checks .bx{width:20px;height:20px;flex:none;border-radius:7px;border:1.5px solid var(--border-strong);background:var(--surface);display:grid;place-items:center;transition:transform .45s var(--spring),background-color .25s,border-color .25s}
+.checks .bx svg{width:13px;height:13px;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:22;stroke-dashoffset:22;transition:stroke-dashoffset .35s .12s}
+.checks label:has(input:checked) .bx{background:var(--accent);border-color:var(--accent);transform:rotate(-8deg) scale(1.08)}
+.checks label:has(input:checked) .bx svg{stroke-dashoffset:0}
+.checks label:hover .bx{border-color:var(--text-3)}
+.checks label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.live i,.badge i{display:none}
+/* rounder everywhere */
+.seg{border-radius:14px;padding:4px} .seg button{border-radius:10px;transition:color .15s,background-color .2s,transform .35s var(--spring)}
+.seg button:active{transform:scale(.94)}
+.mark{border-radius:11px} .mini>div{border-radius:14px} .tip{border-radius:10px}
+.track{border-radius:8px}
+.seg-fill:first-child{border-radius:8px 0 0 8px}.seg-fill:last-child{border-radius:0 8px 8px 0}.seg-fill:only-child{border-radius:8px}
+.card{transition:transform .5s var(--spring)}
+/* rarity as coloured names, not dots */
+.rn{font-weight:500;color:var(--rc)}
+.rn.imp{background:linear-gradient(90deg,var(--impossible),#ff9a3c);-webkit-background-clip:text;background-clip:text;color:transparent}
+.legend i.imp,.seg-fill.imp{background:linear-gradient(90deg,var(--impossible),#ff9a3c)!important}
+.seg-fill{transition:flex-grow .8s var(--spring)}
+/* the 2x pill and the crate quest switch */
+.x2,.qt{position:relative;isolation:isolate;overflow:hidden;display:inline-flex;align-items:center;gap:9px;flex:none;height:38px;padding:0 13px 0 10px;border-radius:12px;border:1px solid var(--border);background:var(--raised);color:var(--text-2);
+  font:600 13px var(--sans);cursor:pointer;transition:border-color .25s,color .25s,transform .4s var(--spring),opacity .3s}
+.x2::before,.qt::before{content:'';position:absolute;inset:0;z-index:-1;background:var(--sw-bg);transform:scaleX(0);transform-origin:left;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+.x2{--sw:var(--legendary);--sw-bg:color-mix(in srgb,var(--legendary) 18%,transparent)}
+.qt{--sw:var(--crate);--sw-bg:color-mix(in srgb,var(--crate) 18%,transparent)}
+.x2 .bx,.qt .bx{width:20px;height:20px;flex:none;border-radius:7px;border:1.5px solid var(--border-strong);background:var(--surface);display:grid;place-items:center;transition:transform .45s var(--spring),background-color .25s,border-color .25s}
+.x2 .bx svg,.qt .bx svg{width:13px;height:13px;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:22;stroke-dashoffset:22;transition:stroke-dashoffset .35s .12s}
+.x2 .ico,.qt .ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.x2[aria-pressed="true"],.qt[aria-checked="true"]{color:var(--text-1);border-color:color-mix(in srgb,var(--sw) 50%,transparent)}
+.x2[aria-pressed="true"]::before,.qt[aria-checked="true"]::before{transform:none}
+.x2[aria-pressed="true"] .bx,.qt[aria-checked="true"] .bx{background:var(--sw);border-color:var(--sw);transform:rotate(-8deg) scale(1.08)}
+.x2[aria-pressed="true"] .bx svg,.qt[aria-checked="true"] .bx svg{stroke-dashoffset:0}
+.x2[aria-pressed="true"] .ico{color:var(--sw);fill:currentColor}
+.x2:active,.qt:active{transform:scale(.95)}
+.x2:hover .bx,.qt:hover .bx{border-color:var(--text-3)}
+.x2:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.hide{display:none!important}
+#pTable.simple th:nth-child(3),#pTable.simple td:nth-child(3){display:none}
+.legend b{font:500 11.5px var(--mono);color:var(--text-3);margin-left:2px}
+
+
+/* kpis */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+@media (max-width:860px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{background:var(--surface);padding:16px 18px;min-width:0}
+.kpi .l{font-size:12.5px;color:var(--text-2);display:flex;align-items:center;gap:6px}
+.kpi .v{font:600 clamp(20px,5.6vw,28px)/1.15 var(--sans);letter-spacing:-.02em;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .v small{font-size:14px;font-weight:500;color:var(--text-3);letter-spacing:0;margin-left:2px}
+.kpi .d{font-size:12px;color:var(--text-3);margin-top:4px}
+.delta{font:500 12px var(--mono);padding:1px 6px;border-radius:5px;background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good)}
+.delta.neg{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+
+/* cards */
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column}
+.card header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 18px 0}
+.card h2{font:600 14px/1.3 var(--sans);margin:0}
+.card .cap{margin:2px 0 0;font-size:12.5px;color:var(--text-3)}
+.card .body{padding:16px 18px 18px;flex:1}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--text-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.legend i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.legend i.ring{background:transparent!important;border:1.5px solid var(--text-2);border-radius:50%}
+.wide{grid-column:1/-1}
+
+/* bar rows */
+.rows{display:grid;gap:14px}
+.row{display:grid;grid-template-columns:96px minmax(0,1fr) auto;align-items:center;gap:12px}
+.row .name{font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .name small{display:block;color:var(--text-3);font-weight:400;font-size:11.5px}
+.row .val{font:500 13px var(--mono);text-align:right;min-width:64px}
+.track{position:relative;height:22px;border-radius:4px;background:color-mix(in srgb,var(--text-1) 4%,transparent)}
+.stack{display:flex;height:100%;gap:2px;transform-origin:left;animation:grow .8s cubic-bezier(.2,.8,.2,1) both}
+.seg-fill{height:100%;min-width:0;transition:flex-basis .6s cubic-bezier(.2,.8,.2,1)}
+.seg-fill:first-child{border-radius:4px 0 0 4px}.seg-fill:last-child{border-radius:0 4px 4px 0}.seg-fill:only-child{border-radius:4px}
+.seg-fill span{display:block;font:500 11px/22px var(--mono);color:#fff;padding-left:7px;white-space:nowrap;overflow:hidden}
+.marker{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text-1);border-radius:1px;transition:left .6s cubic-bezier(.2,.8,.2,1)}
+.marker::after{content:'';position:absolute;top:-4px;left:-3px;width:8px;height:8px;border-radius:50%;background:var(--surface);border:2px solid var(--text-1)}
+@keyframes grow{from{transform:scaleX(.02);opacity:.4}to{transform:none;opacity:1}}
+.axis{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:12px;font:400 11px var(--mono);color:var(--text-3)}
+.axis .ticks{display:flex;justify-content:space-between}
+.axis .pad{min-width:64px}
+.dim{opacity:.35}
+
+/* species matrix */
+.tbl{overflow-x:auto;margin:0 -18px;padding:0 18px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;padding-left:0}
+th:last-child,td:last-child{padding-right:0}
+thead th{font:500 11.5px var(--sans);color:var(--text-3);border-bottom:1px solid var(--border-strong)}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:color-mix(in srgb,var(--text-1) 2.5%,transparent)}
+.cellbar{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.cellbar b{display:block;height:6px;border-radius:3px;background:var(--accent);opacity:.85;transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.cellbar em{font:500 12.5px var(--mono);font-style:normal;min-width:36px;text-align:right}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px}
+.chip i{width:8px;height:8px;border-radius:50%}
+.tag{display:inline-block;font:500 11px var(--sans);padding:1px 7px;border-radius:999px;border:1px solid var(--border-strong);color:var(--text-2);margin-left:6px}
+.tag.crate{border-color:color-mix(in srgb,var(--crate) 45%,transparent);color:var(--crate)}
+.tag.limit{border-color:color-mix(in srgb,var(--warn) 50%,transparent);color:var(--warn)}
+
+/* predictor */
+.bench{display:grid;grid-template-columns:280px minmax(0,1fr);gap:0}
+@media (max-width:860px){.bench{grid-template-columns:minmax(0,1fr)}}
+.controls{padding:18px;border-right:1px solid var(--border);display:grid;gap:20px;align-content:start}
+@media (max-width:860px){.controls{border-right:0;border-bottom:1px solid var(--border)}}
+.field{display:grid;gap:8px}
+.field .lab{font-size:12.5px;color:var(--text-2);display:flex;justify-content:space-between;align-items:baseline}
+.lvl{font:600 22px var(--sans);letter-spacing:-.02em}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:2px;background:linear-gradient(var(--accent),var(--accent)) 0/var(--fill,0%) 100% no-repeat,var(--border-strong);margin:8px 0}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--surface);border:2px solid var(--accent);box-shadow:var(--shadow);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--surface);border:2px solid var(--accent);cursor:pointer}
+.ticks11{display:flex;justify-content:space-between;font:400 10.5px var(--mono);color:var(--text-3)}
+.note{font-size:12.5px;color:var(--text-3);line-height:1.5;margin:0}
+.badge{display:inline-flex;align-items:center;gap:6px;font:500 12px var(--sans);padding:3px 9px;border-radius:999px;width:max-content}
+.badge.meas{background:color-mix(in srgb,var(--good) 13%,transparent);color:var(--good)}
+.badge.est{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
+.badge i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.out{padding:18px;display:grid;gap:18px;min-width:0;align-content:start}
+.mini{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:520px){.mini{grid-template-columns:minmax(0,1fr)}}
+.mini>div{background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:12px 14px;min-width:0}
+.mini .l{font-size:12px;color:var(--text-2)}
+.mini .v{font:600 22px/1.2 var(--sans);letter-spacing:-.02em;margin-top:4px}
+.mini .d{font-size:11.5px;color:var(--text-3)}
+.ci{position:relative;width:120px;height:14px;display:inline-block;vertical-align:middle}
+.ci .rng{position:absolute;top:5px;height:4px;border-radius:2px;background:color-mix(in srgb,var(--accent) 30%,transparent)}
+.ci .pt{position:absolute;top:2px;width:2px;height:10px;border-radius:1px;background:var(--accent);transition:left .5s cubic-bezier(.2,.8,.2,1)}
+
+footer{color:var(--text-3);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 18px;padding-top:4px}
+
+/* tooltip */
+.tip{position:fixed;z-index:10;pointer-events:none;background:var(--text-1);color:var(--bg);font:500 12px/1.45 var(--sans);padding:7px 10px;border-radius:7px;box-shadow:0 6px 24px rgba(0,0,0,.18);opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s;max-width:260px}
+.tip.on{opacity:1;transform:none}
+.tip b{font-family:var(--mono);font-weight:500}
+
+/* round 4: option 2 layout. Off/On segments like the app's Settings; rods compared at the bottom */
+.top{padding-bottom:0}
+.tgl{display:inline-flex;align-items:center;gap:10px;font:500 12.5px var(--sans);color:var(--text-2);flex:none}
+.seg.onoff button{min-width:46px;justify-content:center}
+.seg.onoff button[aria-pressed="true"]{background:var(--border-strong);box-shadow:none}
+.card .tbl table#mix td small{display:block;font:400 11.5px var(--sans);color:var(--text-3)}
+#mix td:first-child{padding-block:8px}
+#mix td.z{color:var(--text-3)}
+.bench3{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr);gap:22px;padding:16px 18px 18px;align-items:start}
+@media (max-width:900px){.bench3{grid-template-columns:minmax(0,1fr)}}
+.field3{display:grid;gap:20px}
+#pCount{font:400 12px var(--mono);color:var(--text-3)}
+.sechead .cap{margin:2px 0 0;font-size:12.5px;color:var(--text-3)}
+.rod .vs{margin-top:6px}
+.pcard{background:var(--raised);border:1px solid var(--border);border-radius:16px;padding:16px 18px;display:grid;gap:12px}
+.pcard .l{font-size:12.5px;color:var(--text-2)}
+.pcard .big{font:600 38px/1 var(--sans);letter-spacing:-.03em}
+.pcard .big small{font:500 14px var(--sans);color:var(--text-3);margin-left:4px;letter-spacing:0}
+.pcard dl{display:grid;grid-template-columns:1fr auto;gap:9px 12px;margin:0;font-size:13px}
+.pcard dt{color:var(--text-2)} .pcard dd{margin:0;font:500 13px var(--mono);text-align:right}
+.gbar{display:flex;height:7px;gap:2px;border-radius:9px;overflow:hidden;background:color-mix(in srgb,var(--text-1) 6%,transparent)}
+.gbar b{display:block;height:100%;transition:width .8s var(--spring)}
+.gbar b.c{background:var(--crate)} .gbar b.s{background:var(--leftover)}
+.ptbl{border-top:1px solid var(--border)}
+.badge.meas,.badge.est{background:var(--raised);border:1px solid var(--border);color:var(--text-2)}
+.rodsec{display:grid;gap:14px;margin-top:6px}
+.sechead{display:flex;align-items:flex-end;gap:12px 16px;flex-wrap:wrap}
+.sechead>div:first-child{margin-right:auto}
+.sechead h2{font:600 16px/1.3 var(--sans);margin:0}
+.podium{display:grid;grid-template-columns:repeat(var(--n,3),minmax(0,1fr));gap:16px;align-items:end}
+@media (max-width:860px){.podium{grid-template-columns:minmax(0,1fr)}}
+.rod{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;overflow:hidden;display:grid;gap:12px;
+  border-top:3px solid var(--rc);animation:rodin .6s var(--spring) both;transition:transform .45s var(--spring)}
+.rod:hover{transform:translateY(-3px)}
+@keyframes rodin{from{opacity:0;transform:translateY(14px)}}
+.rod.best{border:1px solid color-mix(in srgb,var(--rc) 55%,transparent);background:linear-gradient(180deg,color-mix(in srgb,var(--rc) 13%,var(--surface)),var(--surface) 70%);padding-block:24px}
+.rod .rk{position:absolute;right:16px;top:6px;font:700 46px/1 var(--sans);color:color-mix(in srgb,var(--text-1) 9%,transparent)}
+.rod.best .rk{color:color-mix(in srgb,var(--rc) 40%,transparent)}
+.rod h3{margin:0;font:600 15px var(--sans);display:flex;align-items:center;gap:8px}
+.rod h3 i{width:10px;height:10px;border-radius:3px;background:var(--rc)}
+.rod .bestb{font:600 11px var(--sans);padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--rc) 20%,transparent);color:var(--rc)}
+.rod .gv{font:600 34px/1 var(--sans);letter-spacing:-.03em} .rod.best .gv{font-size:44px}
+.rod .gv small{font:500 13px var(--sans);color:var(--text-3);margin-left:4px;letter-spacing:0}
+.rod .vs{font:400 12px var(--mono);color:var(--text-3)} .rod .vs b{font-weight:500;color:var(--text-2)}
+.rod .st{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border-top:1px solid var(--border);padding-top:12px}
+.rod .st b{display:block;font:600 16px var(--sans)} .rod .st span{font-size:11.5px;color:var(--text-3)}
+.rod.dim{opacity:.5}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="page">
+  <div class="top">
+    <div class="brand">
+      <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="var(--bg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 18 4"/><path d="M18 4v9a3 3 0 0 1-6 0"/><circle cx="12" cy="17" r="1.6"/></svg></div>
+      <div><h1>Rod Lab</h1><p><span class="live"><i></i><span id="asof"></span></span></p></div>
+    </div>
+  </div>
+
+  <section class="grid">
+    <article class="card">
+      <header><div><h2>What you catch</h2><p class="cap">Total from your runs, rarest first</p></div></header>
+      <div class="body"><div class="tbl"><table id="mix"></table></div></div>
+    </article>
+    <article class="card">
+      <header><div><h2>Fish per hour</h2><p class="cap" id="fishCap"></p></div>
+        <div class="tgl"><span>Crate quest</span><div class="seg onoff" id="qt" role="group" aria-label="Crate quest" data-tip="Angler crate quest: turn commons into crates, sell the rest"></div></div></header>
+      <div class="body"><div class="tbl"><table id="species"></table></div></div>
+    </article>
+  </section>
+
+  <article class="card">
+    <header><div><h2>Predictor</h2><p class="cap" id="predCap">Measured at each rod's real enchant level; other levels are a model estimate</p></div><div id="pBadge"></div></header>
+    <div class="bench3">
+      <div class="field3">
+        <div class="field"><div class="lab">Rod</div><div class="seg" id="pRod" role="group" aria-label="Predictor rod"></div></div>
+        <div class="field">
+          <div class="lab"><label for="pLvl">Enchant</label><span class="lvl num" id="pLvlOut">+0</span></div>
+          <input id="pLvl" type="range" min="0" max="10" step="1" value="0">
+          <div class="ticks11"><span>+0</span><span>+2</span><span>+4</span><span>+6</span><span>+8</span><span>+10</span></div>
+        </div>
+        <p class="note" id="pLuck"></p>
+      </div>
+      <div class="field"><div class="lab">Titles<span class="num" id="pCount"></span></div><div class="checks" id="pTitles"></div></div>
+      <div class="pcard" id="pStats"></div>
+    </div>
+    <div class="body ptbl" id="pTblWrap"><div class="tbl"><table id="pTable"></table></div></div>
+  </article>
+
+  <section class="rodsec">
+    <div class="sechead"><div><h2>Your rods</h2><p class="cap" id="rodsCap">Gold per hour from your own runs</p></div>
+      <div class="tgl" id="x2wrap"><span>2× cash</span><div class="seg onoff" id="x2" role="group" aria-label="2x cash boost" data-tip="2× cash boost: crates pay double"></div></div>
+      <div class="seg" id="boostSeg" role="group" aria-label="2x money boost"></div></div>
+    <div class="podium" id="podium"></div>
+    <p class="note" id="oreNote"></p>
+  </section>
+
+  <article class="card" id="runsCard">
+    <header><div><h2>Runs</h2><p class="cap">Every rod session the farmer logged</p></div></header>
+    <div class="body"><div class="tbl"><table id="runs"></table></div></div>
+  </article>
+
+  <footer id="foot"></footer>
+</div>
+<div class="tip" id="tip" role="tooltip"></div>
+
+<script>
+const DATA = /*DATA*/;
+const $ = id => document.getElementById(id);
+const fmt = (v, d=0) => v == null || !isFinite(v) ? '—' : v.toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d});
+const k = v => v == null || !isFinite(v) ? '—' : v >= 10000 ? (v/1000).toFixed(1)+'k' : fmt(v);
+const RAR = ['Common','Uncommon','Legendary'];
+const RVAR = {Common:'var(--common)',Uncommon:'var(--uncommon)',Legendary:'var(--legendary)'};
+const COMMONS = Object.keys(DATA.crates.B.needs);
+const ORDER = ['Legendary','Rare','Common'];
+const MIN_FISH = 150;
+// The public app shows a simple view; the owner's published copy sets DATA.advanced.
+const SIMPLE = !DATA.advanced;
+const TIERS = DATA.tiers || ['Impossible','Mythic','Legendary','Rare','Uncommon','Common'];
+const TVAR = {Impossible:'var(--impossible)',Mythic:'var(--mythic)',Legendary:'var(--legendary)',Rare:'var(--rare)',Uncommon:'var(--uncommon)',Common:'var(--common)'};
+const store = (key, fallback) => { try { const v = localStorage.getItem(key); return v == null ? fallback : v === '1'; } catch (e) { return fallback; } };
+const keep = (key, on) => { try { localStorage.setItem(key, on ? '1' : '0'); } catch (e) {} };
+let crateQuest = store('rodlab-crates', true);
+if (!document.documentElement.dataset.theme) document.documentElement.dataset.theme = 'dark';
+
+const direct = c => Object.entries(c).reduce((s,[k,v])=>s+(DATA.prices[k]||0)*v,0);
+let boostMode = (SIMPLE ? store('rodlab-2x', !!(DATA.boost && DATA.boost.on)) : DATA.boost && DATA.boost.on) ? 'on' : 'off';
+function crateMult(r){                 // r: {ores, hours, cratesPerH} or null for a flat toggle
+  if(boostMode==='off')return 1;
+  if(boostMode==='on'||!r)return DATA.boost.multiplier;
+  // Own ores: 1 ore = 1 boosted minute; crates are stockpiled and turned in while boosted.
+  const oreH=r.hours?(r.ores||0)/r.hours:0, need=r.cratesPerH/(DATA.boost.crates_per_minute*DATA.boost.ore_minutes);
+  const covered=need>0?Math.min(1,oreH/need):1;
+  return 1+(DATA.boost.multiplier-1)*covered;
+}
+function bestCrates(counts,mult=1){
+  const N=DATA.crates; let best=null;
+  if(!crateQuest){const all=direct(counts);return {a:0,b:0,crate:0,rest:all,total:all,limit:COMMONS.reduce((m,x)=>(counts[x]||0)<(counts[m]||0)?x:m,COMMONS[0])}}
+  const limA=Math.min(...Object.entries(N.A.needs).map(([k,n])=>Math.floor((counts[k]||0)/n)));
+  for(let a=0;a<=limA;a++){
+    const left={...counts}; for(const[k,n]of Object.entries(N.A.needs))left[k]=(left[k]||0)-a*n;
+    const b=Math.min(...Object.entries(N.B.needs).map(([k,n])=>Math.floor((left[k]||0)/n)));
+    for(const[k,n]of Object.entries(N.B.needs))left[k]-=b*n;
+    const crate=mult*(a*N.A.gold+b*N.B.gold), rest=direct(left);
+    if(!best||crate+rest>best.total)best={a,b,crate,rest,total:crate+rest};
+  }
+  best.limit=COMMONS.reduce((m,x)=>(counts[x]||0)<(counts[m]||0)?x:m,COMMONS[0]);
+  return best;
+}
+function hourly(perHour,mult=1){
+  const b=crateQuest?Math.min(...COMMONS.map(x=>(perHour[x]||0)/2)):0, left={...perHour};
+  COMMONS.forEach(x=>left[x]-=2*b);
+  return {b,crate:mult*b*DATA.crates.B.gold,rest:direct(left)};
+}
+// The 2x cash boost burns Mythic Refinement Ore: 1 ore = 1 minute (user, 2026-10-15).
+const oreOf = r => (r.ores&&r.ores.mythicrefinementore)||0;
+const TITLE_LUCK = t => (DATA.title_buffs[t]||{}).fishing_luck||1;
+const luckOfTitles = list => (list||[]).reduce((m,t)=>m*TITLE_LUCK(t),1);
+// Every drop by tier: fish from counts, items (ores, gear, guards) from drops.
+const tiersOf = r => { const o={}; TIERS.forEach(x=>o[x]=0);
+  for(const[x,v]of Object.entries(r.counts||{}))o[DATA.rarity[x]]+=v;
+  for(const[n,v]of Object.entries(r.drops||{})){const tr=(DATA.item_rarity||{})[n]; if(tr)o[tr]+=v}
+  return o; };
+const rarityOf = c => { const o={Common:0,Uncommon:0,Legendary:0}; for(const[x,v]of Object.entries(c))o[DATA.rarity[x]]+=v; return o; };
+function wilson(x,n,z=1.96){if(!n)return[0,0];const p=x/n,d=1+z*z/n,c=p+z*z/(2*n),h=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n));return[Math.max(0,(c-h)/d),Math.min(1,(c+h)/d)]}
+
+function derive(r){
+  const h=r.active_hours, c0=bestCrates(r.counts,1), per={};
+  for(const[x,v]of Object.entries(r.counts))per[x]=h?v/h:0;
+  const crPerH=h?(c0.a+c0.b)/h:null, mult=crateMult({ores:oreOf(r),hours:h,cratesPerH:crPerH||0});
+  const c=bestCrates(r.counts,mult);
+  return {...r,c,per,mult,rc:rarityOf(r.counts),hpm:h?r.hooks/(h*60):null,oreH:h?oreOf(r)/h:null,
+    directH:h?direct(r.counts)/h:null,crateH:h?c.crate/h:null,restH:h?c.rest/h:null,totalH:h?c.total/h:null,
+    crPerH:h?(c.a+c.b)/h:null,small:r.fish<MIN_FISH};
+}
+let rods = DATA.rods.map(derive).sort((a,b)=>ORDER.indexOf(a.rod)-ORDER.indexOf(b.rod));
+const ROD_SW = {Legendary:'var(--legendary)',Rare:'var(--rare)',Common:'var(--common)'};
+const rerod = () => { rods=DATA.rods.map(derive).sort((a,b)=>ORDER.indexOf(a.rod)-ORDER.indexOf(b.rod)); };
+let view = 'All';
+
+/* tooltip */
+const tip=$('tip');
+document.addEventListener('pointermove',e=>{
+  const t=e.target.closest('[data-tip]');
+  if(!t){tip.classList.remove('on');return}
+  tip.innerHTML=t.dataset.tip; tip.classList.add('on');
+  const w=tip.offsetWidth,h=tip.offsetHeight;
+  tip.style.left=Math.min(innerWidth-w-8,Math.max(8,e.clientX-w/2))+'px';
+  tip.style.top=Math.max(8,e.clientY-h-14)+'px';
+});
+
+/* rod switcher */
+function seg(el,items,current,onPick){
+  el.innerHTML=''; items.forEach(([val,label,sw])=>{
+    const b=document.createElement('button'); b.type='button';
+    b.innerHTML=(sw?`<i class="sw" style="background:${sw}"></i>`:'')+label;
+    b.setAttribute('aria-pressed',val===current); b.onclick=()=>onPick(val); el.appendChild(b);
+  });
+}
+const onoff = (el, on, pick) => seg(el, [[false,'Off'],[true,'On']], on, pick);
+function drawSeg(){
+  $('boostSeg').classList.toggle('hide',SIMPLE); $('x2wrap').classList.toggle('hide',!SIMPLE||!crateQuest);
+  onoff($('x2'), boostMode==='on', v=>{boostMode=v?'on':'off';keep('rodlab-2x',v);rerod();drawSeg();render();predict()});
+  onoff($('qt'), crateQuest, v=>{crateQuest=v;keep('rodlab-crates',v);rerod();drawSeg();render();predict()});
+  if(SIMPLE)return;
+  seg($('boostSeg'),[['on','2× on'],['ores','Own ores'],['off','No boost']],boostMode,v=>{boostMode=v;rerod();drawSeg();render();predict()});
+  const pre=document.createElement('span');pre.className='pre';pre.textContent='Crate cash';$('boostSeg').prepend(pre);
+}
+
+/* count-up for KPI values */
+function countUp(el,to,format){
+  const from=+el.dataset.v||0; el.dataset.v=to;
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches||!isFinite(to)){el.textContent=format(to);return}
+  const t0=performance.now(),dur=650;
+  (function step(t){const p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);el.textContent=format(from+(to-from)*e);if(p<1)requestAnimationFrame(step)})(t0);
+}
+
+function render(){
+  const shown = rods;
+  const ranked = rods.filter(r=>!r.small).sort((a,b)=>b.totalH-a.totalH);
+  const best = ranked[0], second = ranked[1];
+
+  /* what you catch: tiers down, rods across */
+  const tierRows = TIERS.map(x=>({x,per:shown.map(r=>tiersOf(r)[x])})).filter(o=>o.per.some(v=>v));
+  const examples = x => [...new Set([...Object.keys(DATA.rarity).filter(f=>DATA.rarity[f]===x).map(f=>DATA.names[f]),
+    ...Object.keys(DATA.item_rarity||{}).filter(n=>DATA.item_rarity[n]===x&&shown.some(r=>(r.drops||{})[n]))])].slice(0,3).join(' · ');
+  $('mix').innerHTML = `<thead><tr><th>Rarity</th>${shown.map(r=>`<th>${r.rod}</th>`).join('')}</tr></thead><tbody>`+
+    tierRows.map(o=>`<tr><td><span class="rn${o.x==='Impossible'?' imp':''}" style="--rc:${TVAR[o.x]}">${o.x}</span><small>${examples(o.x)}</small></td>${o.per.map(v=>`<td class="num${v?'':' z'}">${v?fmt(v):'–'}</td>`).join('')}</tr>`).join('')+'</tbody>';
+
+  /* your rods: best in the middle, gold per hour with crates vs sold */
+  const order = ranked.length>=3?[ranked[1],ranked[0],ranked[2],...ranked.slice(3)]:ranked.slice();
+  rods.filter(r=>r.small).forEach(r=>order.push(r));
+  const gtop = Math.max(1,...rods.map(r=>r.totalH||0));
+  $('podium').style.setProperty('--n',Math.min(3,order.length)||1);
+  $('podium').innerHTML = order.map((r,i)=>{const isBest=r===best, rank=ranked.indexOf(r)+1;
+    const vs = r.small?`${fmt(r.fish)} fish so far, small sample`:isBest?(second?`<b>+${fmt(best.totalH-second.totalH)}</b> /h vs ${second.rod}`:'only rod with enough data'):`<b>−${fmt(best.totalH-r.totalH)}</b> /h vs best`;
+    return `<article class="rod${isBest?' best':''}${r.small?' dim':''}" style="--rc:${ROD_SW[r.rod]||'var(--text-2)'};animation-delay:${i*70}ms">${rank?`<span class="rk">${rank}</span>`:''}
+      <h3><i></i>${r.rod}${isBest?'<span class="bestb">Best</span>':''}</h3>
+      <div><div class="gv num">${fmt(r.totalH)}<small>gold/h</small></div><div class="vs">${vs}</div></div>
+      <div class="gbar" data-tip="${r.rod}<br>crates <b>${fmt(r.crateH)}</b>/h · sold <b>${fmt(r.restH)}</b>/h"><b class="c" style="width:${100*(r.crateH||0)/gtop}%"></b><b class="s" style="width:${100*(r.restH||0)/gtop}%"></b></div>
+      <div class="st"><div><b class="num">${crateQuest?fmt(r.crPerH,1):fmt(r.active_hours?r.fish/r.active_hours:0)}</b><span>${crateQuest?'crates/h':'fish/h'}</span></div><div><b class="num">${fmt(r.active_hours?r.fish/r.active_hours:0)}</b><span>fish/h</span></div><div><b class="num">${fmt(r.active_hours,1)}h</b><span>fished</span></div></div></article>`}).join('');
+  $('rodsCap').textContent = crateQuest?`Crates first (${fmt(DATA.crates.B.gold*(boostMode==='off'?1:DATA.boost.multiplier))} gold each${boostMode==='on'?' with 2×':''}), the rest sold`:'Everything sold to the merchant';
+  $('oreNote').classList.toggle('hide',SIMPLE);
+  $('oreNote').innerHTML = rods.map(r=>`<b>${r.rod}</b>: ${fmt(r.oreH,2)} Mythic ore/h, ${DATA.names[r.c.limit]} limits crates`).join(' · ')+
+    ` — 1 Mythic Refinement Ore = 1 minute of 2× crate cash; stockpiled crates are turned in at about ${DATA.boost.crates_per_minute}/min (estimate).`;
+
+  /* species matrix */
+  $('fishCap').textContent = crateQuest?'Crate fish are tagged; the one that runs out first limits crates':'How many of each fish you catch in an hour';
+  const species = Object.keys(DATA.rarity).sort((a,b)=>RAR.indexOf(DATA.rarity[a])-RAR.indexOf(DATA.rarity[b]));
+  const smax = Math.max(1,...shown.flatMap(r=>species.map(x=>r.per[x]||0)));
+  $('species').innerHTML = `<thead><tr><th>Fish</th>${shown.map(r=>`<th>${r.rod}</th>`).join('')}<th>Gold</th></tr></thead><tbody>`+
+    species.map(x=>`<tr><td><span class="rn" style="--rc:${RVAR[DATA.rarity[x]]}">${DATA.names[x]}</span>${crateQuest&&COMMONS.includes(x)?'<span class="tag crate">crate</span>':''}${crateQuest&&shown.length===1&&shown[0].c.limit===x?'<span class="tag limit">runs out first</span>':''}</td>`+
+      shown.map(r=>{const v=r.per[x]||0;return `<td><span class="cellbar" data-tip="${DATA.names[x]} · ${r.rod}<br><b>${fmt(v,1)}</b>/h · ${fmt(r.counts[x]||0)} caught"><b style="width:${Math.max(2,56*v/smax)}px"></b><em>${fmt(v,1)}</em></span></td>`}).join('')+
+      `<td class="mono">${DATA.prices[x]}</td></tr>`).join('')+'</tbody>';
+
+  /* runs */
+  $('runsCard').classList.toggle('hide',SIMPLE);
+  const list = DATA.runs.slice().reverse();
+  $('runs').innerHTML = '<thead><tr><th>Run</th><th>Started</th><th>Fished</th><th>Hooks</th><th>Fish</th><th>Crates</th><th>Crate gold</th><th>Leftovers</th><th>Combined</th><th>Per hour</th><th>Mythic</th><th>Titles</th></tr></thead><tbody>'+
+    list.map(r=>{const h=r.active_hours,c0=bestCrates(r.counts,1),c=bestCrates(r.counts,crateMult({ores:oreOf(r),hours:h,cratesPerH:h?(c0.a+c0.b)/h:0})),d=new Date(r.started*1000);
+      return `<tr><td><span class="rn" style="--rc:${ROD_SW[r.rod]||'var(--text-2)'}">${r.rod}</span></td><td class="mono">${d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})} ${d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</td><td class="num">${fmt(h,1)}h</td><td class="num">${fmt(r.hooks)}</td><td class="num">${fmt(r.fish)}</td><td class="num">${c.b} B${c.a?' + '+c.a+' A':''}</td><td class="num">${fmt(c.crate)}</td><td class="num">${fmt(c.rest)}</td><td class="num"><b>${fmt(c.total)}</b></td><td class="num">${h>=.05?fmt(c.total/h):'—'}</td><td class="num">${fmt(oreOf(r))}</td><td style="color:var(--text-2)">${(r.titles||[]).map(t=>t.split(' ').map(w=>w[0]).join('')).join(' · ')||'—'}</td></tr>`}).join('')+'</tbody>';
+}
+
+/* predictor */
+const LUCK = Object.fromEntries(Object.entries(DATA.enchant_luck).map(([a,b])=>[+a,b]));
+function luckAt(level){
+  if(LUCK[level]!=null)return{v:LUCK[level],exact:true};
+  const ks=Object.keys(LUCK).map(Number).sort((a,b)=>a-b);
+  const lo=Math.max(...ks.filter(x=>x<level)),hi=Math.min(...ks.filter(x=>x>level));
+  return{v:LUCK[lo]+(LUCK[hi]-LUCK[lo])*(level-lo)/(hi-lo),exact:false};
+}
+let pick = rods.find(r=>!r.small)?.rod || rods[0]?.rod, lvl = rods.find(r=>r.rod===pick)?.enchant_level||0;
+let titlesPick = null;
+function drawPredictor(){
+  seg($('pRod'),rods.map(r=>[r.rod,r.rod,ROD_SW[r.rod]]),pick,v=>{pick=v;lvl=rods.find(r=>r.rod===v).enchant_level;titlesPick=null;drawPredictor()});
+  const r=rods.find(x=>x.rod===pick); if(titlesPick==null)titlesPick=new Set(r&&r.titles||[]);
+  $('pTitles').innerHTML=Object.entries(DATA.title_buffs).sort((a,b)=>(b[1].fishing_luck||1)-(a[1].fishing_luck||1)).map(([t,b],i)=>
+    `<label><input type="checkbox" id="pt${i}" data-t="${t}" ${titlesPick.has(t)?'checked':''}><span class="bx"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>${t}<small>${b.fishing_luck?b.fishing_luck+'× luck':''}${b.fishing_luck&&b.bite_speed?' · ':''}${b.bite_speed?b.bite_speed+'× bite':''}</small></label>`).join('');
+  $('pTitles').querySelectorAll('input').forEach(el=>el.onchange=()=>{
+    if(el.checked&&titlesPick.size>=3){el.checked=false;return}
+    el.checked?titlesPick.add(el.dataset.t):titlesPick.delete(el.dataset.t);
+    $('pTitles').classList.toggle('full',titlesPick.size>=3);$('pCount').textContent=`${titlesPick.size} / 3`;predict()});
+  $('pTitles').classList.toggle('full',titlesPick.size>=3); $('pCount').textContent=`${titlesPick.size} / 3`;
+  const sl=$('pLvl'); sl.value=lvl; sl.style.setProperty('--fill',(lvl*10)+'%');
+  predict();
+}
+$('pLvl').addEventListener('input',e=>{lvl=+e.target.value;e.target.style.setProperty('--fill',(lvl*10)+'%');predict()});
+function predict(){
+  const r=rods.find(x=>x.rod===pick); if(!r)return;
+  $('pLvlOut').textContent='+'+lvl;
+  const base=luckAt(r.enchant_level), tgt=luckAt(lvl);
+  const tBase=luckOfTitles(r.titles), tNow=luckOfTitles([...(titlesPick||[])]);
+  const f=(tgt.v*tNow)/(base.v*tBase);
+  const sameTitles=[...(titlesPick||[])].sort().join()===(r.titles||[]).slice().sort().join();
+  const real=lvl===r.enchant_level&&sameTitles;
+  const w={Common:r.rc.Common,Uncommon:r.rc.Uncommon*f,Legendary:r.rc.Legendary*f}, W=(w.Common+w.Uncommon+w.Legendary)||1;
+  const fph=r.active_hours?r.fish/r.active_hours:0, per={};
+  for(const[x,v]of Object.entries(r.counts)){const rr=DATA.rarity[x];per[x]=r.rc[rr]?fph*(w[rr]/W)*(v/r.rc[rr]):0}
+  const hc=hourly(per,crateMult({ores:oreOf(r),hours:r.active_hours,cratesPerH:Math.min(...COMMONS.map(x=>(per[x]||0)/2))})), total=hc.crate+hc.rest;
+  $('pBadge').innerHTML = real?'<span class="badge meas">Measured</span>':'<span class="badge est">Estimate</span>';
+  $('pLuck').textContent = `Enchant luck ×${tgt.v.toFixed(2)} at +${lvl} (measured at +${r.enchant_level}); titles ×${tNow.toFixed(3)} (measured with ×${tBase.toFixed(3)}). `+(tgt.exact?'':'This level is interpolated until the exact table is in. ')+(r.small?`Only ${fmt(r.fish)} fish so far, so treat this as rough.`:'');
+  if(!$('ps0'))$('pStats').innerHTML = `<div class="l">Predicted</div><div class="big num"><span id="ps0"></span><small>gold/h</small></div><div class="gbar" id="pBar"><b class="c"></b><b class="s"></b></div><dl id="pDl"></dl>`;
+  countUp($('ps0'),total,v=>fmt(v));
+  const bars=$('pBar').children; bars[0].style.width=(total?100*hc.crate/total:0)+'%'; bars[1].style.width=(total?100*hc.rest/total:0)+'%';
+  $('pDl').innerHTML = (crateQuest?`<dt>From crates</dt><dd>${fmt(hc.crate)}</dd><dt>Sold</dt><dd>${fmt(hc.rest)}</dd><dt>Crates/h</dt><dd>${fmt(hc.b,1)}</dd>`:`<dt>Sold</dt><dd>${fmt(hc.rest)}</dd><dt>Fish/h</dt><dd>${fmt(fph)}</dd>`)+`<dt>Hooks/min</dt><dd>${fmt(r.hpm,2)}</dd>`;
+  if(SIMPLE){$('predCap').textContent='Try another enchant level or other titles and see what you would earn';$('pLuck').textContent=real?'Measured from your own runs.':'An estimate from your own runs.'}
+  const rows=Object.keys(r.counts).sort((a,b)=>RAR.indexOf(DATA.rarity[a])-RAR.indexOf(DATA.rarity[b])||r.counts[b]-r.counts[a]);
+  const ciMax=Math.max(.05,...rows.map(x=>Math.max(wilson(r.counts[x],r.fish)[1],fph?per[x]/fph:0)))*1.1;
+  $('pTable').classList.toggle('simple',SIMPLE); $('pTblWrap').classList.toggle('hide',SIMPLE);
+  $('pTable').innerHTML = '<thead><tr><th>Fish</th><th>Chance</th><th>Measured 95% range</th><th>Per hour</th><th>Gold</th></tr></thead><tbody>'+
+    rows.map(x=>{const p=fph?per[x]/fph:0,[lo,hi]=wilson(r.counts[x],r.fish),sc=v=>Math.min(100,100*v/ciMax);
+      return `<tr><td><span class="rn" style="--rc:${RVAR[DATA.rarity[x]]}">${DATA.names[x]}</span></td><td class="num"><b>${(100*p).toFixed(1)}%</b></td>
+        <td><span class="ci" data-tip="${DATA.names[x]}<br>measured ${(100*r.counts[x]/r.fish).toFixed(1)}% · range ${(100*lo).toFixed(1)}–${(100*hi).toFixed(1)}%"><span class="rng" style="left:${sc(lo)}%;width:${Math.max(1,sc(hi)-sc(lo))}%"></span><span class="pt" style="left:calc(${sc(p)}% - 1px)"></span></span> <span class="mono" style="color:var(--text-3);font-size:12px">${(100*lo).toFixed(1)}–${(100*hi).toFixed(1)}%</span></td>
+        <td class="num">${fmt(per[x],1)}</td><td class="mono">${DATA.prices[x]}</td></tr>`}).join('')+'</tbody>';
+}
+
+$('asof').textContent = `Data as of ${DATA.generated}`;
+$('foot').innerHTML = SIMPLE?`<span>Gold: Common 33 · Uncommon 66 · Legendary 165</span><span>2× cash doubles crates only</span>`:`<span>Prices: Common 33 · Uncommon 66 · Legendary 165</span><span>Crate base gold: B ${fmt(DATA.crates.B.gold)} · A ${fmt(DATA.crates.A.gold)} (2× boost doubles crates only)</span><span>Refine luck per level: +1 1.05× … +8 1.9×, +9 2×, +10 3×</span><span>Range bars: shaded = measured 95% range, tick = predicted chance</span>`;
+drawSeg(); render(); drawPredictor();
+</script>
