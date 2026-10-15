@@ -564,6 +564,32 @@ footer a{color:inherit}
 .rcol.zero b{color:var(--text-3)} .rcol.zero .bar{background:var(--border)}
 .rcol.hit .bar{animation:hitfill .8s var(--spring)}
 
+/* Items map (option 4) */
+.tm-wrap{padding:16px;display:grid;gap:14px}
+.tm-head .pill{border-color:var(--border);background:var(--raised)}
+.itlist{display:none}.tm-wrap.list .itlist{display:block}.tm-wrap.list .tm,.tm-wrap.list .legend{display:none}
+.tm-head{display:flex;align-items:center;gap:10px;padding:2px 4px 0}
+.tm-head h2{margin:0;font:600 16px var(--sans);display:flex;align-items:center;gap:8px}
+.tm-head h2 svg{color:var(--text-3)}
+.tm-head .sp{flex:1}
+.tm{position:relative;height:610px}
+.cell{position:absolute;border-radius:14px;padding:12px 14px;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;
+  background:color-mix(in srgb,var(--rc) 15%,var(--surface));border:1px solid color-mix(in srgb,var(--rc) 32%,transparent);
+  animation:tmpop .7s var(--spring) both;transition:transform .4s var(--spring),background-color .2s}
+.cell:hover{transform:scale(1.02);background:color-mix(in srgb,var(--rc) 22%,var(--surface));z-index:2}
+.cell.imp{background:linear-gradient(135deg,color-mix(in srgb,var(--impossible) 26%,var(--surface)),color-mix(in srgb,#ff9a3c 22%,var(--surface)));border-color:color-mix(in srgb,#ff7a6a 45%,transparent)}
+@keyframes tmpop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}}
+.cell .n{font:500 13px/1.25 var(--sans);color:var(--text-1)}
+.cell .t{font:650 10.5px/1 var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--rc);margin-bottom:4px}
+.cell .q{font:600 30px/1 var(--sans);letter-spacing:-.02em}
+.cell .m{font:400 12px var(--mono);color:var(--text-2);display:flex;gap:10px}
+.cell.s .q{font-size:22px}.cell.xs .q{font-size:18px}.cell.xs .m span+span{display:none}
+.legend{display:flex;gap:8px;flex-wrap:wrap;padding:0 4px}
+.legend>span{display:inline-flex;align-items:center;gap:8px;padding:5px 11px 5px 6px;border-radius:999px;background:var(--raised);border:1px solid var(--border);font-size:12.5px;color:var(--text-2)}
+.legend i{width:18px;height:10px;border-radius:4px;background:var(--rc)}
+.legend i.imp{background:linear-gradient(90deg,var(--impossible),#ff9a3c)}
+.legend b{font:500 12.5px var(--mono);color:var(--text-1)}
+.legend>.note{margin-left:auto;background:transparent;border:0;color:var(--text-3)}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -676,9 +702,12 @@ footer a{color:inherit}
 
   <!-- Items -->
   <section class="view" id="v-items">
-    <article class="card">
-      <header><h3><svg class="i"><use href="#i-box"/></svg>Items <span class="count" id="itemsCount"></span></h3></header>
-      <div class="body"><div class="tbl"><table id="items"></table></div></div>
+    <article class="card tm-wrap" id="itemsCard">
+      <div class="tm-head"><h2><svg class="i"><use href="#i-box"/></svg>Items</h2><span class="pill"><b id="itemsCount">0</b></span><span class="pill" id="itemsRate"></span><span class="sp"></span>
+        <div class="seg" id="itemsView" role="group" aria-label="View"></div></div>
+      <div class="tm" id="tm"></div>
+      <div class="legend" id="tmKey"></div>
+      <div class="tbl itlist"><table id="items"></table></div>
     </article>
   </section>
 
@@ -953,11 +982,49 @@ function drawChecks(s){
 /* --- other views --- */
 function drawItems(s){
   const items = (s.items || []).map(r => ({...r, rarity: r.rarity || rarityOf(r.item)})).filter(r => r.quantity > 0).sort((a, b) => (RORDER.indexOf(a.rarity) + 9) % 9 - (RORDER.indexOf(b.rarity) + 9) % 9 || b.quantity - a.quantity), total = items.reduce((a, r) => a + r.quantity, 0);
-  $('itemsCount').textContent = total ? fmt(total) : '';
+  $('itemsCount').textContent = fmt(total);
+  const hours = (s.active_seconds || 0)/3600; $('itemsRate').innerHTML = hours > .05 ? `${ico('gauge')}<b class="num">${fmt(total/hours)}</b>/h` : ''; $('itemsRate').hidden = !(hours > .05);
+  segHtml($('itemsView'), [['map', 'Map'], ['list', 'List']].map(([k, l]) => `<button data-k="${k}" aria-pressed="${k === itemsView}">${l}</button>`).join(''));
+  $('itemsCard').classList.toggle('list', itemsView === 'list');
+  if (itemsView === 'map') drawMap(items, total, hours);
   $('items').innerHTML = items.length ? `<thead><tr><th>Item</th><th>Rarity</th><th>Qty</th><th>Share</th></tr></thead><tbody>${items.map(r =>
     `<tr><td>${esc(r.item)}</td><td>${r.rarity ? `<span class="rtag" style="--rc:${RVAR[r.rarity]}">${r.rarity}</span>` : ''}</td><td class="num mono">${fmt(r.quantity)}</td><td><span class="share"><b style="width:${(100*r.quantity/Math.max(...items.map(x => x.quantity))).toFixed(1)}%"></b><em class="mono num">${fmt(100*r.quantity/total,1)}%</em></span></td></tr>`).join('')}</tbody>`
     : `<tbody><tr><td class="empty">${ico('box', 'big')}</td></tr></tbody>`;
 }
+// Items map (Items option 4): area follows count, rare items enlarged so one Refinement Guard stays readable.
+let itemsView = 'map'; try { itemsView = localStorage.getItem('autofish-items-view') || 'map'; } catch (e) {}
+function squarify(items, x, y, w, h){
+  const worst = (row, side) => { const s = row.reduce((a, r) => a + r.v, 0), mx = Math.max(...row.map(r => r.v)), mn = Math.min(...row.map(r => r.v)); return Math.max(side*side*mx/(s*s), (s*s)/(side*side*mn)); };
+  const total = items.reduce((a, i) => a + i.v, 0), scale = (w*h)/total, out = []; let row = [], rect = {x, y, w, h};
+  const layout = (row, rc) => { const s = row.reduce((a, r) => a + r.v, 0);
+    if (rc.w >= rc.h) { const cw = s/rc.h; let yy = rc.y; row.forEach(r => { const ch = r.v/cw; out.push({...r, x: rc.x, y: yy, w: cw, h: ch}); yy += ch; }); return {x: rc.x + cw, y: rc.y, w: rc.w - cw, h: rc.h}; }
+    const ch = s/rc.w; let xx = rc.x; row.forEach(r => { const cw = r.v/ch; out.push({...r, x: xx, y: rc.y, w: cw, h: ch}); xx += cw; }); return {x: rc.x, y: rc.y + ch, w: rc.w, h: rc.h - ch}; };
+  for (const d of items.map(i => ({...i, v: i.v*scale}))) { const side = Math.min(rect.w, rect.h);
+    if (!row.length || worst([...row, d], side) <= worst(row, side)) row.push(d); else { rect = layout(row, rect); row = [d]; } }
+  if (row.length) layout(row, rect); return out;
+}
+function drawMap(items, total, hours){
+  const box = $('tm'), W = box.clientWidth, H = box.clientHeight, G = 6;
+  const key = W + '|' + items.map(r => r.item + r.quantity).join(',');
+  if (box._k === key || !W) return; const first = !box._k; box._k = key;
+  if (!items.length) { box.innerHTML = `<div class="empty">${ico('box', 'big')}</div>`; $('tmKey').innerHTML = ''; return; }
+  const wv = q => Math.max(Math.pow(q, .55), 3.2), BY = {};
+  items.forEach(r => { const t = r.rarity || 'Common'; (BY[t] = BY[t] || []).push(r); });
+  const tiers = RORDER.filter(t => BY[t]).map(t => ({t, v: BY[t].reduce((a, r) => a + wv(r.quantity), 0)}));
+  const small = tiers.filter(x => !['Uncommon', 'Common'].includes(x.t)), big = tiers.filter(x => ['Uncommon', 'Common'].includes(x.t));
+  const sw = small.length && big.length ? Math.round(W*.36) : small.length ? W : 0;
+  const rects = [...(small.length ? squarify(small, 0, 0, sw, H) : []), ...(big.length ? squarify(big, sw, 0, W - sw, H) : [])];
+  let html = '', k = 0;
+  rects.forEach(tr => squarify(BY[tr.t].map(r => ({...r, v: wv(r.quantity)})), tr.x, tr.y, tr.w, tr.h).forEach(c => {
+    const w = c.w - G, h = c.h - G, size = Math.min(w, h) < 95 ? 'xs' : Math.min(w, h) < 130 ? 's' : '', rate = c.quantity/Math.max(.1, hours);
+    html += `<div class="cell ${size}${tr.t === 'Impossible' ? ' imp' : ''}" style="--rc:${RVAR[tr.t]};left:${c.x + G/2}px;top:${c.y + G/2}px;width:${w}px;height:${h}px;animation-delay:${first ? (k++)*35 : 0}ms${first ? '' : ';animation:none'}" title="${esc(c.item)}: ${fmt(c.quantity)}">
+      <div><div class="t">${tr.t}</div><div class="n">${esc(c.item)}</div></div>
+      <div><div class="q num">${fmt(c.quantity)}</div><div class="m"><span>${fmt(rate, rate < 10 ? 1 : 0)}/h</span><span>${fmt(100*c.quantity/total, 1)}%</span></div></div></div>`; }));
+  box.innerHTML = html;
+  $('tmKey').innerHTML = tiers.map(x => `<span><i class="${x.t === 'Impossible' ? 'imp' : ''}" style="--rc:${RVAR[x.t]}"></i>${x.t} <b class="num">${fmt(BY[x.t].reduce((a, r) => a + r.quantity, 0))}</b></span>`).join('') + '<span class="note">Area ≈ count · rare enlarged</span>';
+}
+addEventListener('resize', () => { if (view === 'items' && S) drawItems(S); });
+
 const KINDS = [['all','All','list'],['catch','Catches','fish'],['recovery','Fixes','refresh'],['problem','Problems','alert']];
 let logPick = null;
 const evKey = e => String(e.id ?? (e.at + e.text));
@@ -1120,6 +1187,7 @@ async function setting(key, value){ try { const r = await api('/api/settings', {
 document.querySelectorAll('.seg.onoff').forEach(g => g.addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b || b.getAttribute('aria-pressed') === 'true') return;
   g.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); glide(g); setting(g.dataset.key, b.dataset.v === 'true'); }));
 $('sUser').addEventListener('change', e => setting('account_username', e.target.value.trim()));
+$('itemsView').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (!b) return; itemsView = b.dataset.k; try { localStorage.setItem('autofish-items-view', itemsView); } catch (x) {} $('tm')._k = null; drawItems(S); });
 $('sHook').addEventListener('change', e => { const v = e.target.value.trim(); if (v) setting('webhook', v); e.target.value = ''; });
 $('sRod').addEventListener('click', e => { const b = e.target.closest('[data-rod]'); if (b) setting('rod', b.dataset.rod); });
 $('sSlot').addEventListener('click', e => { const b = e.target.closest('[data-slot]'); if (b) { $('sSlot').querySelectorAll('.key').forEach(x => x.classList.toggle('on', x === b)); setting('rod_slot', +b.dataset.slot); } });
