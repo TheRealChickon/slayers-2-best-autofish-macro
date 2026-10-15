@@ -1,0 +1,179 @@
+<p align="center">
+  <img src="docs/images/banner.svg" alt="Autofish: hands-free fishing for Project Slayers 2 on Roblox" width="100%">
+</p>
+
+<p align="center">
+  <a href="../../releases/latest"><img alt="Download" src="https://img.shields.io/badge/download-latest%20release-e3a64a?style=for-the-badge"></a>
+  <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-1b6f8f?style=for-the-badge">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-3c8c5a?style=for-the-badge"></a>
+</p>
+
+**Autofish** plays the fishing minigame in **Project Slayers 2** for you. It casts, wins the minigame, picks up the catch and casts again, hour after hour. If Roblox disconnects, it rejoins and gets back to fishing on its own. A live dashboard shows what you caught, how fast you're fishing and how much your catch is worth.
+
+You don't need to know anything about coding. Download, double-click, done.
+
+<p align="center">
+  <img src="docs/images/demo.gif" alt="Autofish casting, winning the minigame and collecting a fish" width="720">
+</p>
+
+## Features
+
+- 🎣 **Fully hands-free.** Casts, plays the reel minigame, holds T to collect drops and recasts.
+- 🔁 **Recovers by itself.** Re-equips your rod, fixes a stuck screen, and rejoins after a disconnect.
+- 🌙 **Overnight mode.** Waits until you've stepped away, then takes over. Moving your mouse hands control back.
+- 📊 **Live dashboard.** Catches, hooks per minute, gold per hour, bait left and a running log.
+- 🧪 **Rod Lab.** Compares your rods side by side: drop rates, gold per hour and Angler crate value.
+- 💬 **Discord reports (optional).** One message per session that updates itself with your latest numbers.
+- 🖥️ **Any screen.** Works fullscreen or windowed, on laptops and big monitors, at 100 – 150 % Windows scaling.
+- 🔒 **Private.** No Roblox password or cookie is ever used. Your settings and logs stay on your PC.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/cli-dashboard.png" alt="Autofish dashboard with catches and live log"><br><sub><b>Dashboard.</b> What's happening right now, with recent logs on the right.</sub></td>
+    <td width="50%"><img src="docs/images/rod-lab.png" alt="Rod Lab comparing fishing rods"><br><sub><b>Rod Lab.</b> Which rod earns the most gold per hour.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/cli-settings.png" alt="Autofish settings page"><br><sub><b>Settings.</b> Everything is changed with the arrow keys and Enter.</sub></td>
+    <td width="50%"><img src="docs/images/cli-catches.png" alt="Catches page with item counts"><br><sub><b>Catches.</b> Every fish and item, this session or all time.</sub></td>
+  </tr>
+</table>
+
+## Install
+
+> **You need:** a Windows 10 or 11 PC, Roblox, and Project Slayers 2 with a fishing rod in your hotbar. Python is installed for you if it's missing.
+
+### 1. Download
+
+Go to the **[latest release](../../releases/latest)** and download the file called **`Autofish-….zip`** under *Assets*.
+
+### 2. Unzip
+
+Right-click the zip and choose **Extract All…**, then open the extracted **Autofish** folder.
+
+<img src="docs/images/install-folder.png" alt="The extracted Autofish folder with Install.cmd" width="640">
+
+### 3. Double-click `Install.cmd`
+
+A blue window opens and installs everything (a few minutes the first time). When it says **Autofish … is installed**, you can close it.
+
+<img src="docs/images/install-done.png" alt="Install.cmd finished successfully" width="640">
+
+> **"Windows protected your PC"?** That's Windows SmartScreen being careful with a file from the internet. Click **More info → Run anyway**. You can read every script in this repository first if you like.
+
+You now have three icons on your desktop: **Fishing CLI** (the dashboard), **Fishing** and **Start Fishing**.
+
+### 4. First-time settings
+
+Open **Fishing CLI**, go to **Settings** with the arrow keys, and set these three things:
+
+| Setting | What to enter |
+| --- | --- |
+| **Username** | Your Roblox **username** (not your display name). Optional, but it lets Autofish notice disconnects faster. |
+| **Rod slot** | The hotbar number (1 – 9) your fishing rod is in. |
+| **Cast point** | Pick **Capture pointer**, then within 4 seconds hover your mouse over the water where you want to cast. |
+
+<img src="docs/images/cli-settings.png" alt="Settings page with Username, Rod slot and Cast point" width="640">
+
+### 5. Start fishing
+
+1. In Roblox, walk to your fishing spot facing the water and **set your spawn there** (so a rejoin brings you back).
+2. In the dashboard, open **Run** and choose **Full farmer**.
+3. Leave Roblox in front. That's it. 🎣
+
+**Controls while it runs** (with Roblox in front):
+
+| Key | Does |
+| --- | --- |
+| **F8** | Pause / resume |
+| **F9** or **F12** | Stop |
+| Switching to another app | Pauses automatically; coming back resumes |
+
+## Modes
+
+| Mode | You do | Autofish does |
+| --- | --- | --- |
+| **Full farmer** *(main mode)* | Set your spawn at the fishing spot once | Everything: rod, casting, minigame, pickup, recovery and rejoining |
+| **Farm here** | Stand anywhere you can fish | Same as Full farmer, but stays where you are and doesn't use your spawn |
+| **Fish here** | Aim with the mouse, press F8 | Click, reel, collect, repeat |
+| **Minigame only** | Cast and collect yourself | Only plays the reel minigame |
+| **Auto rejoin** | Play normally | Watches for disconnects and rejoins; no fishing |
+
+All modes except Full farmer live under **Run → Other modes**.
+
+## Discord reports (optional)
+
+Get one Discord message per session that edits itself every few minutes with your catches, pace and gold. In your Discord server, open **Server Settings → Integrations → Webhooks → New Webhook → Copy Webhook URL**, then paste it in **Settings → Discord webhook** and choose **Test webhook**.
+
+The webhook is stored encrypted for your Windows account and never shown again or uploaded anywhere else.
+
+## Troubleshooting
+
+<details>
+<summary><b>My screen is small / Roblox isn't fullscreen. Does it still work?</b></summary>
+
+Yes. Autofish reads the game as a 16:9 picture. If your Roblox window has a different shape (for example maximized on a 1366 × 768 laptop, or a 16:10 or ultrawide monitor), Autofish resizes the window to the biggest 16:9 size that fits your screen. If Roblox is fullscreen on a screen that isn't 16:9, it presses **F11** once to leave fullscreen first.
+
+Everything from about 960 × 540 up to 4K works, at 100 %, 125 % or 150 % Windows scaling. If your screen is smaller than that, you'll see a message saying so; use F11 fullscreen on a 16:9 screen or lower Windows display scaling.
+</details>
+
+<details>
+<summary><b>I don't have an Nvidia graphics card.</b></summary>
+
+That's fine. Autofish reads on-screen text with your processor instead. It's a bit slower (roughly 5 – 10 % fewer hooks per minute) but works the same.
+</details>
+
+<details>
+<summary><b>It says "Waiting for Roblox".</b></summary>
+
+Autofish only sends input while Roblox is the window in front, so it never types into another app. Click on Roblox and it continues. Minimizing Roblox, locking the screen or letting the PC sleep pauses it.
+</details>
+
+<details>
+<summary><b>It doesn't cast, or casts into the floor.</b></summary>
+
+Set the **Cast point** again with **Capture pointer** while standing at your spot, and check that your camera faces the water. The rod must be in the hotbar (not only in your backpack) and **Rod slot** must match.
+</details>
+
+<details>
+<summary><b>The rod isn't selected.</b></summary>
+
+Put the rod in a visible hotbar slot and set **Rod slot** to that number. Leave **Auto rod** on so Autofish re-equips it when needed.
+</details>
+
+<details>
+<summary><b>"Multiple Roblox Player windows"</b></summary>
+
+Close the extra Roblox windows. Autofish works with one Roblox client at a time.
+</details>
+
+<details>
+<summary><b>How do I update?</b></summary>
+
+Download the new zip from [Releases](../../releases/latest), unzip it and run `Install.cmd` again. Your settings, stats and webhook are kept.
+</details>
+
+<details>
+<summary><b>How do I uninstall?</b></summary>
+
+Stop Autofish, run `Install-CLI.cmd -Uninstall` from `%LOCALAPPDATA%\Autofish\app` to remove the `autofish` command, delete the three desktop icons, then delete the `%LOCALAPPDATA%\Autofish` folder (this also deletes your stats). Nothing else is installed: no service, no scheduled task, no admin rights.
+</details>
+
+Still stuck? [Open an issue](../../issues/new/choose) with your screen resolution, Windows scaling and the last lines of `autofish logs --activity`.
+
+## ⚠️ Disclaimer
+
+Autofish is a fan-made tool. It is **not affiliated with, endorsed by or supported by Roblox Corporation** or the makers of Project Slayers 2.
+
+Roblox's [Terms of Use](https://en.help.roblox.com/hc/en-us/articles/115004647846) and many games' rules don't allow automation, macros or bots. Using Autofish **may get your account warned, suspended or banned**. You use it entirely at your own risk; the authors accept no responsibility for what happens to your account.
+
+Autofish only looks at your screen and presses keys and mouse buttons like a person would. It doesn't read or change the game's memory, doesn't use your password or cookie, and doesn't give you anything that normal play can't.
+
+## For tinkerers
+
+- 📖 **[Full manual](docs/MANUAL.md):** every mode, setting, hotkey, file and command (`autofish status`, `autofish logs`, `autofish predictions` …).
+- 🛠️ **Run from source:** install Python 3.12 (64-bit), clone the repo and double-click `Setup.cmd`. Tests: `.\.venv\Scripts\python.exe -m unittest discover -s tests`.
+- 🤝 **[Contributing](CONTRIBUTING.md):** bug reports, screenshots from unusual setups and pull requests are welcome.
+
+Released under the [MIT license](LICENSE).
