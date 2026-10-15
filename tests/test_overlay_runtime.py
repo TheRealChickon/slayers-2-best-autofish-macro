@@ -52,6 +52,18 @@ class OverlayRender(unittest.TestCase):
         self.assertFalse(item.running)
         self.assertFalse(win32gui.IsWindow(hwnd))
 
+    @unittest.skipUnless(os.name=='nt','Native Windows window')
+    def test_failed_blur_setup_closes_the_hidden_window(self):
+        item=overlay.Overlay()
+        with patch.object(overlay,'roblox_window',return_value=None), \
+             patch.object(overlay,'enable_blur',side_effect=OSError('Backdrop unavailable')):
+            try:
+                with self.assertRaisesRegex(RuntimeError,'Backdrop unavailable'):
+                    item.start('http://127.0.0.1:12345/overlay?t=fixture')
+            finally:item.stop()
+        self.assertFalse(item.running)
+        self.assertIsNone(item.hwnd)
+
 
 class ActivityClock(unittest.TestCase):
     def test_clock_needs_fresh_fishing_and_actual_roblox_focus(self):
