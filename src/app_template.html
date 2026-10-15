@@ -804,7 +804,7 @@ function drawKpis(s){
   const baitPct = bait != null && s.bait_start ? Math.max(2, Math.min(100, 100*bait/s.bait_start)) : null;
   const cards = [
     ['pace', 'gauge', 'Pace', pace, v => `${fmt(v,1)}<small>/min</small>`, s.hooks ? `${fmt(s.hooks)} hooks` : ''],
-    ['gold', 'coins', 'Gold / h', s.gold_per_hour, v => `${fmt(v/1000,1)}<small>k</small>`, ''],
+    ['gold', 'coins', 'Gold / h', s.gold_per_hour, v => `${fmt(v/1000,1)}<small>k</small>`, s.gold_per_hour && s.active_seconds ? `≈ ${fmt(s.gold_per_hour*s.active_seconds/3600/1000,1)}k this session` : ''],
     ['bait', 'hook', 'Bait', bait, v => fmt(v), hrs ? `≈ ${dur(hrs*3600)} left` : ''],
   ];
   const box = $('kpis');
