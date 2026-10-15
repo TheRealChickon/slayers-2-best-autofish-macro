@@ -61,7 +61,7 @@ class NewTitles(unittest.TestCase):
         from title_manager import listed_titles,canonical_title,category_count
         rows=[row('Angler',800,400),row('Deep Water Angler',1100,400),row('Leviathan H',1450,400),
               row('Legendary Fisherman',800,520),row('Salvager',1100,520),row('Master Angler',1450,520),
-              row('One',1405,700),row('Buffs',2100,640)]
+              row('One',1405,700),row('Buffs',2100,640),row('OuwFish',1290,720),row('Collect',1280,745)]
         names=[canonical_title(n) for n in listed_titles(rows)]
         self.assertEqual(names,['Angler','Deep Water Angler','Leviathan Hunter','Legendary Fisherman','Salvager','Master Angler'])
         self.assertEqual(category_count('Fishing (6)'),6)
