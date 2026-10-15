@@ -118,6 +118,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .empty{color:var(--text-3);font-size:13px;padding:18px 0;text-align:center}
 
 /* activity */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--text-3) 35%,transparent);border-radius:99px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--text-3) 60%,transparent);background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
 .feed{display:grid;gap:0;max-height:318px;overflow:auto;margin:0 -18px;padding:0 18px;scrollbar-width:thin}
 .feed.tall{max-height:none}
 .ev{display:grid;grid-template-columns:52px 10px minmax(0,1fr);gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
@@ -367,8 +372,8 @@ footer a{color:inherit}
 /* ===== 3b ===== */
 .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
 .mc.rec:not([aria-checked="true"]){border:1.5px dashed color-mix(in srgb,var(--accent) 70%,transparent)}
-.mc .rec-tag{position:absolute;top:-10px;left:14px;display:none;align-items:center;gap:4px;font:600 11px var(--sans);color:#fff;background:var(--accent);border-radius:99px;padding:2px 9px 2px 7px;box-shadow:0 4px 10px color-mix(in srgb,var(--accent) 35%,transparent)}
-.mc .rec-tag .i{width:12px;height:12px;stroke-width:2.4}
+.mc .rec-tag{position:absolute;top:-8px;left:12px;display:none;align-items:center;gap:3px;font:600 9.5px/1 var(--sans);letter-spacing:.01em;color:#fff;background:var(--accent);border-radius:99px;padding:3px 7px 3px 5px;box-shadow:0 2px 6px color-mix(in srgb,var(--accent) 25%,transparent)}
+.mc .rec-tag .i{width:10px;height:10px;stroke-width:2.4}
 .mc.rec .rec-tag{display:inline-flex;animation:recin .6s var(--spring) backwards .2s}
 @keyframes recin{from{transform:translateY(6px) scale(.6);opacity:0}}
 /* catch, Rod Lab style: one bar by rarity, then a compact table */
@@ -586,6 +591,8 @@ footer a{color:inherit}
 .cell .q{font:600 30px/1 var(--sans);letter-spacing:-.02em}
 .cell .m{font:400 12px var(--mono);color:var(--text-2);display:flex;gap:10px}
 .cell.s .q{font-size:22px}.cell.xs .q{font-size:18px}.cell.xs .m span+span{display:none}
+/* Tiles too small for text show only colour; the name and count are in the hover tooltip. */
+.cell.xxs{padding:0}.cell.xxs>div{display:none}
 .legend{display:flex;gap:8px;flex-wrap:wrap;padding:0 4px}
 .legend>span{display:inline-flex;align-items:center;gap:8px;padding:5px 11px 5px 6px;border-radius:999px;background:var(--raised);border:1px solid var(--border);font-size:12.5px;color:var(--text-2)}
 .legend i{width:18px;height:10px;border-radius:4px;background:var(--rc)}
@@ -829,7 +836,7 @@ const MODES = [
   {k:'assist', name:'Minigame', icon:'pad', c:'var(--common)', line:'You cast and collect. It wins the minigame.', does:['reel']},
   {k:'spot', name:'Fish here', icon:'target', c:'var(--uncommon)', line:'You aim. It clicks, reels and collects.', does:['reel','cast','collect']},
   {k:'here', name:'Farm here', icon:'pin', c:'var(--accent)', line:'Stand at the water. It farms and fixes hiccups.', does:['reel','cast','collect','fix']},
-  {k:'full', name:'Full farmer', icon:'crown', c:'var(--legendary)', line:'All night. Rejoins and walks back if kicked.', does:['reel','cast','collect','fix','rejoin'], pass:true}];
+  {k:'full', name:'Full farmer', icon:'crown', c:'color-mix(in srgb,var(--legendary) 55%,var(--text-3))', line:'All night. Rejoins and walks back if kicked.', does:['reel','cast','collect','fix','rejoin'], pass:true}];
 const ABIL = [['reel','pad','Wins the minigame'],['cast','hook','Casts'],['collect','box','Collects drops'],['fix','wrench','Fixes small problems'],['rejoin','refresh','Rejoins after a disconnect']];
 const RVAR = {Common:'var(--common)', Uncommon:'var(--uncommon)', Rare:'var(--rare)', Legendary:'var(--legendary)', Mythic:'var(--mythic)', Impossible:'var(--impossible)'};
 const RORDER = ['Impossible','Mythic','Legendary','Rare','Uncommon','Common'];
@@ -1056,7 +1063,7 @@ function drawMap(items, total, hours){
   const rects = [...(small.length ? squarify(small, 0, 0, sw, H) : []), ...(big.length ? squarify(big, sw, 0, W - sw, H) : [])];
   let html = '', k = 0;
   rects.forEach(tr => squarify(BY[tr.t].map(r => ({...r, v: wv(r.quantity)})), tr.x, tr.y, tr.w, tr.h).forEach(c => {
-    const w = c.w - G, h = c.h - G, size = Math.min(w, h) < 95 ? 'xs' : Math.min(w, h) < 130 ? 's' : '', rate = c.quantity/Math.max(.1, hours);
+    const w = c.w - G, h = c.h - G, size = Math.min(w, h) < 56 ? 'xxs' : Math.min(w, h) < 95 ? 'xs' : Math.min(w, h) < 130 ? 's' : '', rate = c.quantity/Math.max(.1, hours);
     html += `<div class="cell ${size}${tr.t === 'Impossible' ? ' imp' : ''}" style="--rc:${RVAR[tr.t]};left:${c.x + G/2}px;top:${c.y + G/2}px;width:${w}px;height:${h}px;animation-delay:${first ? (k++)*35 : 0}ms${first ? '' : ';animation:none'}" title="${esc(c.item)}: ${fmt(c.quantity)}">
       <div><div class="t">${tr.t}</div><div class="n">${esc(c.item)}</div></div>
       <div><div class="q num">${fmt(c.quantity)}</div><div class="m"><span>${fmt(rate, rate < 10 ? 1 : 0)}/h</span><span>${fmt(100*c.quantity/total, 1)}%</span></div></div></div>`; }));

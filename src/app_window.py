@@ -87,6 +87,11 @@ def state(journal=None, feed=None):
     log_run = s.get('log_run') or {}
     feed.update(log_run.get('started', s['started']), state=s['state'] if s['running'] else None, ended=log_run.get('ended'))
     recent = s.get('recent') or {}
+    # The header's Session clock: this run's fishing time when the run recorded its
+    # starting total, otherwise the lifetime total (runs started before this field).
+    base = log_run.get('active_at_start')
+    if isinstance(base, (int, float)) and not log_run.get('ended'):
+        s = {**s, 'active_seconds': max(0, (s['active_seconds'] or 0)-base)}
     return {**{k: s[k] for k in ('state', 'mode', 'running', 'starting', 'paused', 'manual_paused', 'reason', 'active_seconds',
                                   'activity_running', 'hooks', 'hooks_per_hour', 'last_item', 'collections', 'bait_remaining_estimate',
                                   'bait_hours_remaining_estimate')},
