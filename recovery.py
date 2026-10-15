@@ -159,6 +159,11 @@ class Recovery:
         self.inp.hold(True)
         try:self.sleep(hold)
         finally:self.inp.hold(False)
+    def scroll(self,x,y,notches):
+        """Mouse wheel over a menu list; negative notches scroll down."""
+        self.move(x,y);self.sleep(.15)
+        for _ in range(abs(notches)):
+            self.guard();USER.mouse_event(0x0800,0,0,120 if notches>0 else -120,0);self.sleep(.06)
     def key(self,k,seconds=.2):
         self.guard();scan=USER.MapVirtualKeyW(ord(k.upper()),0)
         USER.keybd_event(ord(k.upper()),scan,0,0)
