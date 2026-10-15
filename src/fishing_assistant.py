@@ -622,7 +622,13 @@ def main():
                             rod=recheck_selected_rod(frame,last_verified_rod)
                             if rod is None:rod=locate_rod(frame)
                             last_verified_rod=rod if selected_rod(rod) else None
-                            if selected_rod(rod):note_rod(rod['name'])
+                            if selected_rod(rod):
+                                # Keep the frame behind every rod change: Common/Rare
+                                # flapped at each start on 2026-10-15.
+                                if rod['name']!=tracked_rod:
+                                    cv2.imwrite(str(RUN/f"rod-change-{rod['name']}.jpg"),frame,[cv2.IMWRITE_JPEG_QUALITY,85])
+                                    event('rod_change_seen',rod=rod['name'],score=rod['score'],ring=rod['ring'],x=rod['x'],y=rod['y'])
+                                note_rod(rod['name'])
                             last_rod_check=now
                             if unselected_rod(rod):
                                 inp.release();inp.aim(*screen.point(rod['x'],rod['y']))

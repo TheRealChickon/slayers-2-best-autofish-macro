@@ -181,6 +181,35 @@ def resume(mode=None,until=None,automatic=False):
         return message
 
 
+def switch_mode(mode):
+    """An explicit Switch click pauses the old controller, then resumes the same run.
+
+    A later Stop/Pause/F8 request cancels the switch. Never run two controllers.
+    """
+    if mode not in ('full', 'here', 'assist', 'spot'): raise ValueError('Unknown mode')
+    if mode == 'full' and not full_farmer_available(load_config()): raise ValueError(FULL_NEEDS_GAMEPASS)
+    def stamp(name):
+        path = RUN/name
+        return (path.stat().st_mtime_ns, path.read_bytes()) if path.exists() else None
+    with guard():
+        refuse_peer_controller()
+        if any(alive(name) for name in ('bait-driver-pid.json', 'route-recorder-pid.json', 'calibration-pid.json')):
+            raise RuntimeError('Finish or pause the other controller before switching modes')
+        if not alive() and not starting() and not alive('pid.json'): return resume(mode)
+        pause()
+        holds = {name: stamp(name) for name in ('PAUSE', 'STOP', 'F8_PAUSE')}
+    deadline = time.monotonic() + 15
+    def unchanged():
+        return all(stamp(name) == value for name, value in holds.items())
+    while alive() or starting() or alive('pid.json'):
+        if not unchanged(): raise RuntimeError('A new manual hold cancelled the mode switch')
+        if time.monotonic() >= deadline: raise RuntimeError('Still pausing. Choose Start when the controller has stopped.')
+        time.sleep(.1)
+    with guard():
+        if not unchanged(): raise RuntimeError('A new manual hold cancelled the mode switch')
+        return resume(mode)
+
+
 def refuse_peer_controller():
     peer = load_config().get('peer_data_dir')
     if not peer:

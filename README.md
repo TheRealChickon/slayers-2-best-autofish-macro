@@ -38,7 +38,13 @@ You don't need to know anything about coding. Download, double-click, done.
 
 Autofish.exe opens one window with everything in it: what the farmer is doing right now, Start / Pause / Stop, a session timer, pace and gold per hour graphs, bait left, your catch by rarity, a live log and a timeline of the last hour. Items shows everything you've collected as a map or a searchable list. It works in light and dark mode and runs offline on your PC.
 
-The **Overlay** button puts a small card in the corner of the Roblox window with your status, pace, gold, rod and latest catches. Clicks pass straight through it to the game.
+The **Overlay** button toggles a small translucent card over Roblox with your status, pace, gold, rod and latest catches. Pace is green; Gold / h and Session are gold. The background is transparent while text stays solid. It appears only while Roblox is in front, lets clicks pass through, and never takes keyboard focus.
+
+<p align="center"><img src="docs/images/overlay.png" alt="Translucent Autofish overlay with green Pace and gold Gold per hour and Session values" width="284"></p>
+
+*Dashboard and overlay previews use demonstration data. The overlay image is rendered by the actual native renderer.*
+
+The session clock advances only with fresh fishing telemetry while Roblox is focused. It freezes during manual pause, focus loss, recovery or a stale connection. Mode cards stay selectable while running: choose a mode, then **Switch to** to pause the old controller and continue the saved run. A new Stop or Pause cancels the switch. Pages still scroll with the mouse wheel and keyboard, without visible scrollbars.
 
 ## Rod Lab
 

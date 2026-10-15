@@ -19,18 +19,20 @@ def normalized(value):
     return re.sub(r'[^a-z]', '', value.lower())
 
 
-def matching_title(value):
+def matching_title(value,names=PRIORITY):
+    """Match OCR text to a known title. `names` includes titles discovered in game."""
     clean=normalized(value)
-    for title in PRIORITY:
-        if normalized(title) in clean:return title
+    # Longest name first so 'Deep Water Angler' wins over 'Angler'.
+    for title in sorted(names,key=lambda n:-len(normalized(n))):
+        if normalized(title) and normalized(title) in clean:return title
     ranked=sorted(((SequenceMatcher(None,normalized(title),clean).ratio(),title)
-                   for title in PRIORITY),reverse=True)
+                   for title in names),reverse=True)
     if ranked and ranked[0][0]>.83 and (len(ranked)==1 or ranked[0][0]-ranked[1][0]>.12):
         return ranked[0][1]
     return None
 
 
-def slot_titles(rows):
+def slot_titles(rows,names=PRIORITY):
     """Require a title immediately above each numbered slot; unknowns are kept."""
     result={}
     for row in rows:
@@ -39,9 +41,46 @@ def slot_titles(rows):
         slot=word.title();sx,sy=row['center']
         candidates=[r for r in rows if 0 < sy-r['center'][1] < 75 and abs(sx-r['center'][0]) < 105]
         candidates.sort(key=lambda r:r['center'][0])
-        result[slot]=(matching_title(' '.join(r['text'] for r in candidates)) if candidates else None,
+        result[slot]=(matching_title(' '.join(r['text'] for r in candidates),names) if candidates else None,
                       (sx,sy-36))
     return result
+
+
+TITLE_NAME = re.compile(r"[A-Za-z][A-Za-z'\- ]{3,39}")
+
+
+def listed_titles(rows):
+    """Title pills left of the detail panel; slot labels and categories are not titles."""
+    names=[]
+    # The world's pickup prompt ('OuwFish' over 'Collect') shows through the menu.
+    prompts=[r['center'] for r in rows if normalized(r['text']).startswith('collec')]
+    rows=[r for r in rows if not any(abs(r['center'][0]-x)<160 and 0<y-r['center'][1]<45 for x,y in prompts)]
+    for r in sorted(rows,key=lambda r:(round(r['center'][1]/20),r['center'][0])):
+        text=re.sub(r'\s+',' ',r['text']).strip()
+        if r['center'][0]>=2000 or not TITLE_NAME.fullmatch(text):continue
+        if normalized(text) in ('one','two','three','vanity','equip','equipped','unequip','requirements','buffs','collect'):continue
+        if normalized(text) not in {normalized(n) for n in names}:names.append(text)
+    return names
+
+
+def canonical_title(text):
+    """Repair clipped OCR of a built-in title ('Leviathan H'); any other text is a new title.
+    Containment is not enough here: 'Master Angler' must not become 'Angler'."""
+    clean=normalized(text)
+    for title in PRIORITY:
+        if normalized(title)==clean:return title
+    # A pill clipped at the panel edge reads as the start of its name.
+    clipped=[t for t in PRIORITY if len(clean)>=6 and normalized(t).startswith(clean)]
+    if len(clipped)==1:return clipped[0]
+    ranked=sorted(((SequenceMatcher(None,normalized(t),clean).ratio(),t) for t in PRIORITY),reverse=True)
+    if ranked[0][0]>.83 and ranked[0][0]-ranked[1][0]>.12:return ranked[0][1]
+    return text
+
+
+def category_count(text):
+    """6 from 'Fishing (6)'; None when the label has no count."""
+    found=re.search(r'(\d+)',text or '')
+    return int(found.group(1)) if found else None
 
 
 def owned_check(frame, requirement_y):
@@ -117,13 +156,47 @@ class TitleManager:
 
     def slots(self):
         rows=self.rows((1120,1070,1050,170))
-        slots=slot_titles(rows)
+        slots=slot_titles(rows,getattr(self,'names',PRIORITY))
         if set(slots)!=set(SLOTS):raise ValueError('Fishing title slots are not readable')
         return slots
 
     def shows(self,rows,title):
         header=' '.join(r['text'] for r in rows if r['center'][1]<450)
-        return normalized(title) in normalized(header) or matching_title(header)==title
+        return normalized(title) in normalized(header) or matching_title(header,getattr(self,'names',PRIORITY))==title
+
+    def listing(self,expected=None):
+        """Read every title pill, scrolling the list when the tab count says some are hidden."""
+        d=self.driver
+        frame=d.capture()
+        self.save_frame(frame)
+        names=listed_titles(d.text(frame,(720,340,1300,700)))
+        # Pills fade in one by one: the last one is still nearly black at 0.55 s
+        # (Living Legend, 2026-10-15). Re-read while the count is short, then scroll.
+        for attempt in range(8):
+            if expected is None or len(names)>=expected:break
+            if attempt>=4:
+                scroll=getattr(d,'scroll',None)
+                if scroll is None:break
+                scroll(1370,690,-3)
+            d.sleep(.6)
+            frame=d.capture()
+            more=listed_titles(d.text(frame,(720,340,1300,700)))
+            added=[n for n in more if normalized(n) not in {normalized(x) for x in names}]
+            names+=added
+            self.save_frame(frame)
+            if not added and attempt>=4:break
+        if expected is not None and len(names)<expected:
+            d.event('fishing_titles_partial',expected=expected,read=names)
+        return names
+
+    @staticmethod
+    def save_frame(frame,name='titles-list.jpg'):
+        """Keep the latest Fishing titles screen for diagnosing new or hidden titles."""
+        try:
+            import cv2
+            from app_config import data_directory
+            cv2.imwrite(str(data_directory()/name),frame,[cv2.IMWRITE_JPEG_QUALITY,85])
+        except Exception:pass
 
     def inspect(self,title,details=None):
         d=self.driver
@@ -136,7 +209,8 @@ class TitleManager:
             frame=d.capture()
             rows=d.text(frame,(1980,320,560,700))
         if not self.shows(rows,title):
-            raise ValueError(f'Fishing title detail changed for {title}')
+            self.save_frame(frame,'title-detail.jpg')
+            raise ValueError(f'Fishing title detail changed for {title}; read {[r["text"] for r in rows][:12]}')
         requirement=self.named(rows,'Requirements')
         if details is not None:details[title]=parse_buffs(rows)
         return owned_check(frame,requirement['center'][1])
@@ -158,19 +232,29 @@ class TitleManager:
                 # The Titles screen has Combat/Ouwigahara categories; the inventory does not.
                 if any(normalized(r['text']).startswith(('combat','ouwigahara')) for r in categories):break
             else:raise ValueError('Titles screen did not open')
-            d.click(*self.named(categories,'Fishing',r'Fishing\s*[\(\[]?\s*\d*\s*[\)\]]?')['center'])
+            fishing=self.named(categories,'Fishing',r'Fishing\s*[\(\[]?\s*\d*\s*[\)\]]?')
+            d.click(*fishing['center'])
             d.sleep(.55)
-            frame=d.capture()
             # Title pills only: left of the detail panel, not the One/Two/Three check labels.
-            listing=d.text(frame,(720,340,1300,300))
-            names=[r['text'].strip() for r in listing if r['center'][0]<2000
-                   and not any(word.startswith(normalized(r['text'])) for word in ('one','two','three','vanity'))
-                   and re.fullmatch(r"[A-Za-z' ]{5,40}",r['text'].strip())]
+            # The tab count ('Fishing (6)') says how many exist, so later unlocks are found.
+            names=self.listing(category_count(fishing['text']))
+            names=[canonical_title(n) for n in names]
             if any(sum(normalized(t)==normalized(n) for n in names) != 1 for t in PRIORITY):
-                raise ValueError('Fishing title list changed; read '+str([r['text'] for r in listing]))
+                raise ValueError('Fishing title list changed; read '+str(names))
+            self.names=tuple(dict.fromkeys(list(PRIORITY)+names))
             details={}
-            owned={title for title in names if self.inspect(title,details)}
+            owned=set()
+            for title in list(names):
+                try:
+                    if self.inspect(title,details):owned.add(title)
+                except ValueError as error:
+                    # A known title must be readable; a stray OCR line is just dropped.
+                    if title in PRIORITY:raise
+                    names.remove(title)
+                    d.event('fishing_title_skipped',title=title,reason=str(error))
+            self.names=tuple(dict.fromkeys(list(PRIORITY)+names))
             catalog=self.update_catalog(names,owned,details)
+            self.names=tuple(dict.fromkeys(list(self.names)+list(catalog)))
             from app_config import load_config
             rod=str(load_config().get('active_rod') or '')
             priority=(load_config().get('title_priority') or {}).get(rod,'luck')

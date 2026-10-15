@@ -88,7 +88,7 @@ def state():
     feed.update(log_run.get('started', s['started']), state=s['state'] if s['running'] else None, ended=log_run.get('ended'))
     recent = s.get('recent') or {}
     return {**{k: s[k] for k in ('state', 'mode', 'running', 'starting', 'paused', 'manual_paused', 'reason', 'active_seconds',
-                                  'hooks', 'hooks_per_hour', 'last_item', 'collections', 'bait_remaining_estimate',
+                                  'activity_running', 'hooks', 'hooks_per_hour', 'last_item', 'collections', 'bait_remaining_estimate',
                                   'bait_hours_remaining_estimate')},
             'version': version(), 'game': 'Project Slayers 2', 'rod': current_rod(),
             'pace': recent.get('hooks_per_minute') if recent.get('fresh') else None,
@@ -120,6 +120,10 @@ def action(body):
         mode = body.get('mode') or load_config()['mode']
         if mode not in MODES: raise ValueError('Unknown mode')
         return actions.resume(mode=mode)
+    if name == 'switch_mode':
+        mode = body.get('mode')
+        if mode not in MODES: raise ValueError('Unknown mode')
+        return actions.switch_mode(mode)
     if name == 'resume': return actions.resume()
     if name == 'pause': return actions.pause()
     if name == 'stop': return actions.stop()
