@@ -345,6 +345,32 @@ class IsolatedState(unittest.TestCase):
             app.key('n'); self.assertFalse(app.config['spawn_gamepass'])
             self.assertEqual(app_config.load_config()['mode'], 'here')
 
+    def test_gamepass_yes_asks_for_the_roblox_username_and_saves_it_locally(self):
+        with patch.dict(app_config.DEFAULTS, {'spawn_gamepass': None}):
+            app=terminal_app.Terminal()
+            app.key('y')
+            self.assertTrue(app.ask_username)
+            screen='\n'.join(terminal_app.ANSI.sub('',line) for line in app.render(120,35))
+            self.assertIn('Roblox username', screen)
+            for letter in 'Builder_1': app.key(letter)
+            with patch.object(app,'job',side_effect=lambda fn:fn()),\
+                    patch.object(terminal_app,'resolve_account',return_value={'account_username':'Builder_1','user_id':42}) as resolve:
+                app.key('ENTER')
+            resolve.assert_called_once_with('Builder_1')
+            self.assertFalse(app.ask_username)
+            saved=app_config.load_config()
+            self.assertEqual((saved['account_username'],saved['user_id'],saved['mode']),('Builder_1',42,'full'))
+
+    def test_username_step_can_be_skipped_and_is_not_asked_without_the_gamepass(self):
+        with patch.dict(app_config.DEFAULTS, {'spawn_gamepass': None}):
+            app=terminal_app.Terminal()
+            app.key('y'); app.key('CANCEL')
+            self.assertFalse(app.ask_username); self.assertIsNone(app.editing)
+            self.assertEqual(app_config.load_config()['account_username'],'')
+            other=terminal_app.Terminal(); other.config['spawn_gamepass']=None
+            other.key('n')
+            self.assertFalse(other.ask_username); self.assertIsNone(other.editing)
+
     def test_run_page_leads_with_full_farmer_and_keeps_other_modes_one_level_down(self):
         app=terminal_app.Terminal()
         with patch.object(app,'job',side_effect=lambda fn:fn()), patch.object(control_actions,'resume') as resume,\

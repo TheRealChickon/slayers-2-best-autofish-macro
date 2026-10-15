@@ -126,6 +126,7 @@ class Terminal:
         self.show_total = False
         self.log_run = {}
         self.editing = None
+        self.ask_username = False  # first-run step after answering yes to the gamepass
         self.buffer = ''
         self.alive = True
         self.jobs = queue.Queue()
@@ -431,11 +432,24 @@ class Terminal:
                 tint('  You can change this any time in Settings › Spawn gamepass.','dim'),'',
                 tint('  Y yes   N no   S stop farming   Q close','dim')]
 
+    def username_question(self):
+        """First-run step after a yes: Full farmer needs the account to rejoin."""
+        return ['',tint('  FIRST-TIME SETUP','gold'),'',
+                tint('  What is your Roblox username?','text'),'',
+                tint('  Full farmer uses it to check you are in the game and to rejoin after a','dim'),
+                tint('  disconnect. Use your username, not your display name. It is saved only','dim'),
+                tint('  on this PC.','dim'),'',
+                tint('  › ','gold')+tint(self.buffer+'▏','text'),'',
+                tint('  Enter save   Esc skip for now','dim')]
+
     def key(self, key):
         if self.config.get('spawn_gamepass') is None and not self.editing:
             if key.lower() in ('y','n'):
                 self.config=set_spawn_gamepass(key.lower()=='y')
                 self.toast('Full farmer is your main mode' if self.config['spawn_gamepass'] else 'Farm here is your main mode')
+                if self.config['spawn_gamepass'] and not self.config.get('account_username'):
+                    # Full farmer rejoins through this account, so ask for it straight away.
+                    self.ask_username=True;self.edit('Username')
             elif key.lower()=='q':self.alive=False
             elif key.lower()=='s':
                 try: self.toast(actions.stop())
@@ -443,6 +457,11 @@ class Terminal:
             return
         if self.editing:
             self.effects.secret = ''
+            if key in ('ENTER','CANCEL') and self.ask_username:
+                self.ask_username=False
+                if key=='CANCEL' or not self.buffer.strip():
+                    self.editing, self.buffer = None, ''
+                    self.toast('Add your Roblox username later in Settings › Username');return
             if key == 'ENTER': self.finish_edit()
             elif key == 'CANCEL': self.editing, self.buffer = None, ''
             elif key == 'BACKSPACE': self.buffer = self.buffer[:-1]
@@ -705,6 +724,8 @@ class Terminal:
             return ['Fishing  /  '+d.get('state', ''), '', 'Enlarge the terminal to at least 65 columns × 22 rows.', '', 'Q close   C continue   P pause   S stop']
         if self.config.get('spawn_gamepass') is None:
             return self.gamepass_question()
+        if self.ask_username:
+            return self.username_question()
         active = d['running'] and not d['stop_requested'] and not d.get('manual_paused') and d['state'] != 'Waiting for Roblox'
         spin = '●' if self.config['reduced_motion'] or not active else '◐◓◑◒'[int(time.monotonic()*5)%4]
         state = tint(spin+' '+d['state'],state_tone(d['state'],active))

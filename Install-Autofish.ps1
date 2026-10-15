@@ -1,7 +1,14 @@
-param([string]$Target = (Join-Path $env:LOCALAPPDATA 'Autofish\app'), [switch]$NoDesktop, [switch]$NoCLI)
+param([string]$Target = (Join-Path $env:LOCALAPPDATA 'Autofish\app'), [switch]$NoDesktop, [switch]$NoCLI,
+      [string]$Launcher, [switch]$Pause)
 # Install or update Autofish from this unzipped folder. Settings (config.local.json),
 # run data and stats (data\), the webhook and the Python environment are kept.
 $ErrorActionPreference = 'Stop'
+# Started by Autofish.exe: keep the window open on errors so the reason can be read.
+trap {
+    Write-Host ''; Write-Host $_ -ForegroundColor Red
+    if ($Pause) { Read-Host 'Press Enter to close' | Out-Null }
+    exit 1
+}
 $source = $PSScriptRoot
 $Target = [IO.Path]::GetFullPath($Target)
 $version = if (Test-Path -LiteralPath (Join-Path $source 'VERSION')) { (Get-Content -LiteralPath (Join-Path $source 'VERSION') -Raw).Trim() } else { 'unknown' }
@@ -55,5 +62,22 @@ if (-not (Test-Path -LiteralPath $venv)) {
 }
 & $venv -m pip install --disable-pip-version-check -q -r (Join-Path $Target 'requirements.txt')
 if ($LASTEXITCODE -ne 0) { throw 'Installing dependencies failed; check the internet connection and run Install.cmd again.' }
-& (Join-Path $Target 'Setup.ps1') -SkipInstall -NoDesktop:$NoDesktop -NoCLI:$NoCLI
-Write-Host "Autofish $version is installed. Open a new terminal and run: autofish tui" -ForegroundColor Green
+if ($Launcher) {
+    # One desktop icon: the launcher, copied beside the app so the download can be deleted.
+    & (Join-Path $Target 'Setup.ps1') -SkipInstall -NoDesktop -NoCLI:$NoCLI
+    $exe = Join-Path (Split-Path $Target) 'Autofish.exe'
+    Copy-Item -LiteralPath $Launcher -Destination $exe -Force
+    if (-not $NoDesktop) {
+        $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'Autofish.lnk'))
+        $shortcut.TargetPath = $exe
+        $shortcut.WorkingDirectory = Split-Path $Target
+        $shortcut.Description = 'Autofish dashboard'
+        $shortcut.Save()
+        Write-Host 'Desktop: Autofish'
+    }
+    Write-Host "Autofish $version is installed. Starting it now..." -ForegroundColor Green
+    if ($Pause) { Start-Sleep -Seconds 2 }
+} else {
+    & (Join-Path $Target 'Setup.ps1') -SkipInstall -NoDesktop:$NoDesktop -NoCLI:$NoCLI
+    Write-Host "Autofish $version is installed. Open a new terminal and run: autofish tui" -ForegroundColor Green
+}

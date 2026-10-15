@@ -13,33 +13,30 @@
 You don't need to know anything about coding. Download, double-click, done.
 
 <p align="center">
-  <img src="docs/images/demo.gif" alt="Autofish casting, winning the minigame and collecting a fish" width="720">
+  <img src="docs/images/demo.gif" alt="Autofish casting, winning the minigame and collecting a fish" width="640">
 </p>
 
 ## Features
 
-- 🎣 **Fully hands-free.** Casts, plays the reel minigame, holds T to collect drops and recasts.
-- 🔁 **Recovers by itself.** Re-equips your rod and fixes a stuck screen. With the Set Spawn Anywhere gamepass it also rejoins after a disconnect and gets straight back to fishing.
-- 🌙 **Overnight mode.** Waits until you've stepped away, then takes over. Moving your mouse hands control back.
-- 📊 **Live dashboard.** Catches, hooks per minute, gold per hour, bait left and a running log.
-- 🧪 **Rod Lab.** Compares your rods side by side: drop rates, gold per hour and Angler crate value.
-- 💬 **Discord reports (optional).** One message per session that updates itself with your latest numbers.
-- 🖥️ **Any screen.** Works fullscreen or windowed, on laptops and big monitors, at 100 – 150 % Windows scaling.
-- 🌅 **Any light.** Red skies, night and other tinted scenes are balanced automatically, so the minigame is still read correctly.
-- 🔒 **Private.** No Roblox password or cookie is ever used. Your settings and logs stay on your PC.
+- **Fully hands-free.** Casts, plays the reel minigame, holds T to collect drops and recasts.
+- **Recovers by itself.** Re-equips your rod and fixes a stuck screen. With the Set Spawn Anywhere gamepass it also rejoins after a disconnect and gets straight back to fishing.
+- **Overnight mode.** Waits until you've stepped away, then takes over. Moving your mouse hands control back.
+- **Live dashboard.** Catches, hooks per minute, gold per hour, bait left and a running log.
+- **Bait buying.** Stand at Baitmonger Nori, pick an amount or a gold budget, and Autofish buys the Fish Heads in bulk. It can go straight back to farming afterwards, and the dashboard tracks how much bait is left.
+- **Best fishing titles.** Can equip your three strongest fishing titles for you, with luck or bite speed as the focus for each rod.
+- **Rod Lab.** Compares your rods side by side: drop rates, gold per hour and Angler crate value.
+- **Discord reports (optional).** One message per session that updates itself with your latest numbers.
+- **Any screen.** Works fullscreen or windowed, on laptops and big monitors, at 100 – 150 % Windows scaling.
+- **Any light.** Red skies, night and other tinted scenes are balanced automatically, so the minigame is still read correctly.
+- **Private.** No Roblox password or cookie is ever used. Your settings and logs stay on your PC.
 
-## Screenshots
+## Rod Lab
 
-<table>
-  <tr>
-    <td width="50%"><img src="docs/images/cli-dashboard.png" alt="Autofish dashboard with catches and live log"><br><sub><b>Dashboard.</b> What's happening right now, with recent logs on the right.</sub></td>
-    <td width="50%"><img src="docs/images/rod-lab.png" alt="Rod Lab comparing fishing rods"><br><sub><b>Rod Lab.</b> Which rod earns the most gold per hour.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/images/cli-settings.png" alt="Autofish settings page"><br><sub><b>Settings.</b> Everything is changed with the arrow keys and Enter.</sub></td>
-    <td width="50%"><img src="docs/images/cli-catches.png" alt="Catches page with item counts"><br><sub><b>Catches.</b> Every fish and item, this session or all time.</sub></td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/images/rod-lab.png" alt="Rod Lab comparing fishing rods: catch mix, gold per hour and crate value" width="100%">
+</p>
+
+Rod Lab compares your rods side by side: what each one catches, how much gold per hour it earns, and how many Angler crates it fills. It runs offline on your PC.
 
 ## Install
 
@@ -49,52 +46,38 @@ You don't need to know anything about coding. Download, double-click, done.
 
 Go to the **[latest release](../../releases/latest)** and download the file called **`Autofish-….zip`** under *Assets*.
 
-### 2. Unzip
+### 2. Unzip and double-click `Autofish.exe`
 
-Right-click the zip and choose **Extract All…**, then open the extracted **Autofish** folder.
+Right-click the zip, choose **Extract All…**, and open the extracted **Autofish** folder. Inside there is **Autofish.exe** and an `app` folder. Double-click **Autofish.exe**.
 
-<img src="docs/images/install-folder.png" alt="The extracted Autofish folder with Install.cmd" width="640">
+The first time, a window opens and installs everything, which takes a few minutes. Then the dashboard opens by itself, and you get one **Autofish** icon on your desktop. From then on, just use that icon. You can delete the downloaded folder.
 
-### 3. Double-click `Install.cmd`
+> **"Windows protected your PC"?** That's Windows SmartScreen being careful with a new program from the internet. Click **More info → Run anyway**. All of Autofish's code is in this repository if you want to check it first.
 
-A window opens and installs everything (a few minutes the first time). When it says **Autofish … is installed**, you can close it.
+### 3. First-time settings
 
-<img src="docs/images/install-done.png" alt="Install.cmd finished successfully" width="640">
-
-> **"Windows protected your PC"?** That's Windows SmartScreen being careful with a file from the internet. Click **More info → Run anyway**. You can read every script in this repository first if you like.
-
-You now have three icons on your desktop: **Fishing CLI** (the dashboard), **Fishing** and **Start Fishing**.
-
-### 4. First-time settings
-
-Open **Fishing CLI**. The first time, it asks one question:
-
-<img src="docs/images/cli-gamepass.png" alt="First-time question about the Set Spawn Anywhere gamepass" width="640">
-
-Answer **Y** or **N**. This decides your main mode:
+The first time the dashboard opens, it asks one question: do you own the **Set Spawn Anywhere** gamepass? Answer **Y** or **N**. This decides your main mode:
 
 | Your answer | Main mode | What it means |
 | --- | --- | --- |
 | **Yes** | **Full farmer** | Your spawn is at your fishing spot, so when Roblox disconnects or something gets stuck, Autofish rejoins and lands right back there. It can run all night on its own. |
 | **No** | **Farm here** | Autofish fishes, wins the minigame and claims every catch where you stand, and fixes small problems on the spot. Without the gamepass a rejoin would drop you somewhere else, so after a disconnect it stops and waits for you instead. |
 
-You can change the answer any time in **Settings → Spawn gamepass**.
+If you answer **Yes**, it then asks for your **Roblox username** (not your display name). Full farmer needs it to check that you're in the game and to rejoin after a disconnect. It is saved only on your PC. You can change both answers any time in **Settings**.
 
-Then go to **Settings** with the arrow keys and set these three things:
+Then go to **Settings** with the arrow keys and check these:
 
 | Setting | What to enter |
 | --- | --- |
-| **Username** | Your Roblox **username** (not your display name). Optional, but it lets Autofish notice disconnects faster. |
+| **Username** | Your Roblox **username** (not your display name). Already set if you answered Yes; optional for Farm here, where it helps notice disconnects. |
 | **Rod slot** | The hotbar number (1 – 9) your fishing rod is in. |
 | **Cast point** | Pick **Capture pointer**, then within 4 seconds hover your mouse over the water where you want to cast. |
 
-<img src="docs/images/cli-setup.png" alt="Settings page with Username, Rod slot and Cast point" width="640">
-
-### 5. Start fishing
+### 4. Start fishing
 
 1. In Roblox, walk to your fishing spot and face the water. With the gamepass, **set your spawn there** too, so a rejoin brings you back.
 2. In the dashboard, open **Run** and choose **Start Full farmer** (or **Start Farm here** without the gamepass).
-3. Leave Roblox in front. That's it. 🎣
+3. Leave Roblox in front. That's it.
 
 **Controls while it runs** (with Roblox in front):
 
@@ -171,18 +154,18 @@ Close the extra Roblox windows. Autofish works with one Roblox client at a time.
 <details>
 <summary><b>How do I update?</b></summary>
 
-Download the new zip from [Releases](../../releases/latest), unzip it and run `Install.cmd` again. Your settings, stats and webhook are kept.
+Download the new zip from [Releases](../../releases/latest), unzip it and double-click its **Autofish.exe**. It updates your installed copy and keeps your settings, stats and webhook.
 </details>
 
 <details>
 <summary><b>How do I uninstall?</b></summary>
 
-Stop Autofish, run `Install-CLI.cmd -Uninstall` from `%LOCALAPPDATA%\Autofish\app` to remove the `autofish` command, delete the three desktop icons, then delete the `%LOCALAPPDATA%\Autofish` folder (this also deletes your stats). Nothing else is installed: no service, no scheduled task, no admin rights.
+Stop Autofish, run `Install-CLI.cmd -Uninstall` from `%LOCALAPPDATA%\Autofish\app` to remove the `autofish` command, delete the **Autofish** desktop icon, then delete the `%LOCALAPPDATA%\Autofish` folder (this also deletes your stats). Nothing else is installed: no service, no scheduled task, no admin rights.
 </details>
 
 Still stuck? [Open an issue](../../issues/new/choose) with your screen resolution, Windows scaling and the last lines of `autofish logs --activity`.
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 Autofish is a fan-made tool. It is **not affiliated with, endorsed by or supported by Roblox Corporation** or the makers of Project Slayers 2.
 
@@ -192,8 +175,8 @@ Autofish only looks at your screen and presses keys and mouse buttons like a per
 
 ## For tinkerers
 
-- 📖 **[Full manual](docs/MANUAL.md):** every mode, setting, hotkey, file and command (`autofish status`, `autofish logs`, `autofish predictions` …).
-- 🛠️ **Run from source:** install Python 3.12 (64-bit), clone the repo and double-click `Setup.cmd`. Tests: `.\.venv\Scripts\python.exe -m unittest discover -s tests`.
-- 🤝 **[Contributing](CONTRIBUTING.md):** bug reports, screenshots from unusual setups and pull requests are welcome.
+- **[Full manual](docs/MANUAL.md):** every mode, setting, hotkey, file and command (`autofish status`, `autofish logs`, `autofish predictions` …).
+- **Run from source:** install Python 3.12 (64-bit), clone the repo and double-click `Setup.cmd`. Tests: `.\.venv\Scripts\python.exe -m unittest discover -s tests`.
+- **[Contributing](CONTRIBUTING.md):** bug reports, screenshots from unusual setups and pull requests are welcome.
 
 Released under the [MIT license](LICENSE).
