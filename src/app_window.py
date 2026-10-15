@@ -72,18 +72,18 @@ def checks(s, config):
     return rows
 
 
-def state():
+def state(journal=None, feed=None):
     """Everything the window draws, from the same sources as `autofish status`."""
     import rod_stats
     from item_journal import Journal
     from live_feed import LiveFeed
     from status_view import snapshot
-    journal = Journal()
+    journal = journal if journal is not None else Journal()
     s = snapshot(journal)
     config = load_config()
     catch, fish = catch_rows(journal.counts)
     hours = (s['active_seconds'] or 0)/3600
-    feed = LiveFeed()
+    feed = feed if feed is not None else LiveFeed()
     log_run = s.get('log_run') or {}
     feed.update(log_run.get('started', s['started']), state=s['state'] if s['running'] else None, ended=log_run.get('ended'))
     recent = s.get('recent') or {}
@@ -206,6 +206,17 @@ def page(token):
 
 def make_server(token, port=0):
     seen = {'at': time.time()}
+    # These readers already track file offsets. Keep them for this server's
+    # lifetime, and serialize updates so dashboard and overlay polls cannot
+    # replay the entire history or race while appending the same catch.
+    from item_journal import Journal
+    from live_feed import LiveFeed
+    journal, feed = Journal(), LiveFeed()
+    state_lock = threading.Lock()
+
+    def read_state():
+        with state_lock:
+            return {**state(journal, feed), 'overlay': overlay().running}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args): pass
@@ -238,7 +249,7 @@ def make_server(token, port=0):
                 if path == '/rodlab':
                     import rod_stats
                     return self.send(200, rod_stats.dashboard(rod_stats.export_data()), 'text/html')
-                if path == '/api/state': return self.send(200, {**state(), 'overlay': overlay().running})
+                if path == '/api/state': return self.send(200, read_state())
                 if path == '/overlay': return self.send(200, overlay_page(token), 'text/html')
                 if path == '/api/gear': return self.send(200, gear())
             except Exception as error:
@@ -262,7 +273,7 @@ def make_server(token, port=0):
                 elif path == '/api/action': message = action(body)
                 elif path == '/api/settings': message = settings(body)
                 else: return self.send(404, {'error': 'Not found'})
-                return self.send(200, {'message': message, 'state': {**state(), 'overlay': overlay().running}})
+                return self.send(200, {'message': message, 'state': read_state()})
             except Exception as error:
                 return self.send(400, {'error': str(error)})
 

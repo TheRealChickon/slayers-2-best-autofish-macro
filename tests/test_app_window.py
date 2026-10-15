@@ -73,6 +73,50 @@ class AppWindow(unittest.TestCase):
         self.assertTrue(any(e['group'] == 'catches' for e in state['events']))
         self.assertIn('Refinement Ore', [i['item'] for i in state['items']])
 
+    def test_poll_reuses_history_offsets_and_reads_appended_catches(self):
+        original = json.loads
+        decoded = []
+        def decode(value, *args, **kwargs):
+            row = original(value, *args, **kwargs)
+            if isinstance(row, dict) and row.get('event') == 'reward_observed': decoded.append(row)
+            return row
+        with patch.object(json, 'loads', side_effect=decode):
+            self.assertEqual(self.call('GET', '/api/state')[0], 200)
+            self.assertEqual(len(decoded), 8)  # journal and activity feed, once each
+            decoded.clear()
+            self.assertEqual(self.call('GET', '/api/state')[0], 200)
+            self.assertEqual(decoded, [])
+            with (self.root/'events-20261015-010000.jsonl').open('a') as stream:
+                stream.write(json.dumps({'at': 120, 'event': 'reward_observed', 'text': 'Coral X3', 'cycle': 9})+'\n')
+            state = json.loads(self.call('GET', '/api/state')[1])
+            self.assertEqual(len(decoded), 2)
+            self.assertEqual(next(x['count'] for x in state['catch'] if x['name'] == 'Coral'), 5)
+
+    def test_simultaneous_dashboard_and_overlay_polls_do_not_duplicate_catches(self):
+        from concurrent.futures import ThreadPoolExecutor
+        self.call('GET', '/api/state')
+        with (self.root/'events-20261015-010000.jsonl').open('a') as stream:
+            stream.write(json.dumps({'at': 120, 'event': 'reward_observed', 'text': 'Coral X3', 'cycle': 9})+'\n')
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            results = list(pool.map(lambda _: self.call('GET', '/api/state'), range(6)))
+        for status, body in results:
+            self.assertEqual(status, 200)
+            state = json.loads(body)
+            self.assertEqual(next(x['count'] for x in state['catch'] if x['name'] == 'Coral'), 5)
+            self.assertEqual(len([x for x in state['events'] if 'Coral X3' in x['text']]), 1)
+
+    def test_new_run_resets_cached_history_and_still_reads_fresh_status(self):
+        self.call('GET', '/api/state')
+        metrics.write('totals.json', {'started': 200, 'rounds': 2, 'active_seconds': 10})
+        metrics.write('current-run.json', {'id': 'new-run', 'started': 200, 'ended': None})
+        with (self.root/'events-new.jsonl').open('w') as stream:
+            stream.write(json.dumps({'at': 210, 'event': 'reward_observed', 'text': 'Coral X1', 'cycle': 1})+'\n')
+        state = json.loads(self.call('GET', '/api/state')[1])
+        self.assertEqual(state['hooks'], 2)
+        self.assertEqual(state['active_seconds'], 10)
+        self.assertEqual(state['fish'], 1)
+        self.assertTrue(all(x['at'] >= 200 for x in state['events']))
+
     def test_controls_and_settings_use_the_existing_handlers(self):
         with patch.object(control_actions, 'resume', return_value='Started') as resume:
             status, body = self.call('POST', '/api/action', {'action': 'start', 'mode': 'here'})
