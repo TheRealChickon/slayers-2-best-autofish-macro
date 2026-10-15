@@ -118,7 +118,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .empty{color:var(--text-3);font-size:13px;padding:18px 0;text-align:center}
 
 /* activity */
-.feed{display:grid;gap:0;max-height:318px;overflow:auto;margin:0 -18px;padding:0 18px;scrollbar-width:none}
+.feed{display:grid;gap:0;max-height:318px;overflow:auto;margin:0 -18px;padding:0 18px;scrollbar-width:thin}
 .feed.tall{max-height:none}
 .ev{display:grid;grid-template-columns:52px 10px minmax(0,1fr);gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
 .ev:last-child{border-bottom:0}
@@ -166,10 +166,6 @@ tbody tr:hover td{background:color-mix(in srgb,var(--text-1) 2.5%,transparent)}
 .stepper button:hover{background:var(--border)}
 .stepper output{min-width:40px;text-align:center;font:500 14px var(--mono)}
 
-*{scrollbar-width:none}
-*::-webkit-scrollbar{display:none}
-#k-pace{color:var(--good)}
-#k-gold,#d-gold{color:var(--legendary)}
 /* views */
 .view{display:none;gap:16px}
 .view.on{display:grid;animation:in .35s var(--ease)}
@@ -322,11 +318,11 @@ footer a{color:inherit}
 .mc:active:not(:disabled){transform:scale(.96);transition-duration:.12s}
 .mc[aria-checked="true"]{border-color:var(--text-1);box-shadow:0 0 0 1px var(--text-1),0 14px 30px rgba(17,17,16,.12)}
 .mc:disabled{cursor:default}
-.deck.live .mc:not([aria-checked="true"]){opacity:.82}
+.deck.live .mc:not([aria-checked="true"]){opacity:.35}
 .mc .face{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--mc) 14%,transparent);color:var(--mc);transition:transform .5s var(--spring)}
 .mc .face .i{width:22px;height:22px}
 .mc:hover .face{transform:rotate(-8deg) scale(1.08)}
-.mc[aria-checked="true"] .face{background:color-mix(in srgb,var(--mc) 10%,transparent);color:var(--mc)}
+.mc[aria-checked="true"] .face{background:var(--mc);color:#fff}
 .mc b{font:600 15px/1.2 var(--sans);letter-spacing:-.01em}
 .mc p{margin:0;font-size:12.5px;color:var(--text-2);line-height:1.35}
 .mc .ab{display:flex;gap:4px;margin-top:auto}
@@ -371,7 +367,7 @@ footer a{color:inherit}
 /* ===== 3b ===== */
 .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
 .mc.rec:not([aria-checked="true"]){border:1.5px dashed color-mix(in srgb,var(--accent) 70%,transparent)}
-.mc .rec-tag{position:absolute;top:9px;right:34px;display:none;align-items:center;gap:3px;font:500 10px var(--sans);color:var(--text-2);background:none;padding:0}
+.mc .rec-tag{position:absolute;top:-10px;left:14px;display:none;align-items:center;gap:4px;font:600 11px var(--sans);color:#fff;background:var(--accent);border-radius:99px;padding:2px 9px 2px 7px;box-shadow:0 4px 10px color-mix(in srgb,var(--accent) 35%,transparent)}
 .mc .rec-tag .i{width:12px;height:12px;stroke-width:2.4}
 .mc.rec .rec-tag{display:inline-flex;animation:recin .6s var(--spring) backwards .2s}
 @keyframes recin{from{transform:translateY(6px) scale(.6);opacity:0}}
@@ -381,7 +377,7 @@ footer a{color:inherit}
 .mixbar span.hit{animation:hitfill .8s var(--spring)}
 .mixkey{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;color:var(--text-2);margin-bottom:12px}
 .mixkey b{font-weight:600;margin-right:4px}
-.ctbl{max-height:250px;overflow:auto;margin:0 -18px;padding:0 18px;scrollbar-width:none}
+.ctbl{max-height:250px;overflow:auto;margin:0 -18px;padding:0 18px;scrollbar-width:thin}
 .ctbl table td,.ctbl table th{padding:7px 8px}
 .ctbl td.n{font-weight:500}
 .ctbl tr.hit td{animation:rowhit 1s var(--ease)}
@@ -486,7 +482,7 @@ footer a{color:inherit}
 /* log: list on the left, the picked event in detail on the right */
 .logsplit{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;align-items:start}
 @media (max-width:900px){.logsplit{grid-template-columns:minmax(0,1fr)}}
-.loglist{display:grid;max-height:calc(100vh - 230px);min-height:420px;overflow:auto;margin:0 -10px;padding:0 10px;scrollbar-width:none}
+.loglist{display:grid;max-height:calc(100vh - 230px);min-height:420px;overflow:auto;margin:0 -10px;padding:0 10px;scrollbar-width:thin}
 .lrow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:14px;align-items:center;padding:8px 10px;border:1px solid transparent;border-radius:12px;cursor:pointer;font-size:13.5px;text-align:left;background:none;color:var(--text-2);font-family:inherit;transition:background-color .15s,border-color .2s}
 .lrow time{font:400 12px var(--mono);color:var(--text-3)}
 .lrow span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -628,19 +624,6 @@ footer a{color:inherit}
 .itbl .new{font:600 10px/1 var(--sans);color:var(--legendary);background:color-mix(in srgb,var(--legendary) 14%,transparent);border-radius:999px;padding:3px 7px;margin-left:8px;vertical-align:1px;letter-spacing:.03em}
 .itbl td.empty{text-align:center;height:120px;color:var(--text-3)}
 
-.timer b,.timer b i{color:var(--legendary)}
-@media (max-width:1000px){
-  .card.hero{grid-template-columns:minmax(0,1fr)}
-  .hero .ctl{justify-content:space-between;gap:14px}
-  .timer{justify-items:start}
-  .deck{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .kpi .left{position:static;justify-items:start;margin-top:8px}
-}
-@media (max-width:620px){
-  .kpis{grid-template-columns:minmax(0,1fr)}
-  .kpi .left{position:absolute;right:18px;top:38px;margin:0;justify-items:end}
-  .mc{min-height:174px}
-}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -849,7 +832,7 @@ const MODES = [
   {k:'assist', name:'Minigame', icon:'pad', c:'var(--common)', line:'You cast and collect. It wins the minigame.', does:['reel']},
   {k:'spot', name:'Fish here', icon:'target', c:'var(--uncommon)', line:'You aim. It clicks, reels and collects.', does:['reel','cast','collect']},
   {k:'here', name:'Farm here', icon:'pin', c:'var(--accent)', line:'Stand at the water. It farms and fixes hiccups.', does:['reel','cast','collect','fix']},
-  {k:'full', name:'Full farmer', icon:'rod', c:'var(--legendary)', line:'All night. Rejoins and walks back if kicked.', does:['reel','cast','collect','fix','rejoin'], pass:true}];
+  {k:'full', name:'Full farmer', icon:'crown', c:'var(--legendary)', line:'All night. Rejoins and walks back if kicked.', does:['reel','cast','collect','fix','rejoin'], pass:true}];
 const ABIL = [['reel','pad','Wins the minigame'],['cast','hook','Casts'],['collect','box','Collects drops'],['fix','wrench','Fixes small problems'],['rejoin','refresh','Rejoins after a disconnect']];
 const RVAR = {Common:'var(--common)', Uncommon:'var(--uncommon)', Rare:'var(--rare)', Legendary:'var(--legendary)', Mythic:'var(--mythic)', Impossible:'var(--impossible)'};
 const RORDER = ['Impossible','Mythic','Legendary','Rare','Uncommon','Common'];
@@ -924,7 +907,7 @@ function cardHtml(m, live, s){
   const locked = m.pass && s.config && s.config.spawn_gamepass === false;
   const rec = s.config && s.config.spawn_gamepass != null && m.k === (s.config.spawn_gamepass ? 'full' : 'here');
   return `<button class="mc${locked ? ' locked' : ''}${rec ? ' rec' : ''}" role="radio" data-m="${m.k}" aria-checked="${m.k === pickMode}" style="--mc:${m.c}" title="${esc(m.line)}">
-    ${m.pass ? `<span class="tag" title="Needs the Set Spawn Anywhere gamepass">${ico(locked ? 'lock' : 'ticket')}</span>` : ''}<span class="tick">${ico('check')}</span><span class="rec-tag">Recommended</span>
+    ${m.pass ? `<span class="tag" title="Needs the Set Spawn Anywhere gamepass">${ico(locked ? 'lock' : 'ticket')}</span>` : ''}<span class="tick">${ico('check')}</span><span class="rec-tag">${ico('star')}Recommended</span>
     <span class="face">${ico(m.icon)}</span><b>${m.name}</b><p>${m.line}</p>
     <span class="ab">${ABIL.map(([k, i, tip]) => `<span class="${m.does.includes(k) ? 'on' : ''}" title="${tip}">${ico(i)}</span>`).join('')}</span></button>`;
 }
