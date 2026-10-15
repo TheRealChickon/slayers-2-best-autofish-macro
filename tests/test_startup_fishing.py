@@ -113,6 +113,13 @@ class CurrentFishingStartup(unittest.TestCase):
         self.assertTrue(position);self.assertFalse(checked)
         align.assert_not_called();heading.assert_not_called();titles.assert_not_called()
 
+    def test_starting_in_the_current_world_still_checks_titles_once(self):
+        driver=Mock();driver.recover.return_value='current_world'
+        with patch.object(recovery,'load_config',return_value={'camera_heading':270,'auto_fishing_titles':True}),             patch.object(recovery.landmarks,'align') as align,patch.object(recovery,'TitleManager') as titles:
+            self.assertEqual(recovery.prepare_worker(driver,False,True,True,False,False,False),(True,True))
+            self.assertEqual(recovery.prepare_worker(driver,False,True,True,True,False,True),(True,True))
+        align.assert_not_called();titles.return_value.run.assert_called_once()
+
     def test_local_repair_keeps_adopted_position_but_actual_rejoin_restores_saved_setup(self):
         driver=Mock();driver.recover.side_effect=[None,'joined_world']
         with patch.object(recovery,'load_config',return_value={'camera_heading':None,'auto_fishing_titles':True}),\
