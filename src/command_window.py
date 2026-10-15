@@ -14,7 +14,7 @@ import psutil
 import win32api
 import win32gui
 from metrics import RUN, write, read
-from fishing_assistant import ROOT, find_window, rectangle
+from fishing_assistant import CODE, ROOT, find_window, rectangle
 from item_journal import Journal
 from status_view import snapshot, duration
 import control_actions as actions
@@ -370,7 +370,7 @@ class Window:
     def open_cli(self):
         # Use the same installed environment, with a visible console.
         python=os.path.join(os.path.dirname(sys.executable),'python.exe')
-        subprocess.Popen([python,str(ROOT/'fishing_cli.py'),'--color','tui'],cwd=str(ROOT),creationflags=subprocess.CREATE_NEW_CONSOLE)
+        subprocess.Popen([python,str(CODE/'fishing_cli.py'),'--color','tui'],cwd=str(ROOT),creationflags=subprocess.CREATE_NEW_CONSOLE)
 
     def refresh(self):
         try:

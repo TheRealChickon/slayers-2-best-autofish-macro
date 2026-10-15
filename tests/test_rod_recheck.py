@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 import rod_detector as rods
 import test_rare_rod as fixtures
 from app_config import ROOT

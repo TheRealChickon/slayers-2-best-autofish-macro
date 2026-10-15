@@ -13,7 +13,7 @@ from contextlib import contextmanager
 import psutil
 import win32gui
 from metrics import RUN
-from fishing_assistant import ROOT, find_window
+from fishing_assistant import CODE, ROOT, find_window
 from app_config import load_config, save_config, MODES, FULL_NEEDS_GAMEPASS, full_farmer_available
 
 _mutex = threading.RLock()
@@ -156,10 +156,10 @@ def resume(mode=None,until=None,automatic=False):
         (RUN / 'PAUSE').unlink(missing_ok=True)
         (RUN / 'STOP').unlink(missing_ok=True)
         (RUN / 'F8_PAUSE').unlink(missing_ok=True)
-        args = ([sys.executable,str(ROOT/'rejoin_only.py'),'--respect-stop'] +
+        args = ([sys.executable,str(CODE/'rejoin_only.py'),'--respect-stop'] +
                 (['--resume-counters'] if resume_rejoin_counters else []) if mode=='rejoin' else
-                [sys.executable,str(ROOT/'minigame_assist.py'),'--respect-stop','--mode',mode] if mode in ('assist','spot') else
-                [sys.executable, str(ROOT / 'recovery.py'), '--seconds', str(seconds)]+(['--here'] if mode=='here' else ['--rejoin'])+[
+                [sys.executable,str(CODE/'minigame_assist.py'),'--respect-stop','--mode',mode] if mode in ('assist','spot') else
+                [sys.executable, str(CODE / 'recovery.py'), '--seconds', str(seconds)]+(['--here'] if mode=='here' else ['--rejoin'])+[
                  '--focus', '--resume-counters', '--respect-stop']+(['--resume-log-run'] if resume_log_run else []))
         try:
             with (RUN / 'supervisor-stdout.log').open('a') as out, (RUN / 'supervisor-stderr.log').open('a') as err:

@@ -5,7 +5,7 @@ import subprocess
 import sys
 import time
 import psutil
-from app_config import ROOT,load_config,save_config,data_directory
+from app_config import CODE,ROOT,load_config,save_config,data_directory
 from discord_hourly import atomic_json,read_json
 from unattended_focus import PhysicalActivity
 
@@ -20,7 +20,7 @@ def ensure_guard():
     if actions.alive('overnight-guard-pid.json') or actions.alive('overnight-guard-start.json'):return
     root=data_directory()
     with (root/'overnight-guard.log').open('a') as out:
-        p=subprocess.Popen([sys.executable,str(ROOT/'overnight_guard.py')],stdout=out,stderr=out,
+        p=subprocess.Popen([sys.executable,str(CODE/'overnight_guard.py')],stdout=out,stderr=out,
                            creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0),cwd=ROOT)
     atomic_json(root/'overnight-guard-start.json',{'pid':p.pid,'created':psutil.Process(p.pid).create_time()})
 

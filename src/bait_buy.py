@@ -382,9 +382,9 @@ def launch(operation='buy',quantity=None,budget=None,then_full=False):
     """Start the same CLI command from the terminal menu, with local logs."""
     import subprocess
     import sys
-    from fishing_assistant import ROOT
+    from fishing_assistant import CODE
     if operation=='buy': plan(quantity,budget)
-    args=[sys.executable,str(ROOT/'autofish.py'),'bait',operation]
+    args=[sys.executable,str(CODE/'autofish.py'),'bait',operation]
     if budget is not None: args+=['--budget',str(budget)]
     if quantity is not None: args+=['--quantity',str(quantity)]
     if then_full: args+=['--then-full']

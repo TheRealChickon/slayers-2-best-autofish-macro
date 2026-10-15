@@ -7,7 +7,9 @@ from pathlib import Path
 from cast_point import DEFAULT as DEFAULT_CAST_POINT, validate as validate_cast_point
 from damage_plan import DEFAULT_ROTATION, validate_rotation
 
-ROOT = Path(__file__).resolve().parent
+# Code lives in src/; settings, run data and assets sit one level up in the install folder.
+CODE = Path(__file__).resolve().parent
+ROOT = CODE.parent
 MODES = {'full': 'Full farmer', 'here':'Farm here', 'assist': 'Minigame only', 'spot': 'Fish here',
          'rejoin': 'Auto rejoin'}
 GUI_MODES = {key: label for key, label in MODES.items() if key != 'rejoin'}

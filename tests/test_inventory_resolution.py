@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch,Mock
 import sys
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 import cv2
 import numpy as np
 from inventory_watch import reconcile, InventoryScanner, InventoryWatcher

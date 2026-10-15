@@ -6,7 +6,7 @@ from unittest.mock import patch
 from contextlib import redirect_stdout
 from io import StringIO
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 
 from damage_plan import DEFAULT_ROTATION, DamageRotation, validate_rotation
 from damage_measure import DamageMeasurements

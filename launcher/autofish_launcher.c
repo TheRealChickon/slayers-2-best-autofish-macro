@@ -62,7 +62,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR arguments, int
     swprintf(target, MAX_PATH, L"%ls\\Autofish\\app", local);
 
     swprintf(source, MAX_PATH, L"%ls\\app", folder);
-    swprintf(installer, MAX_PATH, L"%ls\\Install-Autofish.ps1", source);
+    swprintf(installer, MAX_PATH, L"%ls\\scripts\\Install-Autofish.ps1", source);
     /* The installed copy sits beside its own app folder: nothing to install. */
     if (exists(installer) && _wcsicmp(source, target) != 0) {
         swprintf(path, MAX_PATH, L"%ls\\VERSION", source);
@@ -80,7 +80,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR arguments, int
         }
     }
 
-    swprintf(path, MAX_PATH, L"%ls\\Open-CLI.ps1", target);
+    swprintf(path, MAX_PATH, L"%ls\\scripts\\Open-CLI.ps1", target);
     if (!exists(path)) fail(L"Autofish is not installed yet. Unzip the download and double-click Autofish.exe there.");
     swprintf(command, 4 * MAX_PATH,
              L"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%ls\"", path);

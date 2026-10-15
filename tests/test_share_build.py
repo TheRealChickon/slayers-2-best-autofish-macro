@@ -5,7 +5,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 import share_build
 
 
@@ -18,8 +18,10 @@ class ShareZip(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             names = zipfile.ZipFile(share_build.build(out=folder)).namelist()
         self.assertEqual({name.split('/')[1] for name in names}, {'Autofish.exe', 'app'})
-        self.assertIn('Autofish/app/Install-Autofish.ps1', names)
+        self.assertIn('Autofish/app/scripts/Install-Autofish.ps1', names)
         self.assertIn('Autofish/app/VERSION', names)
+        self.assertIn('Autofish/app/scripts/Open-CLI.ps1', names)
+        self.assertIn('Autofish/app/src/fishing_cli.py', names)
         for left_out in ('tests/', 'private/', 'launcher/', '.github/', 'docs/images/'):
             self.assertFalse([name for name in names if name.startswith('Autofish/app/'+left_out)], left_out)
 

@@ -49,13 +49,13 @@ if ($Uninstall) {
 
 . (Join-Path $PSScriptRoot 'Runtime.ps1')
 $null = Get-FishingPython
-if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'autofish.py'))) { throw 'Missing autofish.py.' }
+if (-not (Test-Path -LiteralPath (Join-Path $AutofishRoot 'src\autofish.py'))) { throw 'Missing src\autofish.py.' }
 New-Item -ItemType Directory -Path $BinDirectory -Force | Out-Null
 foreach ($name in @('autofish.cmd', 'Invoke-Autofish.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('cli\' + $name)) -Destination (Join-Path $BinDirectory $name) -Force
 }
 $added = (-not $NoPath -and -not $inUserPath) -or ($previous -and $previous.pathAdded)
-@{ product='autofish'; schema=1; appDirectory=$PSScriptRoot; pathAdded=[bool]$added } |
+@{ product='autofish'; schema=1; appDirectory=$AutofishRoot; pathAdded=[bool]$added } |
     ConvertTo-Json | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 if (-not $NoPath -and -not $inUserPath) {
     $newPath = if ($userPath) { $userPath.TrimEnd(';') + ';' + $BinDirectory } else { $BinDirectory }

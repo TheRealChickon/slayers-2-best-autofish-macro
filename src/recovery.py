@@ -5,7 +5,7 @@ from pathlib import Path
 import cv2, mss, numpy as np, psutil, win32gui, win32process
 from rapidocr_onnxruntime import RapidOCR
 from pynput.keyboard import Listener, Key
-from fishing_assistant import ROOT, RUN, USER, Input, find_window, rectangle,move_pointer
+from fishing_assistant import CODE, ROOT, RUN, USER, Input, find_window, rectangle,move_pointer
 from metrics import new_run, write as write_metrics
 import presence_watch
 from app_config import load_config,save_config
@@ -623,7 +623,7 @@ def main():
             if time.monotonic()>=deadline:break
             remaining=max(1,int(deadline-time.monotonic())) if a.seconds>0 else 0;status('fishing');worker_started=time.time()
             with open(RUN/'worker-stdout.log','a') as stdout,open(RUN/'worker-stderr.log','a') as stderr:
-                command=[sys.executable,str(ROOT/'fishing_assistant.py'),'--seconds',str(remaining)]
+                command=[sys.executable,str(CODE/'fishing_assistant.py'),'--seconds',str(remaining)]
                 if current_position:command.append('--current-position')
                 child=subprocess.Popen(command,stdout=stdout,stderr=stderr)
             while child.poll() is None:

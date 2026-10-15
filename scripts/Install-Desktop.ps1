@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+$root = Split-Path -Parent $PSScriptRoot
 $fishingDesktop = [Environment]::GetFolderPath('Desktop')
 $fishingShell = New-Object -ComObject WScript.Shell
 $fishingPowerShell = Join-Path $PSHOME 'powershell.exe'
@@ -10,10 +11,10 @@ foreach ($entry in @(
     $shortcut = $fishingShell.CreateShortcut((Join-Path $fishingDesktop ($entry.Name+'.lnk')))
     $shortcut.TargetPath = $fishingPowerShell
     $shortcut.Arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+(Join-Path $PSScriptRoot $entry.Script)+'"'
-    $shortcut.WorkingDirectory = $PSScriptRoot
+    $shortcut.WorkingDirectory = $root
     $shortcut.Description = $entry.Description
     $shortcut.WindowStyle = 7
-    $shortcut.IconLocation = (Join-Path $PSScriptRoot 'assets\fishing.ico')+',0'
+    $shortcut.IconLocation = (Join-Path $root 'assets\fishing.ico')+',0'
     $shortcut.Save()
     Write-Host ('Desktop: '+$entry.Name)
 }

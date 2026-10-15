@@ -225,7 +225,7 @@ def export_data(root=None, now=None):
 def font_faces():
     """Geist faces embedded as data URIs so the page looks the same offline."""
     import base64
-    fonts = Path(__file__).resolve().parent/'assets'/'fonts'
+    fonts = Path(__file__).resolve().parents[1]/'assets'/'fonts'
     css = []
     for family, name, weights in (('Geist', 'Geist-latin.woff2', '400 700'), ('Geist Mono', 'GeistMono-latin.woff2', '400 500')):
         try: data = base64.b64encode((fonts/name).read_bytes()).decode()

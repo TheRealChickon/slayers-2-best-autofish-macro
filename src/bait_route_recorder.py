@@ -22,7 +22,7 @@ import win32gui
 import win32process
 from pynput import keyboard, mouse
 
-from app_config import ROOT, data_directory
+from app_config import CODE, ROOT, data_directory
 from capture_session import CaptureSession
 from discord_hourly import atomic_json
 from dpi import dpi_aware
@@ -89,7 +89,7 @@ def launch():
         if not executable.exists():
             executable = Path(sys.executable)
         with (root / 'route-recorder-stdout.log').open('a') as out, (root / 'route-recorder-stderr.log').open('a') as err:
-            process = subprocess.Popen([str(executable), str(ROOT / 'bait_route_recorder.py')],
+            process = subprocess.Popen([str(executable), str(CODE / 'bait_route_recorder.py')],
                 stdout=out, stderr=err, creationflags=subprocess.CREATE_NO_WINDOW)
         atomic_json(root / LEASE, {'pid': process.pid, 'created': psutil.Process(process.pid).create_time()})
     return 'Bait route recorder opened. Bring the intended Roblox window forward and press F7 to begin.'

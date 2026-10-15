@@ -160,7 +160,7 @@ Download the new zip from [Releases](../../releases/latest), unzip it and double
 <details>
 <summary><b>How do I uninstall?</b></summary>
 
-Stop Autofish, run `Install-CLI.cmd -Uninstall` from `%LOCALAPPDATA%\Autofish\app` to remove the `autofish` command, delete the **Autofish** desktop icon, then delete the `%LOCALAPPDATA%\Autofish` folder (this also deletes your stats). Nothing else is installed: no service, no scheduled task, no admin rights.
+Stop Autofish, run `scripts\Install-CLI.cmd -Uninstall` from `%LOCALAPPDATA%\Autofish\app` to remove the `autofish` command, delete the **Autofish** desktop icon, then delete the `%LOCALAPPDATA%\Autofish` folder (this also deletes your stats). Nothing else is installed: no service, no scheduled task, no admin rights.
 </details>
 
 Still stuck? [Open an issue](../../issues/new/choose) with your screen resolution, Windows scaling and the last lines of `autofish logs --activity`.
@@ -176,7 +176,8 @@ Autofish only looks at your screen and presses keys and mouse buttons like a per
 ## For tinkerers
 
 - **[Full manual](docs/MANUAL.md):** every mode, setting, hotkey, file and command (`autofish status`, `autofish logs`, `autofish predictions` …).
-- **Run from source:** install Python 3.12 (64-bit), clone the repo and double-click `Setup.cmd`. Tests: `.\.venv\Scripts\python.exe -m unittest discover -s tests`.
+- **Run from source:** install Python 3.12 (64-bit), clone the repo and double-click `scripts\Setup.cmd`. Tests: `.\.venv\Scripts\python.exe -m unittest discover -s tests`.
+- **Repo layout:** `src/` the app (Python), `scripts/` Windows setup and launch scripts, `assets/` game templates and icons, `launcher/` the Autofish.exe source, `docs/` manual and images, `tests/` the test suite.
 - **[Contributing](CONTRIBUTING.md):** bug reports, screenshots from unusual setups and pull requests are welcome.
 
 Released under the [MIT license](LICENSE).

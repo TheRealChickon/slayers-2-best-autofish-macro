@@ -12,7 +12,7 @@ COMBO_BOX = (490, 680, 160, 120)
 C_ICON_BOX = (1205, 1280, 45, 45)
 Z_ICON_BOX = (1093, 1280, 45, 45)
 B_ICON_BOX = (1315, 1280, 45, 45)
-B_READY_REFERENCE = cv2.imread(str(Path(__file__).resolve().parent/'assets'/'b-ready.png'), cv2.IMREAD_GRAYSCALE)
+B_READY_REFERENCE = cv2.imread(str(Path(__file__).resolve().parents[1]/'assets'/'b-ready.png'), cv2.IMREAD_GRAYSCALE)
 
 
 def hotbar_visible(frame):

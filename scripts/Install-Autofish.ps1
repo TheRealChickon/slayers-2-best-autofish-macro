@@ -9,7 +9,7 @@ trap {
     if ($Pause) { Read-Host 'Press Enter to close' | Out-Null }
     exit 1
 }
-$source = $PSScriptRoot
+$source = Split-Path -Parent $PSScriptRoot
 $Target = [IO.Path]::GetFullPath($Target)
 $version = if (Test-Path -LiteralPath (Join-Path $source 'VERSION')) { (Get-Content -LiteralPath (Join-Path $source 'VERSION') -Raw).Trim() } else { 'unknown' }
 Write-Host "Autofish $version -> $Target" -ForegroundColor Cyan
@@ -45,7 +45,7 @@ if (-not $python) {
         Start-Process -FilePath $installer -ArgumentList '/quiet', 'InstallAllUsers=0', 'PrependPath=1', 'Include_launcher=1' -Wait
         $python = Find-Python
     }
-    if (-not $python) { throw 'Python 3.12 could not be installed. Install it from python.org (64-bit), then run Install.cmd again.' }
+    if (-not $python) { throw 'Python 3.12 could not be installed. Install it from python.org (64-bit), then double-click Autofish.exe again.' }
 }
 
 # Copy the app over the previous version; user files are never in the zip, so they stay.
@@ -55,16 +55,34 @@ Get-ChildItem -LiteralPath $source -Force | Where-Object { $_.Name -notin $keep 
     Copy-Item -LiteralPath $_.FullName -Destination $Target -Recurse -Force
 }
 
+# Older versions kept the code and scripts loose in the app folder. They now live in src\
+# and scripts\, so remove only the loose copies of files that moved there.
+foreach ($folder in @('src', 'scripts')) {
+    Get-ChildItem -LiteralPath (Join-Path $Target $folder) -File | ForEach-Object {
+        Remove-Item -LiteralPath (Join-Path $Target $_.Name) -Force -ErrorAction SilentlyContinue
+    }
+}
+Remove-Item -LiteralPath (Join-Path $Target 'cli') -Recurse -Force -ErrorAction SilentlyContinue
+# Shortcuts made by older versions pointed at those loose scripts.
+$desktop = [Environment]::GetFolderPath('Desktop')
+$shell = New-Object -ComObject WScript.Shell
+foreach ($name in @('Fishing', 'Fishing CLI', 'Start Fishing')) {
+    $link = Join-Path $desktop ($name + '.lnk')
+    if (-not (Test-Path -LiteralPath $link)) { continue }
+    $old = $shell.CreateShortcut($link)
+    if ($old.Arguments -like ('*"' + $Target + '\*.ps1"*')) { Remove-Item -LiteralPath $link -Force }
+}
+
 $venv = Join-Path $Target '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $venv)) {
     & $python -m venv (Join-Path $Target '.venv')
     if ($LASTEXITCODE -ne 0) { throw 'Could not create the Python environment.' }
 }
 & $venv -m pip install --disable-pip-version-check -q -r (Join-Path $Target 'requirements.txt')
-if ($LASTEXITCODE -ne 0) { throw 'Installing dependencies failed; check the internet connection and run Install.cmd again.' }
+if ($LASTEXITCODE -ne 0) { throw 'Installing dependencies failed; check the internet connection and double-click Autofish.exe again.' }
 if ($Launcher) {
     # One desktop icon: the launcher, copied beside the app so the download can be deleted.
-    & (Join-Path $Target 'Setup.ps1') -SkipInstall -NoDesktop -NoCLI:$NoCLI
+    & (Join-Path $Target 'scripts\Setup.ps1') -SkipInstall -NoDesktop -NoCLI:$NoCLI
     $exe = Join-Path (Split-Path $Target) 'Autofish.exe'
     Copy-Item -LiteralPath $Launcher -Destination $exe -Force
     if (-not $NoDesktop) {
@@ -78,6 +96,6 @@ if ($Launcher) {
     Write-Host "Autofish $version is installed. Starting it now..." -ForegroundColor Green
     if ($Pause) { Start-Sleep -Seconds 2 }
 } else {
-    & (Join-Path $Target 'Setup.ps1') -SkipInstall -NoDesktop:$NoDesktop -NoCLI:$NoCLI
+    & (Join-Path $Target 'scripts\Setup.ps1') -SkipInstall -NoDesktop:$NoDesktop -NoCLI:$NoCLI
     Write-Host "Autofish $version is installed. Open a new terminal and run: autofish tui" -ForegroundColor Green
 }

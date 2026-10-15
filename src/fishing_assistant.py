@@ -26,7 +26,8 @@ from prompt_shape import find_discs, DiscTrack
 import ocr_engine
 from dpi import dpi_aware
 
-ROOT = Path(__file__).resolve().parent
+CODE = Path(__file__).resolve().parent
+ROOT = CODE.parent
 USER = TaggedInput(ctypes.windll.user32)
 dpi_aware(ctypes.windll.user32)
 

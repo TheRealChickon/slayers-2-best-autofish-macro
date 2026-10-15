@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
-sys.path.insert(0,str(ROOT))
+sys.path.insert(0,str(ROOT/'src'))
 import control_actions
 import fishing_cli
 import game_catalog
@@ -72,17 +72,19 @@ class InstallCommand(unittest.TestCase):
         self.root=Path(temporary.name)
         self.app=self.root/"App & O'Brien (test)";self.app.mkdir()
         self.bin=self.root/'Commands & tools'/'bin'
-        for name in ('Install-CLI.ps1','Runtime.ps1','autofish.py'):
-            shutil.copy2(ROOT/name,self.app/name)
-        shutil.copytree(ROOT/'cli',self.app/'cli')
+        (self.app/'scripts').mkdir();(self.app/'src').mkdir()
+        for name in ('Install-CLI.ps1','Runtime.ps1'):
+            shutil.copy2(ROOT/'scripts'/name,self.app/'scripts'/name)
+        shutil.copytree(ROOT/'scripts'/'cli',self.app/'scripts'/'cli')
+        shutil.copy2(ROOT/'src'/'autofish.py',self.app/'src'/'autofish.py')
         (self.app/'runtime.local.json').write_text(json.dumps({'python':sys.executable}))
-        (self.app/'fishing_cli.py').write_text(
+        (self.app/'src'/'fishing_cli.py').write_text(
             'import json, os\ndef main(argv, prog):\n'
             ' print(json.dumps({"args":argv,"prog":prog,"cwd":os.getcwd()}))\n'
             ' return 7 if "fail" in argv else 0\n')
 
     def install(self,*extra):
-        return subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(self.app/'Install-CLI.ps1'),
+        return subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(self.app/'scripts'/'Install-CLI.ps1'),
                                '-BinDirectory',str(self.bin),'-NoPath',*extra],capture_output=True,text=True,timeout=20)
 
     def invoke(self,*args):
@@ -113,7 +115,7 @@ class InstallCommand(unittest.TestCase):
         result=self.install('-Uninstall');self.assertEqual(result.returncode,0,result.stderr)
         self.assertFalse((self.bin/'autofish.cmd').exists())
         self.assertEqual(keep.read_text(),'user file')
-        self.assertTrue((self.app/'autofish.py').exists())
+        self.assertTrue((self.app/'src'/'autofish.py').exists())
 
     def test_install_refuses_unmanaged_command(self):
         self.bin.mkdir(parents=True)

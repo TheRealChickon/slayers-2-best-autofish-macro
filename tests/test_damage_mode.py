@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 from damage_cycle import DamageCycle, FiveHitGuard, ProgressGuard
 from damage_vision import B_ICON_BOX, B_READY_REFERENCE, SkillReady, gauntlet_selected, hotbar_visible
 from damage_farmer import reset_character

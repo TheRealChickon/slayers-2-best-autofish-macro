@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 import cv2
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 import app_config
 import bait_route_recorder as recorder
 import control_actions as actions
