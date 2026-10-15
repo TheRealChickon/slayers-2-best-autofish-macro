@@ -220,9 +220,22 @@ def export_data(root=None, now=None):
                      for s in (session_stats(root, x, now) for x in sessions(root))]}
 
 
+def font_faces():
+    """Geist faces embedded as data URIs so the page looks the same offline."""
+    import base64
+    fonts = Path(__file__).resolve().parent/'assets'/'fonts'
+    css = []
+    for family, name, weights in (('Geist', 'Geist-latin.woff2', '400 700'), ('Geist Mono', 'GeistMono-latin.woff2', '400 500')):
+        try: data = base64.b64encode((fonts/name).read_bytes()).decode()
+        except OSError: continue
+        css.append(f"@font-face{{font-family:'{family}';font-style:normal;font-weight:{weights};font-display:swap;"
+                   f"src:url(data:font/woff2;base64,{data}) format('woff2')}}")
+    return chr(10).join(css)
+
+
 def dashboard(data, local=True):
     """Rod Lab HTML from the shared template. local=True adds a page wrapper and auto-refresh."""
-    body = TEMPLATE.read_text(encoding='utf-8').replace('/*DATA*/', json.dumps(data))
+    body = TEMPLATE.read_text(encoding='utf-8').replace('/*DATA*/', json.dumps(data)).replace('/*FONTS*/', font_faces())
     if not local:
         return body  # the published artifact supplies its own document wrapper
     return ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
