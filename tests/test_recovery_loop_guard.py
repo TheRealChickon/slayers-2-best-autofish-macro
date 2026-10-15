@@ -7,7 +7,7 @@ import time
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 from faults import RecoveryPolicy, reason_code
 from fishing_assistant import MISSED_CASTS_BEFORE_REJOIN
 
@@ -28,7 +28,7 @@ class RecoveryLoopGuard(unittest.TestCase):
         self.assertEqual(policy.choose('manual_stop', 10001, False), 'stop')
 
     def test_health_flags_recovery_pattern_even_when_user_has_paused(self):
-        script = Path(__file__).resolve().parents[1] / 'health_check.py'
+        script = Path(__file__).resolve().parents[1] / 'src' / 'health_check.py'
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             now = time.time()

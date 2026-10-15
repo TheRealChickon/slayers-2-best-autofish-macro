@@ -7,7 +7,7 @@ A Windows assistant for Project Slayers 2 fishing. It includes a game-inspired i
 
 ## Launch it
 
-**First time:** extract the repository, install Python 3.12 x64, and double-click **Setup.cmd**. Then open **Fishing** on the desktop, set your Roblox username and rod slot in Settings, prepare the game as described below, and click **Continue**.
+**First time:** extract the repository, install Python 3.12 x64, and double-click **scripts\Setup.cmd**. Then open **Autofish** on the desktop, answer the gamepass question, set your rod slot and cast point in Settings, prepare the game as described below, and press **Start**.
 
 Setup installs the **`autofish`** command for your Windows account. Open a new terminal anywhere and run:
 
@@ -22,7 +22,7 @@ Full farmer first checks the current world instead of forcing a startup rejoin. 
 The CLI opens with a full-terminal rod cast over water and reels the float back across the scene when you press **Q**. **Setup → Motion → Reduced** skips both animations.
 Ore pickups have their own short mineral-glint animation in the dashboard; it does not interrupt fishing or alter the item log.
 
-Already set up? Double-click **Install-CLI.cmd** once to add the command without reinstalling dependencies. No administrator access is needed. If a terminal was open during installation, close and reopen it to pick up the updated PATH.
+Already set up? Double-click **scripts\Install-CLI.cmd** once to add the command without reinstalling dependencies. No administrator access is needed. If a terminal was open during installation, close and reopen it to pick up the updated PATH.
 
 ```powershell
 autofish                  # Dashboard; does not start fishing
@@ -38,14 +38,14 @@ autofish logs --activity --follow
 autofish wiki             # Open your local item wiki, if captured
 ```
 
-The command points to this application folder and preserves its settings and saved run. Keep the folder in place; if you move it, rerun Install-CLI.cmd from the new location. To remove only the global command, run `Install-CLI.cmd -Uninstall`; the app and fishing data remain. `Setup.ps1 -NoCLI` skips command installation.
+The command points to this application folder and preserves its settings and saved run. Keep the folder in place; if you move it, rerun scripts\Install-CLI.cmd from the new location. To remove only the global command, run `scripts\Install-CLI.cmd -Uninstall`; the app and fishing data remain. `scripts\Setup.ps1 -NoCLI` skips command installation.
 
 **After setup:**
 
-- **Fishing** on the desktop opens the window. Continue starts/resumes; Pause and Stop release game input.
+- **Autofish** on the desktop opens the app window (`src/app_window.py`): live status, Start/Continue, Pause and Stop, catches, log, Rod Lab and the main settings. It is served only to this PC on 127.0.0.1 and opens as an Edge app window. Closing it leaves the farmer running.
 - **Fishing CLI** opens the terminal dashboard. Press **C** to continue, **P** to pause, **S** to stop, and **Q** to close only the dashboard.
 - **Start Fishing** resumes the saved run directly.
-- Without desktop shortcuts, run `Open-Controls.ps1`, `Open-CLI.ps1`, or `fishing.cmd --color tui` from the extracted application folder.
+- Without desktop shortcuts, run `scripts\Open-Autofish.ps1`, `scripts\Open-CLI.ps1`, or `scripts\fishing.cmd --color tui` from the extracted application folder.
 
 ## Where it works
 
@@ -68,17 +68,17 @@ Setup has been tested from a clean source checkout on Windows with Python 3.12. 
 
 1. Install **Python 3.12, 64-bit** from [python.org](https://www.python.org/downloads/windows/). Include the Python launcher and Tcl/Tk when installing.
 2. Download this repository with **Code → Download ZIP** and extract it to a permanent, writable folder, or clone it with Git.
-3. Double-click **Setup.cmd**. It creates a local Python environment, installs `requirements.txt`, checks the required files, and adds three desktop shortcuts. No administrator privileges are needed.
-4. Open **Fishing** from the desktop. In **Settings**, enter your Roblox **username**, set the rod's hotbar slot (1–9), and save. The username is optional; it enables the public presence check. It does not sign in or change the account open in Roblox.
-5. Sign into the intended account in Roblox, open the game, and complete the fishing position setup below. Select **Continue** in Fishing.
+3. Double-click **scripts\Setup.cmd**. It creates a local Python environment, installs `requirements.txt`, checks the required files, and adds three desktop shortcuts. No administrator privileges are needed.
+4. Open **Autofish** from the desktop. In **Settings**, enter your Roblox **username** and set the rod's hotbar slot (1–9). The username is optional; it enables the public presence check. It does not sign in or change the account open in Roblox.
+5. Sign into the intended account in Roblox, open the game, and complete the fishing position setup below. Press **Start** in Autofish.
 
 An existing installation can be checked without reinstalling packages:
 
 ```powershell
-.\Setup.ps1 -SkipInstall
+.\scripts\Setup.ps1 -SkipInstall
 ```
 
-If your PowerShell policy blocks scripts, use `Setup.cmd`. The launcher sets a policy only for that process; it does not change the machine's policy.
+If your PowerShell policy blocks scripts, use `scripts\Setup.cmd`. The launcher sets a policy only for that process; it does not change the machine's policy.
 
 ## Game setup
 
@@ -104,10 +104,10 @@ excluded, and any monitor or window position works.
 When the client is not 16:9 (more than 8% off, e.g. maximized on a 1366 × 768
 laptop, a 16:10 or 4:3 monitor, or ultrawide), startup and recovery resize the
 Roblox window to the largest 16:9 client that fits the monitor's work area and
-centre it (`window_fit.py`). A maximized window is restored first. If Roblox is
+centre it (`src/window_fit.py`). A maximized window is restored first. If Roblox is
 fullscreen on a screen that is not 16:9, Full farmer presses F11 once (only with
-Roblox in front) to leave fullscreen and then resizes; Minigame only and damage
-mode ask you to press F11 yourself. Clients from 960 × 540 up to 4K are accepted.
+Roblox in front) to leave fullscreen and then resizes; Minigame only asks you
+to press F11 yourself. Clients from 960 × 540 up to 4K are accepted.
 A screen too small for a 960 × 540 client, or a window Windows refuses to resize,
 stops with a message naming the size and what to change.
 
@@ -129,7 +129,7 @@ Opening or closing either view leaves the controller unchanged. **Pause** releas
 
 **F8 pauses/resumes all four modes while Roblox is foreground.** Full farmer keeps the same worker and counters, releases held input, and rereads the current minigame or pickup on resume. Holding F8 counts once. Switching apps or moving the pointer outside Roblox pauses Full farmer automatically; returning resumes unless F8 was used to pause manually. Neither kind of pause triggers a rejoin. The dashboard shows `Paused — F8 to resume`; an explicit Continue command also releases Full farmer's F8 pause. Health checks and presence recovery leave manual pauses alone.
 
-If you move the installation folder, run `Setup.cmd` again to refresh the shortcut paths.
+If you move the installation folder, run `scripts\Setup.cmd` again to refresh the shortcut paths.
 
 ## Fishing modes
 
@@ -151,7 +151,7 @@ This is a **standalone** CLI mode; the app allows only one controller at a time.
 Choose **Settings → Mode → Fish here**, save and Continue. Or run:
 
 ```powershell
-.\fishing.cmd spot
+.\scripts\fishing.cmd spot
 ```
 
 Bring Roblox forward, equip your rod, position your character, camera and mouse, then press **F8**. Fish here only clicks, reels, holds T for a recognized Collect prompt, and repeats. Bait is optional. Empty rounds continue normally. Confirmed reward banners are added to the item journal.
@@ -183,21 +183,21 @@ For semi-automatic fishing, select **Settings → Mode → Minigame only**, save
 Or start it directly:
 
 ```powershell
-.\fishing.cmd assist
+.\scripts\fishing.cmd assist
 ```
 
 You choose the spot, position the camera, equip the rod, cast, and collect with T. The assistant only holds/releases the left mouse button while it recognizes the fishing minigame. It does not move the mouse or character, cast, equip, open inventory, collect, purchase, rejoin, or relaunch Roblox. It releases input when the UI disappears or focus is lost, and waits for Roblox to be foreground again. Q closes the CLI view; P/S pause/stop from the CLI. F9/F12 stop while Roblox is foreground; Escape and keys in other apps do not stop this mode.
 
 **F8 pauses/resumes Minigame only as well as Fish here.** Minigame only starts enabled; focus loss pauses it automatically, and focus return resumes it unless you paused with F8. On return it waits for your Alt/Tab/Windows keys to be released, reacquires current marker positions, and resends a mouse-button release inside the recognized minigame before reeling. It never presses those navigation keys or changes focus. Manual F8 pause remains separate from automatic focus pause.
 
-Detected minigames add to the hook count. Manual pickups are not recorded in the item journal in this mode. Waiting for your next cast is normal and does not trigger recovery. Use `fishing.cmd continue --mode full` after pausing to return to the full farmer.
+Detected minigames add to the hook count. Manual pickups are not recorded in the item journal in this mode. Waiting for your next cast is normal and does not trigger recovery. Use `scripts\fishing.cmd continue --mode full` after pausing to return to the full farmer.
 
 ## Terminal app
 
 Launch **Fishing CLI**, or run:
 
 ```powershell
-.\fishing.cmd --color tui
+.\scripts\fishing.cmd --color tui
 ```
 
 | Key | Action |
@@ -212,11 +212,11 @@ Launch **Fishing CLI**, or run:
 | Q or Ctrl+C | Close the view; fishing stays as it was |
 | Enter / Ctrl+G while editing | Save / cancel |
 
-The **Run** tab has direct **Minigame only**, **Fish here**, **Full farmer** choices: select with ↑/↓ and press Enter to start. Pause the current mode before switching to another. **C** continues the saved mode. The command equivalents are `fishing.cmd assist`, `fishing.cmd spot`, `fishing.cmd continue --mode full`.
+The **Run** tab has direct **Minigame only**, **Fish here**, **Full farmer** choices: select with ↑/↓ and press Enter to start. Pause the current mode before switching to another. **C** continues the saved mode. The command equivalents are `scripts\fishing.cmd assist`, `scripts\fishing.cmd spot`, `scripts\fishing.cmd continue --mode full`.
 
 Use Ctrl+G to cancel an edit; Escape remains a global stop key in Full farmer. In Setup, **Motion** toggles animations. Use a terminal at least 65 columns × 22 rows; 100 × 32 or larger is more comfortable.
 
-The field-terminal view has Run, Catches, Radio (live log), Rig (setup), and Damage pages. Run keeps the current state, pace, last catch, bait estimate and four mode choices together. Detailed recovery history is in Radio, where Catches can also open a filtered catch history. The live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
+The terminal view has Run, Items, Logs, Settings and Predictions pages. Run keeps the current state, pace, last catch, bait estimate and four mode choices together. Detailed recovery history is in Logs. The live log keeps the latest 4,000 events in memory; raw logs retain the complete history on disk.
 
 ## Personal item wiki
 
@@ -238,15 +238,15 @@ Type **blub** in the terminal dashboard, outside a text field, with less than tw
 Scriptable commands remain available:
 
 ```powershell
-.\fishing.cmd status --json
-.\fishing.cmd items --filter fish
-.\fishing.cmd logs --follow
-.\fishing.cmd logs --activity --follow
-.\fishing.cmd plan --hours 8
-.\fishing.cmd pause
-.\fishing.cmd continue
-.\fishing.cmd stop
-.\fishing.cmd export
+.\scripts\fishing.cmd status --json
+.\scripts\fishing.cmd items --filter fish
+.\scripts\fishing.cmd logs --follow
+.\scripts\fishing.cmd logs --activity --follow
+.\scripts\fishing.cmd plan --hours 8
+.\scripts\fishing.cmd pause
+.\scripts\fishing.cmd continue
+.\scripts\fishing.cmd stop
+.\scripts\fishing.cmd export
 ```
 
 ## Future bot integration
@@ -254,9 +254,9 @@ Scriptable commands remain available:
 A local, versioned JSON interface is ready for another program to call:
 
 ```powershell
-.\fishing.cmd api status
-.\fishing.cmd api events --limit 20
-.\fishing.cmd api pause --request-id example-123
+.\scripts\fishing.cmd api status
+.\scripts\fishing.cmd api events --limit 20
+.\scripts\fishing.cmd api pause --request-id example-123
 ```
 
 It supports status, items, recent events, pause, resume, and stop. See [INTEGRATION.md](INTEGRATION.md) for the response contract and a subprocess example. This release does not connect to Discord or run a network listener; a remotely hosted bot will need an authenticated bridge to this Windows PC later.
@@ -272,10 +272,10 @@ checkpoints. Raw mouse device deltas are included for camera turns and shift loc
 alongside normalized cursor positions for menus. Recordings stay in the configured
 local data folder and are excluded from Git.
 
-1. Use **Pause** in Fishing and wait for the controller to stop. F8 alone leaves
+1. Use **Pause** in Autofish and wait for the controller to stop. F8 alone leaves
    the supervisor alive, so use the app/CLI Pause before recording. Existing run
    counters, spawn, configuration and manual stop flags are retained.
-2. Open **Settings → Record bait route**, double-click `Record-Bait-Route.cmd`,
+2. Open **Settings → Record bait route**, double-click `scripts\Record-Bait-Route.cmd`,
    or run `autofish route record`. Opening the recorder does not record anything.
 3. At your fishing spot, bring the intended Roblox window forward and press
    **F7** with other keys/buttons released. That window is selected for this take,
@@ -360,9 +360,9 @@ Known pickup, missed-cast, tracking, window and landmark faults first get one el
 This is optional and separate from resolution scaling. At a working fishing spot, pause the farmer, finish any open minigame, then use **Settings → Save fishing view** or **CLI Setup → Save fishing reference**. Setup brings Roblox forward and makes small camera probes. Enable **Correct small position drift** / **Position correction** to include short movement probes. Stop/F9/F12/Escape cancels setup. Setup does not resume the farmer.
 
 ```powershell
-.\fishing.cmd reference save --position
-.\fishing.cmd reference status
-.\fishing.cmd reference disable
+.\scripts\fishing.cmd reference save --position
+.\scripts\fishing.cmd reference status
+.\scripts\fishing.cmd reference disable
 ```
 
 The default reference uses two crate surfaces, with the building across the water as optional extra evidence. Both crate surfaces must match; distant scenery can be excluded when fog or shadows obscure it. For a different arrangement, `reference save --boxes '[[x,y,w,h],...]'` accepts at least two boxes in a **1280 × 720** reference image: put two separate textured surfaces near the character first, then optional distant static scenery. Avoid the avatar, HUD, water, moving wheels and foliage. Reference images and calibration belong to the configured account and place and stay in local data. Without a matching profile, normal recovery remains available.
@@ -375,7 +375,7 @@ A lightweight drift check runs between rounds at most once every three minutes. 
 
 The window and CLI show recent hooks/minute and items/minute over up to 15 minutes of sampled wall time, including recovery. `status --json` also includes phase seconds for bites, minigames, collection, inventory, recovery and focus waits. Rates marked saved are stale. Existing lifetime totals and the active-time bait planner remain available.
 
-`fishing.cmd diagnostics` shows the last eight failure reports. Each includes a reason code, decision details and up to four local context frames; the diagnostic ring uses at most 32 JPEGs. Raw event logs retain the full history. Diagnostics do not add frame capture to the minigame tracking loop.
+`scripts\fishing.cmd diagnostics` shows the last eight failure reports. Each includes a reason code, decision details and up to four local context frames; the diagnostic ring uses at most 32 JPEGs. Raw event logs retain the full history. Diagnostics do not add frame capture to the minigame tracking loop.
 
 The supervisor handles visible disconnect dialogs and a stalled fishing loop. Vendor purchase dialogs are cancelled before recovery. Recovery uses **M → Back to main menu → Play → Ouwland → held private Join**, then equips the rod. If necessary it opens `roblox://placeId=16205713724` or restarts the selected Roblox game process. Retry delays limit repeated restart attempts. Input is released on loss of focus, window changes, or stop requests.
 
@@ -406,7 +406,7 @@ Rejoin and relaunch are distinct counters. Rejoins count completed returns from 
 
 ### Optional Discord hourly report
 
-`discord_hourly.py` reads the saved fishing events and posts one color-coded Discord embed per hour. It reports new confirmed item names and quantities, casts and items per minute, projected Ore per day from the confirmed Ore quantity in that window, minigame completions, empty rounds, pickup retries, and completed rejoins. It attaches the latest screenshot already saved by the bot's normal inventory scan and labels its capture time; reporting never opens Roblox or scans inventory. A clear Lost Set reward receives a Mythical highlight in that hour's report. Unreadable names are counted separately instead of being guessed.
+`src/discord_hourly.py` reads the saved fishing events and posts one color-coded Discord embed per hour. It reports new confirmed item names and quantities, casts and items per minute, projected Ore per day from the confirmed Ore quantity in that window, minigame completions, empty rounds, pickup retries, and completed rejoins. It attaches the latest screenshot already saved by the bot's normal inventory scan and labels its capture time; reporting never opens Roblox or scans inventory. A clear Lost Set reward receives a Mythical highlight in that hour's report. Unreadable names are counted separately instead of being guessed.
 
 Configure a private webhook locally. The full farmer initializes its first hourly window automatically if needed:
 
@@ -435,10 +435,10 @@ All local settings, logs, screenshots, recordings, and the Python environment ar
 - **Presence stays unknown:** check the username, rather than the display name. Fishing can run without presence configured.
 - **A button seems unresponsive immediately after Pause:** the worker is releasing held inputs. Wait for Paused before Continue.
 - **CSV cannot refresh:** close the CSV in Excel; collection and raw event logging continue.
-- **Setup fails:** check Python 3.12 x64 and internet access, then run Setup.cmd again. `setup_check.py` reports missing imports/assets without starting the game.
-- **Game layout changed:** stop the bot. The current screen coordinates and templates are in `fishing_assistant.py`, `recovery.py`, and `rod_detector.py`.
+- **Setup fails:** check Python 3.12 x64 and internet access, then run scripts\Setup.cmd again. `src/setup_check.py` reports missing imports/assets without starting the game.
+- **Game layout changed:** stop the bot. The current screen coordinates and templates are in `src/fishing_assistant.py`, `src/recovery.py`, and `src/rod_detector.py`.
 
-To remove the app, stop it first, close both views, delete its desktop shortcuts, and remove the extracted folder when you no longer need the saved logs. No Windows service or scheduled task is installed.
+To remove the app, stop it first, close the app window and the terminal dashboard, delete its desktop shortcuts, and remove the extracted folder when you no longer need the saved logs. No Windows service or scheduled task is installed.
 
 ## Branches and rollback
 
@@ -471,7 +471,7 @@ Stopping sends a final report with that run's log (gzip for large logs). The
 reporter handles empty HTTP 204 responses and rate-limit retry timing; reporting
 failures never stop game input. The webhook remains encrypted locally.
 
-An optional `overnight_watch.py` runs without a window, checks saved state every
+An optional `src/overnight_watch.py` runs without a window, checks saved state every
 three seconds and sends authorized errors to an existing Codex chat through the
 desktop app's MCP tools. Its local `monitor.local.json` supplies Node/MCP paths,
 chat ID and expiry; it does not contain a webhook URL. It never controls Roblox,
@@ -551,7 +551,7 @@ focus/manual pauses and recovery gaps, and never counts overlapping workers twic
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
-.\.venv\Scripts\python.exe health_check.py
+.\.venv\Scripts\python.exe src\health_check.py
 ```
 
 The suite covers real 1080p inventory crops, input guards, duplicate prevention, inventory reconciliation and throttling, restart checkpoints, scan-budget cleanup, recovery-log counting and colors, menu and Join transitions, held-input cleanup, multi-monitor input, catch-effect deduplication, reduced motion, responsive controls and the JSON integration boundary. Additional checks cover minigame-only activation/release, spatial pickup evidence, local-repair limits, bounded diagnostic storage, landmark matching, correction limits and recent pace calculations. A prior live 1080p run confirmed four catches, including one recovered from inventory differences. The new minigame-only mode was checked with two manual casts; camera and small lateral corrections were also exercised live.

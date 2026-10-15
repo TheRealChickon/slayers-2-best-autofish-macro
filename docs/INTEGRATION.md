@@ -5,12 +5,12 @@ This interface prepares Fishing for a future Discord bot or another client. It i
 Run it on the Windows PC that runs Roblox, using the installation's Python environment:
 
 ```powershell
-.\.venv\Scripts\python.exe fishing_cli.py api status
-.\.venv\Scripts\python.exe fishing_cli.py api events --limit 50
-.\.venv\Scripts\python.exe fishing_cli.py api pause --request-id interaction-123
+.\.venv\Scripts\python.exe src\fishing_cli.py api status
+.\.venv\Scripts\python.exe src\fishing_cli.py api events --limit 50
+.\.venv\Scripts\python.exe src\fishing_cli.py api pause --request-id interaction-123
 ```
 
-`fishing.cmd api ...` is convenient by hand. Programs should invoke Python directly with an argument list and `shell=False`.
+`scripts\fishing.cmd api ...` is convenient by hand. Programs should invoke Python directly with an argument list and `shell=False`.
 
 ## Commands
 
@@ -80,7 +80,7 @@ def fishing(command, request_id):
         raise ValueError("Unsupported fishing command")
     result = subprocess.run(
         [str(INSTALL / ".venv/Scripts/python.exe"),
-         str(INSTALL / "fishing_cli.py"), "api", command,
+         str(INSTALL / "src" / "fishing_cli.py"), "api", command,
          "--request-id", str(request_id)],
         cwd=INSTALL, capture_output=True, text=True, encoding="utf-8",
         timeout=20, shell=False, creationflags=subprocess.CREATE_NO_WINDOW,
