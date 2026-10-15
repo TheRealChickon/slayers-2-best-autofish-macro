@@ -63,3 +63,12 @@ pauses/recovery, and bound orphan intervals by their last event with a warning.
 Do not produce forecasts when activity records are incomplete or samples are
 small. Unknown prices stay unknown; distinguish NPC estimates from confirmed
 sale proceeds. Never restart the farmer merely to expose the Predictions tab.
+
+Rod Lab has one shared dashboard and two outputs. `rodlab_template.html` plus
+`rod_stats.export_data()` / `rod_stats.dashboard()` are public: `autofish rods page`
+(or Settings > Rod stats page) writes the local `rod-lab.html` in the data folder,
+starts `autofish rods watch` to rebuild it every minute, and the page reloads itself.
+The owner's online copy is a private layer in the gitignored `private/` folder
+(`private/publish_rodlab.py` builds the fragment a Claude session republishes to the
+owner's artifact). Never commit `private/`, artifact URLs or publishing code to the
+public app; change the template and data export once so both outputs stay in step.

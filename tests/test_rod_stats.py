@@ -51,7 +51,7 @@ class RodSessions(unittest.TestCase):
         self.assertEqual(rows['Rare']['counts'], {'seahorse': 1})
         self.assertEqual(rows['Legendary']['rarity_percent']['Legendary'], 33.3)
         text = rod_stats.page(self.root, now=300).read_text(encoding='utf-8')
-        self.assertIn('Rod comparison', text); self.assertIn('Rare', text)
+        self.assertIn('<title>Rod Lab</title>', text); self.assertIn('"rod": "Rare"', text); self.assertIn('http-equiv="refresh"', text)
 
 
 if __name__ == '__main__':

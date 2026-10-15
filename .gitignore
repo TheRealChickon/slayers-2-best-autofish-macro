@@ -19,3 +19,4 @@ __pycache__/
 /monitor.local.json
 *.local.json
 .env
+/private/
