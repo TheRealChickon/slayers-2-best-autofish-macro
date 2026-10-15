@@ -1,6 +1,7 @@
-# Fishing
+# Autofish manual
 
-Sanemi is a separate project. This CLI keeps fishing, automatic fishing titles, item logs and fishing recovery.
+The complete reference for every mode, setting and file. New here? Start with the
+[README](../README.md) instead; it covers install and first run in a few steps.
 
 A Windows assistant for Project Slayers 2 fishing. It includes a game-inspired inventory window, a keyboard terminal app, item history, live events, bait estimates, and fishing reconnect recovery.
 
@@ -35,7 +36,6 @@ autofish rejoin        # Reconnect the configured account without farming
 autofish stop
 autofish logs --activity --follow
 autofish wiki             # Open your local item wiki, if captured
-autofish wiki --site      # Open your configured private ChatGPT Site
 ```
 
 The command points to this application folder and preserves its settings and saved run. Keep the folder in place; if you move it, rerun Install-CLI.cmd from the new location. To remove only the global command, run `Install-CLI.cmd -Uninstall`; the app and fishing data remain. `Setup.ps1 -NoCLI` skips command installation.
@@ -126,7 +126,7 @@ If you move the installation folder, run `Setup.cmd` again to refresh the shortc
 
 ### Auto rejoin from the CLI
 
-Set the Roblox username in Setup first, then run `autofish rejoin`. For the configured **Grofheyse3729** account, the guard checks Roblox's presence about every 45 seconds and reads the visible client. A disconnect dialog or Ouwland menu starts recovery through the game's private-server Join flow. If the Roblox window is gone for 45 seconds, it can reopen the configured place link after the desktop has been idle for 90 seconds. A failed presence API call alone does not count as a disconnect. A visible, loaded world prevents a presence-only rejoin.
+Set the Roblox username in Setup first, then run `autofish rejoin`. For the configured account, the guard checks Roblox's presence about every 45 seconds and reads the visible client. A disconnect dialog or Ouwland menu starts recovery through the game's private-server Join flow. If the Roblox window is gone for 45 seconds, it can reopen the configured place link after the desktop has been idle for 90 seconds. A failed presence API call alone does not count as a disconnect. A visible, loaded world prevents a presence-only rejoin.
 
 This is a **standalone** CLI mode; the app allows only one controller at a time. Full farmer already has its own reconnect recovery. To switch from another running mode, use `autofish pause`, wait for it to stop, then `autofish rejoin`. The guard does not resume fishing or statue attacks after reconnecting. `autofish status`, `autofish watch`, and `autofish logs --activity --follow` show its state, attempts, successful rejoins, client launches, and retries. `autofish pause` retains those counters, `autofish continue` resumes, and `autofish stop` ends the guard. F8 pauses or resumes only with Roblox foreground; F9/F12 stop only with Roblox foreground. It never sends input to another foreground app.
 
@@ -426,7 +426,7 @@ To remove the app, stop it first, close both views, delete its desktop shortcuts
 
 ## Branches and rollback
 
-`master` is the stable release and GitHub default. `dev` holds validated candidates; `dev-rolling` integrates feature branches. New changes start on `feature/<name>` and merge into `dev-rolling` with a merge commit. See [CONTRIBUTING.md](CONTRIBUTING.md) for promotion and rollback commands. The pre-update release is tagged `stable-before-inventory-resolution`. Switching code versions keeps ignored run data and account settings. Always pause before switching.
+`master` is the stable release and GitHub default. `dev` holds validated candidates; `dev-rolling` integrates feature branches. New changes start on `feature/<name>` and merge into `dev-rolling` with a merge commit. See [CONTRIBUTING.md](../CONTRIBUTING.md) for promotion and rollback commands. The pre-update release is tagged `stable-before-inventory-resolution`. Switching code versions keeps ignored run data and account settings. Always pause before switching.
 
 ## Development
 

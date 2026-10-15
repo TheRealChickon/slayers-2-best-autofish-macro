@@ -15,6 +15,7 @@ import numpy as np
 from fishing_assistant import ROOT, USER, Input, detect, find_window, rectangle
 from metrics import RUN, Ledger, read, write
 from screen_space import ScreenSpace
+from window_fit import fitted
 from fishing_vision import ui_visible
 from pickup_policy import classify, PickupGate, Pickup, same_reward
 from spot_fishing import SpotCycle
@@ -287,7 +288,7 @@ def main(argv=None):
                         if hwnd is not None and hwnd!=selected and spot:
                             spot.armed=False  # A new Roblox process needs the player to rearm.
                             spot.paused=True
-                        inp.release();tracker.suspend();screen=ScreenSpace(rect);hwnd=selected;inp.hwnd=hwnd
+                        inp.release();tracker.suspend();screen=ScreenSpace(fitted(selected,rect));hwnd=selected;inp.hwnd=hwnd
                         resuming=True
                     if (spot and (not spot.armed or spot.paused)) or (not spot and assist_paused):
                         inp.release()

@@ -12,7 +12,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-LEFT_OUT = ('tests/', 'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md', '.gitignore')
+LEFT_OUT = ('tests/', 'docs/images/', '.github/', 'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md', '.gitignore')
 
 
 def build(ref='HEAD', out=None):

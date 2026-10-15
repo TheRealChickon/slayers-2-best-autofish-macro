@@ -11,6 +11,7 @@ import presence_watch
 from app_config import load_config,save_config
 from rod_detector import locate_rod, selected_rod, unselected_rod
 from screen_space import ScreenSpace
+from window_fit import fit_window, WindowFitError
 from recovery_pacing import MenuPacer, private_join_target,main_menu_target
 from faults import FaultRecorder, FishingFault, RecoveryPolicy, reason_code
 from performance import PerformanceRecorder
@@ -97,20 +98,28 @@ class Recovery:
         if win32gui.IsIconic(self.hwnd):raise RecoveryError('Roblox lost focus')
         # Fullscreen/menu transitions can report a transient client shape.
         # Wait for a valid, stable rectangle with input released.
-        self.inp.release();last_rect=None;stable=0;invalid=0;maximized=False;until=time.monotonic()+8
+        self.inp.release();last_rect=None;stable=0;invalid=0;maximized=False;fitted=False;until=time.monotonic()+8
         while time.monotonic()<until:
             self.progress(detail='window_transition')
             self.check_stop();rect=rectangle(self.hwnd)
             try:screen=ScreenSpace(rect)
-            except ValueError:
+            except ValueError as error:
                 invalid+=1
-                if (invalid>=5 and not maximized and win32gui.GetForegroundWindow()==self.hwnd
-                        and not any((RUN/name).exists() for name in ('STOP','PAUSE','F8_PAUSE'))):
+                allowed=(win32gui.GetForegroundWindow()==self.hwnd
+                         and not any((RUN/name).exists() for name in ('STOP','PAUSE','F8_PAUSE')))
+                if invalid>=5 and not maximized and allowed:
                     # Roblox may return to its default square window after a
                     # presentation reset. Maximize this exact Player window
                     # rather than launching another client or rejecting 1440p.
                     win32gui.ShowWindow(self.hwnd,3);maximized=True
                     self.event('client_maximized',reason='Restoring a widescreen client after display transition')
+                elif invalid>=10 and maximized and not fitted and allowed:
+                    # Maximized is not 16:9 on this screen (laptop, 16:10,
+                    # ultrawide): size the window to the largest 16:9 client.
+                    fitted=True
+                    try:fit_window(self.hwnd,event=self.event)
+                    except WindowFitError as failure:
+                        self.event('client_fit_failed',reason=str(failure),client=str(error))
                 stable=0;self.sleep(.2,focus=False);continue
             stable=stable+1 if rect==last_rect else 1;last_rect=rect
             if stable>=3:
