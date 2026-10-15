@@ -7,27 +7,27 @@
   --bg:#f7f7f5; --surface:#ffffff; --raised:#fbfbfa; --border:#e6e5e1; --border-strong:#d4d3ce;
   --text-1:#111110; --text-2:#55544f; --text-3:#8a8983;
   --accent:#2a78d6; --accent-soft:#e8f0fb;
-  --common:#1baf7a; --uncommon:#2a78d6; --legendary:#eda100;
-  --crate:#4a3aa7; --leftover:#1baf7a;
+  --common:#8d8c86; --uncommon:#2a78d6; --rare:#0f9fb5; --legendary:#eda100; --mythic:#9b4fe0; --impossible:#e5336b;
+  --crate:#4a3aa7; --leftover:#8a94a3;
   --good:#0ca30c; --warn:#c98500;
   --shadow:0 1px 2px rgba(17,17,16,.04),0 1px 1px rgba(17,17,16,.03);
   --sans:'Geist',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
   --mono:'Geist Mono',ui-monospace,'SFMono-Regular',Consolas,monospace;
-  --r:10px;
+  --r:18px; --spring:cubic-bezier(.34,1.56,.64,1);
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0f0f0e; --surface:#171716; --raised:#1c1c1b; --border:#2a2a28; --border-strong:#383835;
   --text-1:#f2f2ef; --text-2:#b4b3ac; --text-3:#7d7c76;
   --accent:#3987e5; --accent-soft:#1a2738;
-  --common:#199e70; --uncommon:#3987e5; --legendary:#c98500;
-  --crate:#9085e9; --leftover:#199e70;
+  --common:#9c9b95; --uncommon:#3987e5; --rare:#22b5c9; --legendary:#d69a12; --mythic:#b47cf2; --impossible:#ff5a8a;
+  --crate:#9085e9; --leftover:#7d8899;
   --shadow:none; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f0f0e; --surface:#171716; --raised:#1c1c1b; --border:#2a2a28; --border-strong:#383835;
   --text-1:#f2f2ef; --text-2:#b4b3ac; --text-3:#7d7c76;
   --accent:#3987e5; --accent-soft:#1a2738;
-  --common:#199e70; --uncommon:#3987e5; --legendary:#c98500;
-  --crate:#9085e9; --leftover:#199e70;
+  --common:#9c9b95; --uncommon:#3987e5; --rare:#22b5c9; --legendary:#d69a12; --mythic:#b47cf2; --impossible:#ff5a8a;
+  --crate:#9085e9; --leftover:#7d8899;
   --shadow:none; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--text-1);font:14px/1.5 var(--sans);margin:0;-webkit-font-smoothing:antialiased}
@@ -67,6 +67,55 @@ body{background:var(--bg);color:var(--text-1);font:14px/1.5 var(--sans);margin:0
 .checks label{transition:border-color .15s,background-color .15s,opacity .15s,transform .4s cubic-bezier(.34,1.56,.64,1)}
 .checks label:active{transform:scale(.97)}
 button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* titles: rows that fill left to right, the tick draws itself */
+.checks label{position:relative;isolation:isolate;overflow:hidden;background:var(--raised);gap:12px;padding:10px 13px;border-radius:12px}
+.checks label::before{content:'';position:absolute;inset:0;z-index:-1;background:var(--accent-soft);transform:scaleX(0);transform-origin:left;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+.checks label:has(input:checked){background:var(--raised);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.checks label:has(input:checked)::before{transform:none}
+.checks input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}
+.checks .bx{width:20px;height:20px;flex:none;border-radius:7px;border:1.5px solid var(--border-strong);background:var(--surface);display:grid;place-items:center;transition:transform .45s var(--spring),background-color .25s,border-color .25s}
+.checks .bx svg{width:13px;height:13px;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:22;stroke-dashoffset:22;transition:stroke-dashoffset .35s .12s}
+.checks label:has(input:checked) .bx{background:var(--accent);border-color:var(--accent);transform:rotate(-8deg) scale(1.08)}
+.checks label:has(input:checked) .bx svg{stroke-dashoffset:0}
+.checks label:hover .bx{border-color:var(--text-3)}
+.checks label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.live i,.badge i{display:none}
+/* rounder everywhere */
+.seg{border-radius:14px;padding:4px} .seg button{border-radius:10px;transition:color .15s,background-color .2s,transform .35s var(--spring)}
+.seg button:active{transform:scale(.94)}
+.mark{border-radius:11px} .mini>div{border-radius:14px} .tip{border-radius:10px}
+.track{border-radius:8px}
+.seg-fill:first-child{border-radius:8px 0 0 8px}.seg-fill:last-child{border-radius:0 8px 8px 0}.seg-fill:only-child{border-radius:8px}
+.card{transition:transform .5s var(--spring)}
+/* rarity as coloured names, not dots */
+.rn{font-weight:500;color:var(--rc)}
+.rn.imp{background:linear-gradient(90deg,var(--impossible),#ff9a3c);-webkit-background-clip:text;background-clip:text;color:transparent}
+.legend i.imp,.seg-fill.imp{background:linear-gradient(90deg,var(--impossible),#ff9a3c)!important}
+.seg-fill{transition:flex-grow .8s var(--spring)}
+/* the 2x pill and the crate quest switch */
+.x2{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px 0 11px;border-radius:99px;border:1px solid var(--border);background:var(--raised);color:var(--text-3);font:700 14px var(--sans);cursor:pointer;
+  transition:transform .45s var(--spring),background-color .3s,color .3s,border-color .3s,box-shadow .3s,opacity .3s}
+.x2 svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round;transition:transform .5s var(--spring)}
+.x2 small{font:500 12px var(--sans);opacity:.8}
+.x2:hover{transform:translateY(-2px)} .x2:active{transform:scale(.92)}
+.x2[aria-pressed="true"]{background:linear-gradient(135deg,#f5b52e,#e8890c);border-color:transparent;color:#1c1203;box-shadow:0 6px 20px rgba(237,161,0,.35)}
+.x2[aria-pressed="true"] svg{fill:currentColor;transform:rotate(-12deg) scale(1.15)}
+.x2[aria-pressed="true"].pop{animation:x2pop .6s var(--spring)}
+@keyframes x2pop{0%{transform:scale(.85)}60%{transform:scale(1.08)}100%{transform:none}}
+.x2:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.qt{display:inline-flex;align-items:center;gap:10px;flex:none;cursor:pointer;border:1px solid var(--border);background:var(--raised);border-radius:99px;padding:4px 4px 4px 12px;font:600 12.5px var(--sans);color:var(--text-2);transition:border-color .3s,color .3s}
+.qt svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.qt .trk{width:48px;height:28px;border-radius:99px;background:var(--border-strong);position:relative;transition:background-color .35s}
+.qt .trk::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:99px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.3);transition:transform .55s var(--spring),width .25s var(--spring)}
+.qt:active .trk::after{width:28px}
+.qt[aria-checked="true"]{color:var(--text-1);border-color:color-mix(in srgb,var(--crate) 50%,transparent)}
+.qt[aria-checked="true"] .trk{background:var(--crate)}
+.qt[aria-checked="true"] .trk::after{transform:translateX(20px)}
+.qt[aria-checked="true"]:active .trk::after{transform:translateX(14px)}
+.hide{display:none!important}
+#pTable.simple th:nth-child(3),#pTable.simple td:nth-child(3){display:none}
+.legend b{font:500 11.5px var(--mono);color:var(--text-3);margin-left:2px}
+
 
 /* kpis */
 .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
@@ -175,6 +224,7 @@ footer{color:var(--text-3);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 18
     </div>
     <div class="topctl">
       <div class="seg" id="boostSeg" role="group" aria-label="2x money boost"></div>
+      <button class="x2 hide" id="x2" type="button" aria-pressed="false" data-tip="2× cash boost: crates pay double"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>2×<small>cash</small></button>
       <div class="seg" id="rodSeg" role="group" aria-label="Show rod"></div>
     </div>
   </div>
@@ -183,27 +233,28 @@ footer{color:var(--text-3);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 18
 
   <section class="grid">
     <article class="card">
-      <header><div><h2>Catch mix by rarity</h2><p class="cap">Share of fish caught, ores and gear excluded</p></div>
-        <div class="legend"><span><i style="background:var(--common)"></i>Common</span><span><i style="background:var(--uncommon)"></i>Uncommon</span><span><i style="background:var(--legendary)"></i>Legendary</span></div></header>
+      <header><div><h2>What you catch</h2><p class="cap">Everything that came up, rarest first</p></div>
+        <div class="legend" id="mixLegend"></div></header>
       <div class="body"><div class="rows" id="mix"></div></div>
     </article>
     <article class="card">
-      <header><div><h2>Gold per hour</h2><p class="cap">Crates first, leftovers sold directly</p></div>
-        <div class="legend"><span><i style="background:var(--crate)"></i>Crates</span><span><i style="background:var(--leftover)"></i>Leftovers</span><span><i class="ring"></i>All sold directly</span></div></header>
+      <header><div><h2>Gold per hour</h2><p class="cap" id="goldCap"></p></div>
+        <div class="legend" id="goldLegend"></div></header>
       <div class="body"><div class="rows" id="gold"></div><div class="axis" id="goldAxis" style="margin-top:10px"></div></div>
     </article>
-    <article class="card">
-      <header><div><h2>Crate B per hour</h2><p class="cap" id="crateCap"></p></div></header>
+    <article class="card" id="crateCard">
+      <header><div><h2>Crates per hour</h2><p class="cap" id="crateCap"></p></div></header>
       <div class="body"><div class="rows" id="crates"></div><p class="note" id="oreNote" style="margin-top:14px"></p></div>
     </article>
     <article class="card">
-      <header><div><h2>Fish per hour</h2><p class="cap">Crate commons marked; the scarcest one caps crates</p></div></header>
+      <header><div><h2>Fish per hour</h2><p class="cap" id="fishCap"></p></div>
+        <button class="qt" id="qt" type="button" role="switch" aria-checked="true" data-tip="Angler crate quest: turn commons into crates, sell the rest"><svg viewBox="0 0 24 24"><path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>Crate quest<span class="trk"></span></button></header>
       <div class="body"><div class="tbl"><table id="species"></table></div></div>
     </article>
   </section>
 
   <article class="card">
-    <header><div><h2>Predictor</h2><p class="cap">Measured at each rod's real enchant level; other levels are a model estimate</p></div></header>
+    <header><div><h2>Predictor</h2><p class="cap" id="predCap">Measured at each rod's real enchant level; other levels are a model estimate</p></div></header>
     <div class="bench">
       <div class="controls">
         <div class="field"><div class="lab">Rod</div><div class="seg" id="pRod" role="group" aria-label="Predictor rod"></div></div>
@@ -223,7 +274,7 @@ footer{color:var(--text-3);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 18
     </div>
   </article>
 
-  <article class="card">
+  <article class="card" id="runsCard">
     <header><div><h2>Runs</h2><p class="cap">Every rod session the farmer logged</p></div></header>
     <div class="body"><div class="tbl"><table id="runs"></table></div></div>
   </article>
@@ -242,9 +293,17 @@ const RVAR = {Common:'var(--common)',Uncommon:'var(--uncommon)',Legendary:'var(-
 const COMMONS = Object.keys(DATA.crates.B.needs);
 const ORDER = ['Legendary','Rare','Common'];
 const MIN_FISH = 150;
+// The public app shows a simple view; the owner's published copy sets DATA.advanced.
+const SIMPLE = !DATA.advanced;
+const TIERS = DATA.tiers || ['Impossible','Mythic','Legendary','Rare','Uncommon','Common'];
+const TVAR = {Impossible:'var(--impossible)',Mythic:'var(--mythic)',Legendary:'var(--legendary)',Rare:'var(--rare)',Uncommon:'var(--uncommon)',Common:'var(--common)'};
+const store = (key, fallback) => { try { const v = localStorage.getItem(key); return v == null ? fallback : v === '1'; } catch (e) { return fallback; } };
+const keep = (key, on) => { try { localStorage.setItem(key, on ? '1' : '0'); } catch (e) {} };
+let crateQuest = store('rodlab-crates', true);
+if (!document.documentElement.dataset.theme) document.documentElement.dataset.theme = 'dark';
 
 const direct = c => Object.entries(c).reduce((s,[k,v])=>s+(DATA.prices[k]||0)*v,0);
-let boostMode = DATA.boost && DATA.boost.on ? 'on' : 'off';
+let boostMode = (SIMPLE ? store('rodlab-2x', !!(DATA.boost && DATA.boost.on)) : DATA.boost && DATA.boost.on) ? 'on' : 'off';
 function crateMult(r){                 // r: {ores, hours, cratesPerH} or null for a flat toggle
   if(boostMode==='off')return 1;
   if(boostMode==='on'||!r)return DATA.boost.multiplier;
@@ -255,6 +314,7 @@ function crateMult(r){                 // r: {ores, hours, cratesPerH} or null f
 }
 function bestCrates(counts,mult=1){
   const N=DATA.crates; let best=null;
+  if(!crateQuest){const all=direct(counts);return {a:0,b:0,crate:0,rest:all,total:all,limit:COMMONS.reduce((m,x)=>(counts[x]||0)<(counts[m]||0)?x:m,COMMONS[0])}}
   const limA=Math.min(...Object.entries(N.A.needs).map(([k,n])=>Math.floor((counts[k]||0)/n)));
   for(let a=0;a<=limA;a++){
     const left={...counts}; for(const[k,n]of Object.entries(N.A.needs))left[k]=(left[k]||0)-a*n;
@@ -267,7 +327,7 @@ function bestCrates(counts,mult=1){
   return best;
 }
 function hourly(perHour,mult=1){
-  const b=Math.min(...COMMONS.map(x=>(perHour[x]||0)/2)), left={...perHour};
+  const b=crateQuest?Math.min(...COMMONS.map(x=>(perHour[x]||0)/2)):0, left={...perHour};
   COMMONS.forEach(x=>left[x]-=2*b);
   return {b,crate:mult*b*DATA.crates.B.gold,rest:direct(left)};
 }
@@ -275,6 +335,11 @@ function hourly(perHour,mult=1){
 const oreOf = r => (r.ores&&r.ores.mythicrefinementore)||0;
 const TITLE_LUCK = t => (DATA.title_buffs[t]||{}).fishing_luck||1;
 const luckOfTitles = list => (list||[]).reduce((m,t)=>m*TITLE_LUCK(t),1);
+// Every drop by tier: fish from counts, items (ores, gear, guards) from drops.
+const tiersOf = r => { const o={}; TIERS.forEach(x=>o[x]=0);
+  for(const[x,v]of Object.entries(r.counts||{}))o[DATA.rarity[x]]+=v;
+  for(const[n,v]of Object.entries(r.drops||{})){const tr=(DATA.item_rarity||{})[n]; if(tr)o[tr]+=v}
+  return o; };
 const rarityOf = c => { const o={Common:0,Uncommon:0,Legendary:0}; for(const[x,v]of Object.entries(c))o[DATA.rarity[x]]+=v; return o; };
 function wilson(x,n,z=1.96){if(!n)return[0,0];const p=x/n,d=1+z*z/n,c=p+z*z/(2*n),h=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n));return[Math.max(0,(c-h)/d),Math.min(1,(c+h)/d)]}
 
@@ -288,7 +353,8 @@ function derive(r){
     crPerH:h?(c.a+c.b)/h:null,small:r.fish<MIN_FISH};
 }
 let rods = DATA.rods.map(derive).sort((a,b)=>ORDER.indexOf(a.rod)-ORDER.indexOf(b.rod));
-const ROD_SW = {Legendary:'var(--legendary)',Rare:'var(--uncommon)',Common:'var(--common)'};
+const ROD_SW = {Legendary:'var(--legendary)',Rare:'var(--rare)',Common:'var(--common)'};
+const rerod = () => { rods=DATA.rods.map(derive).sort((a,b)=>ORDER.indexOf(a.rod)-ORDER.indexOf(b.rod)); };
 let view = 'All';
 
 /* tooltip */
@@ -312,9 +378,17 @@ function seg(el,items,current,onPick){
 }
 function drawSeg(){
   seg($('rodSeg'),[['All','All rods'],...rods.map(r=>[r.rod,r.rod,ROD_SW[r.rod]])],view,v=>{view=v;drawSeg();render()});
-  seg($('boostSeg'),[['on','2× on'],['ores','Own ores'],['off','No boost']],boostMode,v=>{boostMode=v;rods=DATA.rods.map(derive).sort((a,b)=>ORDER.indexOf(a.rod)-ORDER.indexOf(b.rod));drawSeg();render();predict()});
+  $('boostSeg').classList.toggle('hide',SIMPLE); $('x2').classList.toggle('hide',!SIMPLE);
+  $('x2').setAttribute('aria-pressed',boostMode==='on'); $('x2').disabled=!crateQuest;
+  $('qt').setAttribute('aria-checked',crateQuest);
+  if(SIMPLE)return;
+  seg($('boostSeg'),[['on','2× on'],['ores','Own ores'],['off','No boost']],boostMode,v=>{boostMode=v;rerod();drawSeg();render();predict()});
   const pre=document.createElement('span');pre.className='pre';pre.textContent='Crate cash';$('boostSeg').prepend(pre);
 }
+
+$('x2').onclick=()=>{boostMode=boostMode==='on'?'off':'on';keep('rodlab-2x',boostMode==='on');rerod();drawSeg();render();predict();
+  const b=$('x2');b.classList.remove('pop');void b.offsetWidth;b.classList.add('pop')};
+$('qt').onclick=()=>{crateQuest=!crateQuest;keep('rodlab-crates',crateQuest);rerod();drawSeg();render();predict()};
 
 /* count-up for KPI values */
 function countUp(el,to,format){
@@ -335,22 +409,28 @@ function render(){
     view==='All'
       ? {l:'Best rod',v:best?best.rod:'—',raw:null,d:best&&second?`<span class="delta">+${k(best.totalH-second.totalH)}/h</span> vs ${second.rod}`:'needs more data'}
       : {l:'Rod',v:focus.rod,raw:null,d:`${fmt(focus.fish)} fish · ${fmt(focus.active_hours,1)}h${focus.small?' · small sample':''}`},
-    {l:'Combined gold / h',raw:focus?focus.totalH:null,f:v=>fmt(v),unit:'',d:focus?`${k(focus.crateH)} crates + ${k(focus.restH)} leftovers`:''},
-    {l:'Crate B / h',raw:focus?focus.crPerH:null,f:v=>fmt(v,1),d:focus?`short on ${DATA.names[focus.c.limit]}`:''},
+    {l:'Gold per hour',raw:focus?focus.totalH:null,f:v=>fmt(v),unit:'',d:focus?(crateQuest?`${k(focus.crateH)} from crates + ${k(focus.restH)} sold`:'everything sold to the merchant'):''},
+    crateQuest?{l:'Crates per hour',raw:focus?focus.crPerH:null,f:v=>fmt(v,1),d:focus?`${DATA.names[focus.c.limit]} runs out first`:''}
+      :{l:'Fish per hour',raw:focus&&focus.active_hours?focus.fish/focus.active_hours:null,f:v=>fmt(v),d:focus?`${fmt(focus.hpm,1)} hooks a minute`:''},
     {l:'Bait left',raw:DATA.bait_left,f:v=>fmt(v),d:DATA.bait_hours?`about ${fmt(DATA.bait_hours)} h at the current pace`:''},
   ];
   $('kpis').innerHTML = kp.map((x,i)=>`<div class="kpi"><div class="l">${x.l}</div><div class="v num" id="kv${i}">${x.raw==null?(x.v??'—'):''}</div><div class="d">${x.d}</div></div>`).join('');
   kp.forEach((x,i)=>{if(x.raw!=null)countUp($('kv'+i),x.raw,x.f)});
 
   /* catch mix */
+  const seen={};
   $('mix').innerHTML = shown.map(r=>{
-    const segs=RAR.map(rr=>{const p=r.fish?100*r.rc[rr]/r.fish:0;
-      return `<div class="seg-fill" style="flex:0 0 calc(${p}% - 2px);background:${RVAR[rr]}" data-tip="${r.rod} · ${rr}<br><b>${p.toFixed(1)}%</b> · ${fmt(r.rc[rr])} fish">${p>=9?`<span>${p.toFixed(0)}%</span>`:''}</div>`}).join('');
-    return `<div class="row${r.small?' dim':''}"><div class="name">${r.rod}<small>${r.small?'small sample':fmt(r.active_hours,1)+'h fished'}</small></div><div class="track"><div class="stack">${segs}</div></div><div class="val">${fmt(r.fish)} <span style="color:var(--text-3)">fish</span></div></div>`;
+    const t=tiersOf(r), all=TIERS.reduce((s,x)=>s+t[x],0)||1;
+    const segs=TIERS.filter(x=>t[x]).map(x=>{const p=100*t[x]/all; seen[x]=(seen[x]||0)+t[x];
+      return `<div class="seg-fill${x==='Impossible'?' imp':''}" style="flex:${Math.max(p,3.5)} 1 0;background:${TVAR[x]}" data-tip="${r.rod} · ${x}<br><b>${p<1?p.toFixed(2):p.toFixed(1)}%</b> · ${fmt(t[x])} caught">${p>=9?`<span>${p.toFixed(0)}%</span>`:''}</div>`}).join('');
+    return `<div class="row${r.small?' dim':''}"><div class="name">${r.rod}<small>${r.small?'small sample':fmt(r.active_hours,1)+'h fished'}</small></div><div class="track"><div class="stack">${segs}</div></div><div class="val">${fmt(all)}</div></div>`;
   }).join('');
+  $('mixLegend').innerHTML = TIERS.filter(x=>seen[x]).map(x=>`<span><i class="${x==='Impossible'?'imp':''}" style="background:${TVAR[x]}"></i>${x}</span>`).join('');
 
   /* gold per hour */
-  const gmax = Math.max(1,...shown.map(r=>Math.max(r.totalH||0,r.directH||0)))*1.08;
+  $('goldCap').textContent = crateQuest?'Crates first, the rest sold to the merchant':'Everything sold to the merchant';
+  $('goldLegend').innerHTML = crateQuest?`<span><i style="background:var(--crate)"></i>Crates</span><span><i style="background:var(--leftover)"></i>Sold</span>${SIMPLE?'':'<span><i class="ring"></i>All sold directly</span>'}`:'';
+  const gmax = Math.max(1000,...shown.map(r=>Math.max(r.totalH||0,r.directH||0)))*1.08;
   const nice = (()=>{const raw=gmax/4,mag=Math.pow(10,Math.floor(Math.log10(raw))),s=[1,2,2.5,5,10].find(m=>m*mag>=raw)*mag;return s})();
   const top = Math.ceil(gmax/nice)*nice;
   $('gold').innerHTML = shown.map(r=>{
@@ -359,14 +439,15 @@ function render(){
       <div class="track" style="background:transparent"><div class="stack" style="width:${cw+lw}%">
         <div class="seg-fill" style="flex:${cw} 1 0;background:var(--crate)" data-tip="${r.rod} · crates<br><b>${fmt(r.crateH)}</b> gold/h · ${fmt(r.c.b)} B${r.c.a?' + '+r.c.a+' A':''} total"></div>
         <div class="seg-fill" style="flex:${lw} 1 0;background:var(--leftover)" data-tip="${r.rod} · leftovers sold<br><b>${fmt(r.restH)}</b> gold/h"></div></div>
-        <div class="marker" style="left:calc(${dl}% - 1px)" data-tip="${r.rod} · everything sold directly<br><b>${fmt(r.directH)}</b> gold/h"></div></div>
+        ${SIMPLE||!crateQuest?'':`<div class="marker" style="left:calc(${dl}% - 1px)" data-tip="${r.rod} · everything sold directly<br><b>${fmt(r.directH)}</b> gold/h"></div>`}</div>
       <div class="val">${k(r.totalH)}</div></div>`;
   }).join('');
   $('goldAxis').innerHTML = `<span></span><div class="ticks">${Array.from({length:Math.round(top/nice)+1},(_,i)=>`<span>${i?k(i*nice):'0'}</span>`).join('')}</div><span class="pad"></span>`;
 
   /* crates */
-  $('crateCap').textContent = `2 each of OuwFish, Sea Horse, Coral, OuwFwesh → ${fmt(DATA.crates.B.gold*(boostMode==='off'?1:DATA.boost.multiplier))} gold`+
-    (boostMode==='ores'?' with 2× while your own ores last':boostMode==='on'?' with 2×':' without boost');
+  $('crateCard').classList.toggle('hide',!crateQuest);
+  $('crateCap').textContent = `One crate = 2 each of OuwFish, Sea Horse, Coral and OuwFwesh, pays ${fmt(DATA.crates.B.gold*(boostMode==='off'?1:DATA.boost.multiplier))} gold`+
+    (boostMode==='ores'?' with 2× while your own ores last':boostMode==='on'?' with 2×':'');
   const cmax = Math.max(1,...shown.map(r=>r.crPerH||0))*1.1;
   $('crates').innerHTML = shown.map(r=>{
     const w=100*(r.crPerH||0)/cmax;
@@ -375,21 +456,24 @@ function render(){
       <div class="val">${fmt(r.crPerH,1)}</div></div>`;
   }).join('');
 
+  $('oreNote').classList.toggle('hide',SIMPLE);
   $('oreNote').innerHTML = shown.map(r=>`<b>${r.rod}</b>: ${fmt(r.oreH,2)} Mythic ore/h`).join(' · ')+
     ` — 1 Mythic Refinement Ore = 1 minute of 2× crate cash; stockpiled crates are turned in at about ${DATA.boost.crates_per_minute}/min (estimate).`;
   /* species matrix */
+  $('fishCap').textContent = crateQuest?'Crate fish are tagged; the one that runs out first limits crates':'How many of each fish you catch in an hour';
   const species = Object.keys(DATA.rarity).sort((a,b)=>RAR.indexOf(DATA.rarity[a])-RAR.indexOf(DATA.rarity[b]));
   const smax = Math.max(1,...shown.flatMap(r=>species.map(x=>r.per[x]||0)));
   $('species').innerHTML = `<thead><tr><th>Fish</th>${shown.map(r=>`<th>${r.rod}</th>`).join('')}<th>Gold</th></tr></thead><tbody>`+
-    species.map(x=>`<tr><td><span class="chip"><i style="background:${RVAR[DATA.rarity[x]]}"></i>${DATA.names[x]}</span>${COMMONS.includes(x)?'<span class="tag crate">crate</span>':''}${shown.length===1&&shown[0].c.limit===x?'<span class="tag limit">caps crates</span>':''}</td>`+
+    species.map(x=>`<tr><td><span class="rn" style="--rc:${RVAR[DATA.rarity[x]]}">${DATA.names[x]}</span>${crateQuest&&COMMONS.includes(x)?'<span class="tag crate">crate</span>':''}${crateQuest&&shown.length===1&&shown[0].c.limit===x?'<span class="tag limit">runs out first</span>':''}</td>`+
       shown.map(r=>{const v=r.per[x]||0;return `<td><span class="cellbar" data-tip="${DATA.names[x]} · ${r.rod}<br><b>${fmt(v,1)}</b>/h · ${fmt(r.counts[x]||0)} caught"><b style="width:${Math.max(2,56*v/smax)}px"></b><em>${fmt(v,1)}</em></span></td>`}).join('')+
       `<td class="mono">${DATA.prices[x]}</td></tr>`).join('')+'</tbody>';
 
   /* runs */
+  $('runsCard').classList.toggle('hide',SIMPLE);
   const list = DATA.runs.filter(r=>view==='All'||r.rod===view).slice().reverse();
   $('runs').innerHTML = '<thead><tr><th>Run</th><th>Started</th><th>Fished</th><th>Hooks</th><th>Fish</th><th>Crates</th><th>Crate gold</th><th>Leftovers</th><th>Combined</th><th>Per hour</th><th>Mythic</th><th>Titles</th></tr></thead><tbody>'+
     list.map(r=>{const h=r.active_hours,c0=bestCrates(r.counts,1),c=bestCrates(r.counts,crateMult({ores:oreOf(r),hours:h,cratesPerH:h?(c0.a+c0.b)/h:0})),d=new Date(r.started*1000);
-      return `<tr><td><span class="chip"><i style="background:${ROD_SW[r.rod]||'var(--text-3)'}"></i>${r.rod}</span></td><td class="mono">${d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})} ${d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</td><td class="num">${fmt(h,1)}h</td><td class="num">${fmt(r.hooks)}</td><td class="num">${fmt(r.fish)}</td><td class="num">${c.b} B${c.a?' + '+c.a+' A':''}</td><td class="num">${fmt(c.crate)}</td><td class="num">${fmt(c.rest)}</td><td class="num"><b>${fmt(c.total)}</b></td><td class="num">${h>=.05?fmt(c.total/h):'—'}</td><td class="num">${fmt(oreOf(r))}</td><td style="color:var(--text-2)">${(r.titles||[]).map(t=>t.split(' ').map(w=>w[0]).join('')).join(' · ')||'—'}</td></tr>`}).join('')+'</tbody>';
+      return `<tr><td><span class="rn" style="--rc:${ROD_SW[r.rod]||'var(--text-2)'}">${r.rod}</span></td><td class="mono">${d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})} ${d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</td><td class="num">${fmt(h,1)}h</td><td class="num">${fmt(r.hooks)}</td><td class="num">${fmt(r.fish)}</td><td class="num">${c.b} B${c.a?' + '+c.a+' A':''}</td><td class="num">${fmt(c.crate)}</td><td class="num">${fmt(c.rest)}</td><td class="num"><b>${fmt(c.total)}</b></td><td class="num">${h>=.05?fmt(c.total/h):'—'}</td><td class="num">${fmt(oreOf(r))}</td><td style="color:var(--text-2)">${(r.titles||[]).map(t=>t.split(' ').map(w=>w[0]).join('')).join(' · ')||'—'}</td></tr>`}).join('')+'</tbody>';
   if(view!=='All'&&pick!==view&&rods.some(r=>r.rod===view)){pick=view;lvl=rods.find(r=>r.rod===view).enchant_level;drawPredictor()}
 }
 
@@ -407,7 +491,7 @@ function drawPredictor(){
   seg($('pRod'),rods.map(r=>[r.rod,r.rod,ROD_SW[r.rod]]),pick,v=>{pick=v;lvl=rods.find(r=>r.rod===v).enchant_level;titlesPick=null;drawPredictor()});
   const r=rods.find(x=>x.rod===pick); if(titlesPick==null)titlesPick=new Set(r&&r.titles||[]);
   $('pTitles').innerHTML=Object.entries(DATA.title_buffs).sort((a,b)=>(b[1].fishing_luck||1)-(a[1].fishing_luck||1)).map(([t,b],i)=>
-    `<label><input type="checkbox" id="pt${i}" data-t="${t}" ${titlesPick.has(t)?'checked':''}>${t}<small>${b.fishing_luck?b.fishing_luck+'× luck':''}${b.fishing_luck&&b.bite_speed?' · ':''}${b.bite_speed?b.bite_speed+'× bite':''}</small></label>`).join('');
+    `<label><input type="checkbox" id="pt${i}" data-t="${t}" ${titlesPick.has(t)?'checked':''}><span class="bx"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>${t}<small>${b.fishing_luck?b.fishing_luck+'× luck':''}${b.fishing_luck&&b.bite_speed?' · ':''}${b.bite_speed?b.bite_speed+'× bite':''}</small></label>`).join('');
   $('pTitles').querySelectorAll('input').forEach(el=>el.onchange=()=>{
     if(el.checked&&titlesPick.size>=3){el.checked=false;return}
     el.checked?titlesPick.add(el.dataset.t):titlesPick.delete(el.dataset.t);
@@ -432,18 +516,20 @@ function predict(){
   $('pBadge').innerHTML = real?'<span class="badge meas"><i></i>Measured</span>':'<span class="badge est"><i></i>Model estimate</span>';
   $('pLuck').textContent = `Enchant luck ×${tgt.v.toFixed(2)} at +${lvl} (measured at +${r.enchant_level}); titles ×${tNow.toFixed(3)} (measured with ×${tBase.toFixed(3)}). `+(tgt.exact?'':'This level is interpolated until the exact table is in. ')+(r.small?`Only ${fmt(r.fish)} fish so far, so treat this as rough.`:'');
   const st=(l,v,d,id)=>`<div><div class="l">${l}</div><div class="v num" id="${id}"></div><div class="d">${d}</div></div>`;
-  $('pStats').innerHTML = st('Combined gold / h','',`${k(hc.crate)} crates + ${k(hc.rest)} leftovers`,'ps0')+st('Crate B / h','',`${fmt(fph)} fish per hour`,'ps1')+st('Hooks / min','','Enchant does not change bite speed','ps2');
-  countUp($('ps0'),total,v=>fmt(v)); countUp($('ps1'),hc.b,v=>fmt(v,1)); countUp($('ps2'),r.hpm,v=>fmt(v,2));
+  $('pStats').innerHTML = st('Gold per hour','',crateQuest?`${k(hc.crate)} crates + ${k(hc.rest)} sold`:'everything sold','ps0')+(crateQuest?st('Crates per hour','',`${fmt(fph)} fish per hour`,'ps1'):st('Fish per hour','','same pace, better fish','ps1'))+st('Hooks a minute','','Enchant does not change bite speed','ps2');
+  countUp($('ps0'),total,v=>fmt(v)); countUp($('ps1'),crateQuest?hc.b:fph,v=>fmt(v,crateQuest?1:0)); countUp($('ps2'),r.hpm,v=>fmt(v,2));
+  if(SIMPLE){$('predCap').textContent='Try another enchant level or other titles and see what you would earn';$('pLuck').textContent=real?'Measured from your own runs.':'An estimate from your own runs.'}
   const rows=Object.keys(r.counts).sort((a,b)=>RAR.indexOf(DATA.rarity[a])-RAR.indexOf(DATA.rarity[b])||r.counts[b]-r.counts[a]);
   const ciMax=Math.max(.05,...rows.map(x=>Math.max(wilson(r.counts[x],r.fish)[1],fph?per[x]/fph:0)))*1.1;
+  $('pTable').classList.toggle('simple',SIMPLE);
   $('pTable').innerHTML = '<thead><tr><th>Fish</th><th>Chance</th><th>Measured 95% range</th><th>Per hour</th><th>Gold</th></tr></thead><tbody>'+
     rows.map(x=>{const p=fph?per[x]/fph:0,[lo,hi]=wilson(r.counts[x],r.fish),sc=v=>Math.min(100,100*v/ciMax);
-      return `<tr><td><span class="chip"><i style="background:${RVAR[DATA.rarity[x]]}"></i>${DATA.names[x]}</span></td><td class="num"><b>${(100*p).toFixed(1)}%</b></td>
+      return `<tr><td><span class="rn" style="--rc:${RVAR[DATA.rarity[x]]}">${DATA.names[x]}</span></td><td class="num"><b>${(100*p).toFixed(1)}%</b></td>
         <td><span class="ci" data-tip="${DATA.names[x]}<br>measured ${(100*r.counts[x]/r.fish).toFixed(1)}% · range ${(100*lo).toFixed(1)}–${(100*hi).toFixed(1)}%"><span class="rng" style="left:${sc(lo)}%;width:${Math.max(1,sc(hi)-sc(lo))}%"></span><span class="pt" style="left:calc(${sc(p)}% - 1px)"></span></span> <span class="mono" style="color:var(--text-3);font-size:12px">${(100*lo).toFixed(1)}–${(100*hi).toFixed(1)}%</span></td>
         <td class="num">${fmt(per[x],1)}</td><td class="mono">${DATA.prices[x]}</td></tr>`}).join('')+'</tbody>';
 }
 
 $('asof').textContent = `Data as of ${DATA.generated}`;
-$('foot').innerHTML = `<span>Prices: Common 33 · Uncommon 66 · Legendary 165</span><span>Crate base gold: B ${fmt(DATA.crates.B.gold)} · A ${fmt(DATA.crates.A.gold)} (2× boost doubles crates only)</span><span>Refine luck per level: +1 1.05× … +8 1.9×, +9 2×, +10 3×</span><span>Range bars: shaded = measured 95% range, tick = predicted chance</span>`;
+$('foot').innerHTML = SIMPLE?`<span>Gold: Common 33 · Uncommon 66 · Legendary 165</span><span>2× cash doubles crates only</span>`:`<span>Prices: Common 33 · Uncommon 66 · Legendary 165</span><span>Crate base gold: B ${fmt(DATA.crates.B.gold)} · A ${fmt(DATA.crates.A.gold)} (2× boost doubles crates only)</span><span>Refine luck per level: +1 1.05× … +8 1.9×, +9 2×, +10 3×</span><span>Range bars: shaded = measured 95% range, tick = predicted chance</span>`;
 drawSeg(); render(); drawPredictor();
 </script>

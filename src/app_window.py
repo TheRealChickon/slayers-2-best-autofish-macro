@@ -25,7 +25,9 @@ STATE_FILE = 'app-window.json'
 IDLE_EXIT_SECONDS = 120
 MODES = ('full', 'here', 'assist', 'spot')
 SWITCHES = {'overnight': 'overnight_enabled', 'auto_idle': 'overnight_auto_enable_idle',
-            'auto_titles': 'auto_fishing_titles', 'money_boost': 'money_boost'}
+            'auto_titles': 'auto_fishing_titles'}
+RODS = ('Legendary', 'Rare', 'Common')  # Common and Basic are the same rod
+HOTBAR_KEYS = 5
 
 
 def version():
@@ -83,7 +85,6 @@ def state():
     feed = LiveFeed()
     log_run = s.get('log_run') or {}
     feed.update(log_run.get('started', s['started']), state=s['state'] if s['running'] else None, ended=log_run.get('ended'))
-    names = {rod_stats.key_of(n): rod_stats.RARITY[k] for k, n in rod_stats.NAMES.items()}
     recent = s.get('recent') or {}
     return {**{k: s[k] for k in ('state', 'mode', 'running', 'starting', 'paused', 'manual_paused', 'reason', 'active_seconds',
                                   'hooks', 'hooks_per_hour', 'last_item', 'collections', 'bait_remaining_estimate',
@@ -94,10 +95,16 @@ def state():
             'gold_per_hour': round(rod_stats.best_crates(fish)['gold']/hours) if fish and hours >= .1 else None,
             'bait_start': (s['bait_remaining_estimate'] or 0)+s['hooks'] if s['bait_remaining_estimate'] is not None else None,
             'events': feed.rows[-300:],
-            'items': [{'item': name, 'quantity': qty, 'rarity': names.get(rod_stats.key_of(name))} for name, qty in journal.counts.most_common()],
+            'items': [{'item': name, 'quantity': qty, 'rarity': rod_stats.item_rarity(name)} for name, qty in journal.counts.most_common()],
             'checks': checks(s, config),
             'config': {'account_username': config['account_username'], 'spawn_gamepass': config.get('spawn_gamepass'),
-                       'rod_slot': config['rod_slot'], 'cast_point': list(config['cast_point']), **{k: bool(config.get(v, True if k == 'money_boost' else False)) for k, v in SWITCHES.items()}}}
+                       'rod': config.get('active_rod') or current_rod(), 'webhook': webhook_saved(),
+                       'rod_slot': config['rod_slot'], 'cast_point': list(config['cast_point']), **{k: bool(config.get(v)) for k, v in SWITCHES.items()}}}
+
+
+def webhook_saved():
+    from discord_hourly import SECRET_FILE
+    return (data_directory()/SECRET_FILE).exists()
 
 
 def python_console():
@@ -139,8 +146,16 @@ def settings(body):
     elif key == 'account_username':
         save_config(app_config.resolve_account(str(value)))
     elif key == 'rod_slot':
-        if not isinstance(value, int) or not 1 <= value <= 9: raise ValueError('Rod slot is a number from 1 to 9')
+        if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= HOTBAR_KEYS:
+            raise ValueError(f'Rod slot is a number from 1 to {HOTBAR_KEYS}')
         save_config({'rod_slot': value})
+    elif key == 'rod':
+        if value not in RODS: raise ValueError('Rod is Legendary, Rare or Common')
+        import rod_stats
+        rod_stats.set_rod(value)
+    elif key == 'webhook':
+        from discord_hourly import configure_secret
+        configure_secret(data_directory(), str(value).strip())
     elif key in SWITCHES:
         save_config({SWITCHES[key]: bool(value)})
     else:
@@ -150,7 +165,7 @@ def settings(body):
 
 def page(token):
     import rod_stats
-    boot = json.dumps({'token': token})
+    boot = json.dumps({'token': token, 'rarity': rod_stats.ITEM_RARITY})
     return TEMPLATE.read_text(encoding='utf-8').replace('/*FONTS*/', rod_stats.font_faces()).replace('/*BOOT*/', boot)
 
 

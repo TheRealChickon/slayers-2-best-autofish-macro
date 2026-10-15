@@ -11,24 +11,24 @@
   --bg:#f7f7f5; --surface:#ffffff; --raised:#fbfbfa; --border:#e6e5e1; --border-strong:#d4d3ce;
   --text-1:#111110; --text-2:#55544f; --text-3:#8a8983;
   --accent:#2a78d6; --accent-soft:#e8f0fb;
-  --common:#1baf7a; --uncommon:#2a78d6; --legendary:#eda100;
+  --common:#8d8c86; --uncommon:#2a78d6; --legendary:#eda100; --rare:#0f9fb5; --mythic:#9b4fe0; --impossible:#e5336b;
   --good:#0ca30c; --warn:#c98500; --bad:#d23f31; --idle:#8a8983;
   --shadow:0 1px 2px rgba(17,17,16,.04),0 1px 1px rgba(17,17,16,.03);
   --sans:'Geist',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
   --mono:'Geist Mono',ui-monospace,'SFMono-Regular',Consolas,monospace;
-  --r:10px; --ease:cubic-bezier(.2,.8,.2,1); --spring:cubic-bezier(.34,1.56,.64,1); --squish:cubic-bezier(.5,1.8,.4,.8);
+  --r:18px; --ease:cubic-bezier(.2,.8,.2,1); --spring:cubic-bezier(.34,1.56,.64,1); --squish:cubic-bezier(.5,1.8,.4,.8);
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0f0f0e; --surface:#171716; --raised:#1c1c1b; --border:#2a2a28; --border-strong:#383835;
   --text-1:#f2f2ef; --text-2:#b4b3ac; --text-3:#7d7c76;
   --accent:#3987e5; --accent-soft:#1a2738;
-  --common:#199e70; --uncommon:#3987e5; --legendary:#c98500; --bad:#e5594b;
+  --common:#9c9b95; --uncommon:#3987e5; --legendary:#d69a12; --rare:#22b5c9; --mythic:#b47cf2; --impossible:#ff5a8a; --bad:#e5594b;
   --shadow:none; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f0f0e; --surface:#171716; --raised:#1c1c1b; --border:#2a2a28; --border-strong:#383835;
   --text-1:#f2f2ef; --text-2:#b4b3ac; --text-3:#7d7c76;
   --accent:#3987e5; --accent-soft:#1a2738;
-  --common:#199e70; --uncommon:#3987e5; --legendary:#c98500; --bad:#e5594b;
+  --common:#9c9b95; --uncommon:#3987e5; --legendary:#d69a12; --rare:#22b5c9; --mythic:#b47cf2; --impossible:#ff5a8a; --bad:#e5594b;
   --shadow:none; color-scheme:dark}
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -291,6 +291,161 @@ footer a{color:inherit}
 .state h2.swap{animation:swap .5s var(--spring)}
 @keyframes swap{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .fill{transition:width .9s var(--spring)}
+
+/* ===== v3: cards, rarities, no status dots ===== */
+.top{gap:12px}
+.top .tabs{margin-left:auto}
+.theme{width:38px;height:38px;border-radius:9px;border:1px solid var(--border);background:var(--raised);display:grid;place-items:center;cursor:pointer;color:var(--text-2);transition:transform .45s var(--spring)}
+.theme:hover{transform:rotate(-20deg) scale(1.08)} .theme:active{transform:scale(.88)}
+.sico{width:48px;height:48px;border-radius:14px;flex:none;display:grid;place-items:center;background:var(--raised);border:1px solid var(--border);color:var(--text-2);transition:background-color .3s,color .3s}
+.sico .i{width:24px;height:24px;stroke-width:1.7}
+.on .sico{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+.on .sico .i{animation:bob 2.4s ease-in-out infinite}
+.sico.pop{animation:spop .5s var(--spring)}
+@keyframes spop{0%{transform:scale(.85)}50%{transform:scale(1.1)}100%{transform:none}}
+@keyframes bob{50%{transform:translateY(-3px) rotate(-6deg)}}
+.hero.warn .sico{background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--warn)}
+/* checks: only what needs you; nothing to show when all is fine */
+.hero .checks:empty{display:none}
+.pill{border-color:color-mix(in srgb,var(--warn) 35%,var(--border));background:color-mix(in srgb,var(--warn) 8%,var(--surface));color:var(--text-1)}
+.pill .i,.pill.ok .i,.pill.warn .i,.pill.bad .i{color:var(--warn)}
+.pill.bad{border-color:color-mix(in srgb,var(--bad) 40%,var(--border));background:color-mix(in srgb,var(--bad) 8%,var(--surface))} .pill.bad .i{color:var(--bad)}
+/* deck */
+.hero .deck{grid-column:1/-1}
+.mc{position:relative;border:1px solid var(--border);border-radius:14px;background:var(--surface);padding:14px;cursor:pointer;text-align:left;font:inherit;color:inherit;
+  display:flex;flex-direction:column;gap:8px;transition:transform .5s var(--spring),box-shadow .3s,border-color .25s,opacity .3s,background-color .3s}
+.mc:hover:not(:disabled){transform:translateY(-4px);box-shadow:0 12px 28px rgba(17,17,16,.10)}
+.mc:active:not(:disabled){transform:scale(.96);transition-duration:.12s}
+.mc[aria-checked="true"]{border-color:var(--text-1);box-shadow:0 0 0 1px var(--text-1),0 14px 30px rgba(17,17,16,.12)}
+.mc:disabled{cursor:default}
+.deck.live .mc:not([aria-checked="true"]){opacity:.35}
+.mc .face{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--mc) 14%,transparent);color:var(--mc);transition:transform .5s var(--spring)}
+.mc .face .i{width:22px;height:22px}
+.mc:hover .face{transform:rotate(-8deg) scale(1.08)}
+.mc[aria-checked="true"] .face{background:var(--mc);color:#fff}
+.mc b{font:600 15px/1.2 var(--sans);letter-spacing:-.01em}
+.mc p{margin:0;font-size:12.5px;color:var(--text-2);line-height:1.35}
+.mc .ab{display:flex;gap:4px;margin-top:auto}
+.mc .ab span{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--raised);color:var(--text-3);opacity:.45}
+.mc .ab span.on{opacity:1;background:color-mix(in srgb,var(--mc) 12%,transparent);color:var(--mc)}
+.mc .ab .i{width:14px;height:14px}
+.mc .tag{position:absolute;top:12px;right:12px;display:inline-flex;gap:4px;align-items:center;font:600 11px var(--sans);color:var(--legendary)}
+.mc .tag .i{width:14px;height:14px}
+.mc .tick{position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;background:var(--text-1);color:var(--bg);display:grid;place-items:center;transform:scale(0);transition:transform .45s var(--spring)}
+.mc .tick .i{width:14px;height:14px;stroke-width:2.6}
+.mc[aria-checked="true"] .tick{transform:scale(1)}
+.mc.locked{opacity:.6}
+/* 1 · row: four cards across the hero */
+.deck{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;border-top:1px solid var(--border);padding-top:16px}
+.mc{min-height:170px}
+/* 2 · fan: a hand of cards next to the status */
+/* 3 · spotlight: the chosen card big, the others as a small stack */
+@keyframes flip{0%{transform:rotateY(-80deg) scale(.9);opacity:.2}100%{transform:none;opacity:1}}
+/* 4 · accordion: the chosen card opens up, the rest fold to icon + name */
+/* catch: rarest first, grouped, no dots */
+.rows{gap:7px}
+.rgroup{font:600 11px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--rc);margin:8px 0 2px;display:flex;align-items:center;gap:8px}
+.rgroup:first-child{margin-top:0}
+.rgroup::after{content:'';flex:1;height:1px;background:color-mix(in srgb,var(--rc) 25%,transparent)}
+.row{grid-template-columns:150px minmax(0,1fr) 64px;position:relative}
+.row .track{height:14px}
+.row .val{font-weight:600}
+.row.hit .fill{animation:hitfill .8s var(--spring)}
+@keyframes hitfill{0%{filter:brightness(1.6)}100%{filter:none}}
+.row.hit .val{animation:bump .5s var(--spring)}
+.plus{position:absolute;right:0;top:-4px;font:700 12px var(--sans);color:var(--rc);pointer-events:none;animation:plus 1s var(--ease) forwards}
+@keyframes plus{0%{opacity:0;transform:translateY(6px)}20%{opacity:1}100%{opacity:0;transform:translateY(-16px)}}
+.r-impossible .fill{background:linear-gradient(90deg,var(--impossible),#ff9a3c,var(--impossible));background-size:200% 100%;animation:shimmer 2.4s linear infinite}
+@keyframes shimmer{to{background-position:-200% 0}}
+.r-impossible .name,.r-mythic .name,.r-legendary .name{font-weight:600}
+.rtag{display:inline-block;font:600 11px var(--sans);color:var(--rc);background:color-mix(in srgb,var(--rc) 12%,transparent);border-radius:6px;padding:2px 7px}
+.chip i{display:none}
+.ev.item .i{color:var(--legendary)} .ev.myth .i{color:var(--mythic);fill:color-mix(in srgb,var(--mythic) 25%,transparent)} .ev.imp .i{color:var(--impossible);fill:color-mix(in srgb,var(--impossible) 25%,transparent)}
+.ev.state .i{fill:none}
+.burst{position:fixed;width:7px;height:7px;border-radius:2px;pointer-events:none;z-index:40}
+
+/* ===== 3b ===== */
+.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+.mc.rec:not([aria-checked="true"]){border:1.5px dashed color-mix(in srgb,var(--accent) 70%,transparent)}
+.mc .rec-tag{position:absolute;top:-10px;left:14px;display:none;align-items:center;gap:4px;font:600 11px var(--sans);color:#fff;background:var(--accent);border-radius:99px;padding:2px 9px 2px 7px;box-shadow:0 4px 10px color-mix(in srgb,var(--accent) 35%,transparent)}
+.mc .rec-tag .i{width:12px;height:12px;stroke-width:2.4}
+.mc.rec .rec-tag{display:inline-flex;animation:recin .6s var(--spring) backwards .2s}
+@keyframes recin{from{transform:translateY(6px) scale(.6);opacity:0}}
+/* catch, Rod Lab style: one bar by rarity, then a compact table */
+.mixbar{display:flex;height:26px;gap:2px;border-radius:6px;overflow:hidden;margin-bottom:10px}
+.mixbar span{display:flex;align-items:center;padding:0 8px;min-width:0;color:#fff;font:600 11.5px var(--mono);white-space:nowrap;overflow:hidden;transition:flex-grow .9s var(--spring),filter .3s}
+.mixbar span.hit{animation:hitfill .8s var(--spring)}
+.mixkey{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;color:var(--text-2);margin-bottom:12px}
+.mixkey b{font-weight:600;margin-right:4px}
+.ctbl{max-height:250px;overflow:auto;margin:0 -18px;padding:0 18px;scrollbar-width:thin}
+.ctbl table td,.ctbl table th{padding:7px 8px}
+.ctbl td.n{font-weight:500}
+.ctbl tr.hit td{animation:rowhit 1s var(--ease)}
+@keyframes rowhit{0%{background:color-mix(in srgb,var(--rc) 22%,transparent)}100%{background:transparent}}
+.ctbl tr.hit td.q{animation:bump .5s var(--spring)}
+.ctbl .q{font:600 13px var(--mono)} .ctbl .ph{font:400 12.5px var(--mono);color:var(--text-3)}
+/* activity: time and words, rare drops in their colour */
+.ev{grid-template-columns:44px minmax(0,1fr)}
+.ev .i{display:none}
+.ev.catch span{color:var(--text-2)}
+.ev.rar span{color:var(--rc);font-weight:600}
+.ev.warn span{color:var(--warn)} .ev.error span{color:var(--bad)}
+.ev.state span,.ev.rec span{color:var(--text-3)}
+/* first-run setup */
+.sheet{width:min(600px,100%);text-align:center;padding:26px 28px 24px;position:relative}
+.obbar{height:4px;border-radius:2px;background:var(--border);overflow:hidden;margin:0 36px}
+.obbar b{display:block;height:100%;background:var(--accent);border-radius:2px;transition:width .6s var(--spring)}
+.obback{position:absolute;left:18px;top:16px;width:32px;height:32px;border-radius:9px;border:0;background:transparent;color:var(--text-3);display:grid;place-items:center;cursor:pointer}
+.obback:hover{background:var(--raised);color:var(--text-1)}
+.obstep{animation:obin .5s var(--spring)}
+@keyframes obin{from{opacity:0;transform:translateX(24px)}}
+.sheet h2{font-size:21px;margin:12px 0 4px}
+.sheet .sub{color:var(--text-3);font-size:13px;margin:0}
+.choices.c4{grid-template-columns:repeat(4,1fr)}
+.choice .rodi{width:30px;height:30px;color:var(--rc)}
+.keys{display:flex;gap:6px;justify-content:center;margin-top:20px}
+.key{width:46px;height:52px;border-radius:10px;border:1px solid var(--border-strong);border-bottom-width:3px;background:var(--raised);font:600 17px var(--mono);cursor:pointer;transition:transform .35s var(--spring),background-color .2s,border-color .2s}
+.key:hover{transform:translateY(-3px)}
+.key.on{background:var(--text-1);color:var(--bg);border-color:var(--text-1);transform:translateY(2px)}
+.capture{margin-top:20px;display:grid;justify-items:center;gap:12px}
+.cring{width:96px;height:96px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font:650 34px var(--sans);position:relative}
+.cring .i{width:40px;height:40px}
+.cring svg.prog{position:absolute;inset:-6px;width:108px;height:108px;transform:rotate(-90deg)}
+.cring svg.prog circle{fill:none;stroke:var(--accent);stroke-width:4;stroke-linecap:round;stroke-dasharray:314;stroke-dashoffset:314}
+.cring.go svg.prog circle{transition:stroke-dashoffset 4s linear;stroke-dashoffset:0}
+.done-burst{animation:spop .6s var(--spring)}
+
+/* ===== 3c: rounder, softer, livelier ===== */
+.btn{border-radius:12px;transition:transform .35s var(--spring),background-color .15s,border-color .15s,opacity .15s}
+.btn:active{transform:scale(.94)}
+.btn.sm{border-radius:10px}
+.seg{border-radius:14px;padding:4px} .seg button{border-radius:10px} .seg .glide{border-radius:10px}
+.input{border-radius:12px;padding:9px 13px}
+.stepper{border-radius:12px}
+.sheet{border-radius:24px}
+.choice{border-radius:16px;transition:border-color .15s,background-color .15s,transform .4s var(--spring)}
+.choice:hover{transform:translateY(-3px)}
+.mc{border-radius:20px} .mc .face{border-radius:14px}
+.theme{border-radius:12px} .mark{border-radius:11px} .sico{border-radius:16px}
+.set .ic{border-radius:12px}
+.key{border-radius:14px}
+.toast{border-radius:14px}
+.count,.rtag{border-radius:99px}
+.mixbar{border-radius:10px;height:28px}
+.track,.fill{border-radius:7px}
+.obback{border-radius:12px}
+.sheet .badge{border-radius:18px}
+.view.on{animation:viewin .5s var(--spring)}
+@keyframes viewin{from{opacity:0;transform:translateY(10px) scale(.995)}}
+.card{transition:transform .5s var(--spring),box-shadow .3s}
+.kpi .v{transition:color .3s}
+.choices.c3{grid-template-columns:repeat(3,1fr)}
+.sheet .sub a,.set a.how{color:var(--accent);text-decoration:none;font-weight:500}
+.sheet .sub a:hover,.set a.how:hover{text-decoration:underline}
+.howto{display:inline-flex;align-items:center;gap:6px;margin-top:14px;font:500 13px var(--sans);color:var(--accent);text-decoration:none;padding:6px 12px;border-radius:99px;background:var(--accent-soft);transition:transform .35s var(--spring)}
+.howto:hover{transform:translateY(-2px)} .howto .i{width:15px;height:15px}
+.input.wide{width:100%;margin-top:18px}
+
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -328,6 +483,13 @@ footer a{color:inherit}
     <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-bobber" viewBox="0 0 24 24"><path d="M12 2v5"/><circle cx="12" cy="13" r="5"/><path d="M7 13h10"/><path d="M2 21c2 0 2-1 4-1s2 1 4 1 2-1 4-1 2 1 4 1 2-1 4-1"/></symbol>
+    <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0 5 5L21 13l-8 8-3-3 8-8-1.3-1.3a4 4 0 0 1-5-5L10 2"/><path d="M14.5 4.5a4 4 0 0 0-5.3 5.3L3 16l3 3 6.2-6.2"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+    <symbol id="i-play-c" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="m10 9.5 5 2.5-5 2.5z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
   </defs>
 </svg>
 <div class="page">
@@ -343,13 +505,14 @@ footer a{color:inherit}
       <button data-view="log" aria-pressed="false"><svg class="i"><use href="#i-list"/></svg>Log</button>
       <button data-view="settings" aria-pressed="false" aria-label="Settings" title="Settings"><svg class="i"><use href="#i-sliders"/></svg></button>
     </nav>
+    <button class="theme" id="theme" aria-label="Light or dark" title="Light or dark"><svg class="i"><use href="#i-moon"/></svg></button>
   </div>
 
   <!-- Farm -->
   <section class="view on" id="v-farm">
     <article class="card hero" id="hero">
       <div class="state">
-        <div class="orb" aria-hidden="true"><i></i></div>
+        <div class="sico" id="sico" aria-hidden="true"></div>
         <div style="min-width:0">
           <h2 id="state">Loading</h2>
           <p id="meta"></p>
@@ -357,14 +520,14 @@ footer a{color:inherit}
         </div>
       </div>
       <div class="ctl">
-        <div class="seg" id="modes" role="group" aria-label="Mode"></div>
-        <div class="btns">
+                <div class="btns">
           <button class="btn primary" id="bStart"><svg class="i"><use href="#i-play"/></svg>Start</button>
           <button class="btn primary" id="bResume"><svg class="i"><use href="#i-play"/></svg>Continue</button>
           <button class="btn" id="bPause"><svg class="i"><use href="#i-pause"/></svg>Pause</button>
           <button class="btn danger" id="bStop" aria-label="Stop" title="Stop"><svg class="i"><use href="#i-stop"/></svg></button>
         </div>
       </div>
+      <div class="deck" id="deck" role="radiogroup" aria-label="Mode"></div>
       <div class="checks" id="checks"></div>
     </article>
 
@@ -373,8 +536,8 @@ footer a{color:inherit}
     <section class="grid">
       <article class="card">
         <header><h3><svg class="i"><use href="#i-fish"/></svg>Catch</h3>
-          <div class="legend"><span title="Common"><i style="background:var(--common)"></i>Common</span><span title="Uncommon"><i style="background:var(--uncommon)"></i>Uncommon</span><span title="Legendary"><i style="background:var(--legendary)"></i>Legendary</span></div></header>
-        <div class="body"><div class="rows" id="catch"></div></div>
+          <span class="count" id="catchCount"></span></header>
+        <div class="body"><div id="catch"></div></div>
       </article>
       <article class="card">
         <header><h3><svg class="i"><use href="#i-list"/></svg>Activity</h3></header>
@@ -413,6 +576,8 @@ footer a{color:inherit}
             <input class="input" id="sUser" autocomplete="off" spellcheck="false" placeholder="Roblox username"></label>
           <div class="set" title="Set Spawn Anywhere: Full farmer can rejoin and walk back by itself"><span class="ic"><svg class="i"><use href="#i-ticket"/></svg></span><span class="t">Spawn gamepass</span>
             <button class="switch" role="switch" data-key="spawn_gamepass" aria-checked="false" aria-label="Spawn gamepass"></button></div>
+          <div class="set" title="The rod you fish with; Rod Lab keeps stats per rod"><span class="ic"><svg class="i"><use href="#i-rod"/></svg></span><span class="t">Rod</span>
+            <div class="seg" id="sRod" role="group" aria-label="Rod"></div></div>
           <div class="set" title="The number key your rod is on"><span class="ic"><svg class="i"><use href="#i-keys"/></svg></span><span class="t">Rod slot</span>
             <div class="stepper"><button data-step="-1" aria-label="Lower">−</button><output id="sSlot" class="num">5</output><button data-step="1" aria-label="Higher">+</button></div></div>
           <div class="set" title="Press Capture, then hover over the water within 4 seconds"><span class="ic"><svg class="i"><use href="#i-pointer"/></svg></span><span class="t">Cast point <small class="mono num" id="sCast"></small></span>
@@ -428,8 +593,8 @@ footer a{color:inherit}
             <button class="switch" role="switch" data-key="auto_idle" aria-checked="false" aria-label="Start when idle"></button></div>
           <div class="set" title="Wears the three fishing titles that catch the most"><span class="ic"><svg class="i"><use href="#i-crown"/></svg></span><span class="t">Best titles</span>
             <button class="switch" role="switch" data-key="auto_titles" aria-checked="false" aria-label="Best titles"></button></div>
-          <div class="set" title="Count crates at double value in stats"><span class="ic"><svg class="i"><use href="#i-zap"/></svg></span><span class="t">2× money boost</span>
-            <button class="switch" role="switch" data-key="money_boost" aria-checked="false" aria-label="2x money boost"></button></div>
+          <div class="set" title="One Discord message per session that updates itself"><span class="ic"><svg class="i"><use href="#i-chat"/></svg></span><span class="t">Discord <a class="how" href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks" target="_blank" rel="noopener">How?</a></span>
+            <input class="input" id="sHook" type="password" autocomplete="off" spellcheck="false" placeholder="Webhook URL"></div>
         </div>
       </article>
     </section>
@@ -465,8 +630,15 @@ function glide(seg){
 }
 function segHtml(seg, html){ if (seg._html !== html) { seg._html = html; seg.innerHTML = html; } glide(seg); }
 const ico = (name, cls='') => `<svg class="i ${cls}"><use href="#i-${name}"/></svg>`;
-const MODES = [['full','Full farmer','loop'],['here','Farm here','pin'],['assist','Minigame','pad'],['spot','Fish here','target']];
-const RVAR = {Common:'var(--common)', Uncommon:'var(--uncommon)', Legendary:'var(--legendary)'};
+// Least to most automatic, left to right.
+const MODES = [
+  {k:'assist', name:'Minigame', icon:'pad', c:'var(--common)', line:'You cast and collect. It wins the minigame.', does:['reel']},
+  {k:'spot', name:'Fish here', icon:'target', c:'var(--uncommon)', line:'You aim. It clicks, reels and collects.', does:['reel','cast','collect']},
+  {k:'here', name:'Farm here', icon:'pin', c:'var(--accent)', line:'Stand at the water. It farms and fixes hiccups.', does:['reel','cast','collect','fix']},
+  {k:'full', name:'Full farmer', icon:'crown', c:'var(--legendary)', line:'All night. Rejoins and walks back if kicked.', does:['reel','cast','collect','fix','rejoin'], pass:true}];
+const ABIL = [['reel','pad','Wins the minigame'],['cast','hook','Casts'],['collect','box','Collects drops'],['fix','wrench','Fixes small problems'],['rejoin','refresh','Rejoins after a disconnect']];
+const RVAR = {Common:'var(--common)', Uncommon:'var(--uncommon)', Rare:'var(--rare)', Legendary:'var(--legendary)', Mythic:'var(--mythic)', Impossible:'var(--impossible)'};
+const RORDER = ['Impossible','Mythic','Legendary','Rare','Uncommon','Common'];
 let S = null, view = 'farm', pickMode = null, logKind = 'all', seen = new Set(), busy = false;
 
 /* --- server --- */
@@ -502,18 +674,41 @@ function tone(s){
 }
 function drawHero(s){
   const hero = $('hero'), live = s.running || s.starting;
-  hero.style.setProperty('--tone', tone(s)); hero.classList.toggle('on', live && !s.paused);
+  hero.classList.toggle('on', live && !s.paused); hero.classList.toggle('warn', tone(s) === 'var(--warn)');
+  const si = stateIcon(s), sico = $('sico'); if (sico.dataset.i !== si) { sico.dataset.i = si; sico.innerHTML = ico(si); sico.classList.remove('pop'); void sico.offsetWidth; sico.classList.add('pop'); }
   const h = $('state'); if (h.textContent !== s.state) { h.textContent = s.state; h.classList.remove('swap'); void h.offsetWidth; h.classList.add('swap'); }
-  const mode = MODES.find(m => m[0] === s.mode);
-  const parts = [mode ? ico(mode[2]) + mode[1] : esc(s.mode)];
+  const parts = [];
   if (s.active_seconds) parts.push(ico('gauge') + dur(s.active_seconds));
   if (s.rod) parts.push(ico('rod') + esc(s.rod));
   $('meta').innerHTML = parts.map(p => `<span>${p}</span>`).join('');
   const r = $('reason'); r.innerHTML = s.reason && !s.running ? ico('alert') + esc(s.reason) : ''; r.classList.toggle('show', !!s.reason && !s.running);
   if (pickMode == null || live) pickMode = s.mode;
-  segHtml($('modes'), MODES.map(([k, l, i]) => `<button data-m="${k}" aria-pressed="${k === pickMode}" ${live ? 'disabled' : ''}>${ico(i)}${l}</button>`).join(''));
+  drawDeck(s, live);
   $('bStart').hidden = live || s.paused; $('bResume').hidden = !s.paused || s.running;
   $('bPause').hidden = !live; $('bStop').hidden = !live && !s.paused;
+}
+
+function stateIcon(s){
+  const t = s.state || '';
+  if (s.paused || s.manual_paused) return 'pause';
+  if (!s.running && !s.starting) return 'rod';
+  return /bite|wait/i.test(t) ? 'bobber' : /reel|minigame/i.test(t) ? 'pad' : /cast/i.test(t) ? 'hook' : /collect|claim|pick/i.test(t) ? 'box'
+    : /rejoin|recover|fix|retry|stuck/i.test(t) ? 'refresh' : /roblox/i.test(t) ? 'pad' : 'rod';
+}
+function cardHtml(m, live, s){
+  const locked = m.pass && s.config && s.config.spawn_gamepass === false;
+  const rec = s.config && s.config.spawn_gamepass != null && m.k === (s.config.spawn_gamepass ? 'full' : 'here');
+  return `<button class="mc${locked ? ' locked' : ''}${rec ? ' rec' : ''}" role="radio" data-m="${m.k}" aria-checked="${m.k === pickMode}" ${live ? 'disabled' : ''} style="--mc:${m.c}" title="${esc(m.line)}">
+    ${m.pass ? `<span class="tag" title="Needs the Set Spawn Anywhere gamepass">${ico(locked ? 'lock' : 'ticket')}</span>` : ''}<span class="tick">${ico('check')}</span><span class="rec-tag">${ico('star')}Recommended</span>
+    <span class="face">${ico(m.icon)}</span><b>${m.name}</b><p>${m.line}</p>
+    <span class="ab">${ABIL.map(([k, i, tip]) => `<span class="${m.does.includes(k) ? 'on' : ''}" title="${tip}">${ico(i)}</span>`).join('')}</span></button>`;
+}
+function drawDeck(s, live){
+  const deck = $('deck'); deck.classList.toggle('live', !!live);
+  const key = [pickMode, live, s.config && s.config.spawn_gamepass].join('|');
+  if (deck._key === key) return; const prev = deck._key; deck._key = key;
+  if (!deck.children.length || prev && prev.split('|')[2] !== String(s.config && s.config.spawn_gamepass)) deck.innerHTML = MODES.map(m => cardHtml(m, live, s)).join('');
+  deck.querySelectorAll('.mc').forEach(c => { c.setAttribute('aria-checked', c.dataset.m === pickMode); c.disabled = !!live; });
 }
 function drawKpis(s){
   const pace = s.pace ?? (s.hooks_per_hour ? s.hooks_per_hour/60 : null);
@@ -521,34 +716,55 @@ function drawKpis(s){
   const baitPct = bait != null && s.bait_start ? Math.max(2, Math.min(100, 100*bait/s.bait_start)) : null;
   const cards = [
     ['pace', 'gauge', 'Pace', pace, v => `${fmt(v,1)}<small>/min</small>`, s.hooks ? `${fmt(s.hooks)} hooks` : ''],
-    ['fish', 'fish', 'Fish', s.fish, v => fmt(v), s.last_item ? esc(s.last_item) : ''],
     ['gold', 'coins', 'Gold / h', s.gold_per_hour, v => `${fmt(v/1000,1)}<small>k</small>`, ''],
-    ['bait', 'hook', 'Bait', bait, v => fmt(v), hrs ? `≈ ${dur(hrs*3600)}` : ''],
+    ['bait', 'hook', 'Bait', bait, v => fmt(v), hrs ? `≈ ${dur(hrs*3600)} left` : ''],
   ];
   const box = $('kpis');
   if (!box.children.length) box.innerHTML = cards.map(([id, i, l]) => `<div class="kpi"><div class="l">${ico(i)}${l}</div><div class="v num" id="k-${id}">—</div><div class="d" id="d-${id}"></div>${id === 'bait' ? '<div class="meter"><b id="baitBar" style="width:0"></b></div>' : ''}</div>`).join('');
   for (const [id, , , v, render, d] of cards) { const el = $('k-'+id); v == null ? (el.textContent = '—', el.dataset.v = 0) : tween(el, v, render); $('d-'+id).innerHTML = d || '&nbsp;'; }
   const bar = $('baitBar'); bar.style.width = (baitPct ?? 0) + '%'; bar.classList.toggle('low', baitPct != null && baitPct < 15);
 }
+
+const ITEM_RARITY = BOOT.rarity || {};
+const rarityOf = name => ITEM_RARITY[name] || Object.entries(ITEM_RARITY).find(([k]) => new RegExp('\\b' + k + '\\b', 'i').test(name))?.[1];
+let lastCounts2 = null;
 function drawCatch(s){
-  const rows = (s.catch || []).filter(r => r.count > 0), top = Math.max(1, ...rows.map(r => r.count)), total = rows.reduce((a, r) => a + r.count, 0);
-  $('catch').innerHTML = rows.length ? rows.map(r => `<div class="row"><div class="name">${esc(r.name)}</div>
-    <div class="track"><div class="fill" style="width:${(100*r.count/top).toFixed(1)}%;background:${RVAR[r.rarity] || 'var(--accent)'}"></div></div>
-    <div class="val num">${fmt(r.count)} <small>${fmt(100*r.count/total)}%</small></div></div>`).join('')
-    : `<div class="empty">${ico('fish', 'big')}</div>`;
+  const rows = (s.items || []).map(r => ({...r, rarity: r.rarity || rarityOf(r.item)})).filter(r => r.quantity > 0 && r.rarity)
+    .sort((a, b) => RORDER.indexOf(a.rarity) - RORDER.indexOf(b.rarity) || b.quantity - a.quantity);
+  const total = rows.reduce((a, r) => a + r.quantity, 0); $('catchCount').textContent = total ? fmt(total) : '';
+  const box = $('catch');
+  if (!rows.length) { box.innerHTML = `<div class="empty">${ico('fish', 'big')}</div>`; box._built = false; return; }
+  const by = {}; rows.forEach(r => by[r.rarity] = (by[r.rarity] || 0) + r.quantity);
+  const tiers = RORDER.filter(r => by[r]), hours = Math.max(.1, (s.active_seconds || 0)/3600);
+  if (!box._built) { box._built = true;
+    box.innerHTML = `<div class="mixbar" id="mixbar"></div><div class="mixkey" id="mixkey"></div><div class="ctbl"><table><thead><tr><th>Item</th><th>Rarity</th><th>Count</th><th>/ h</th></tr></thead><tbody id="ctb"></tbody></table></div>`; }
+  // Rare tiers get a floor width so one Krathulon is still visible next to 400 commons.
+  const bar = $('mixbar'), have = new Set();
+  tiers.forEach(r => { let seg = bar.querySelector(`[data-r="${r}"]`);
+    if (!seg) { seg = document.createElement('span'); seg.dataset.r = r; seg.style.background = r === 'Impossible' ? 'linear-gradient(90deg,var(--impossible),#ff9a3c)' : RVAR[r];
+      const at = RORDER.indexOf(r); const next = [...bar.children].find(c => RORDER.indexOf(c.dataset.r) > at); bar.insertBefore(seg, next || null); seg.style.flexGrow = 0; }
+    have.add(r); const share = by[r]/total; seg.style.flexGrow = Math.max(share, .06); seg.textContent = share >= .1 ? Math.round(share*100) + '%' : by[r];
+    seg.title = `${r}: ${fmt(by[r])}`; });
+  [...bar.children].forEach(c => have.has(c.dataset.r) || c.remove());
+  $('mixkey').innerHTML = tiers.map(r => `<span style="color:${RVAR[r]}"><b class="num">${fmt(by[r])}</b>${r}</span>`).join('');
+  const hits = new Set(); if (lastCounts2) rows.forEach(r => { if ((lastCounts2[r.item] || 0) < r.quantity) hits.add(r.item); });
+  $('ctb').innerHTML = rows.map(r => `<tr class="${hits.has(r.item) ? 'hit' : ''}" style="--rc:${RVAR[r.rarity]}"><td class="n">${esc(r.item)}</td><td><span class="rtag" style="--rc:${RVAR[r.rarity]}">${r.rarity}</span></td>
+    <td class="q num">${fmt(r.quantity)}</td><td class="ph num">${fmt(r.quantity/hours, r.quantity/hours < 10 ? 1 : 0)}</td></tr>`).join('');
+  hits.forEach(name => { const r = rows.find(x => x.item === name); const seg = bar.querySelector(`[data-r="${r.rarity}"]`); if (seg) { seg.classList.remove('hit'); void seg.offsetWidth; seg.classList.add('hit'); }
+    if (RORDER.indexOf(r.rarity) <= 2) burst(bar, RVAR[r.rarity]); });
+  lastCounts2 = Object.fromEntries(rows.map(r => [r.item, r.quantity]));
 }
-const RARE = /Krathulon|Crustadon|Mythic/i;
 function evIcon(e){
   if (e.level === 'error' || e.level === 'warn') return ['warn', 'alert'];
-  if (e.group === 'catches') return RARE.test(e.text) ? ['item', 'star'] : ['catch', 'fish'];
+  if (e.group === 'catches') return ['catch', 'fish'];
   if (e.group === 'recovery') return ['rec', 'refresh'];
-  if (e.group === 'state') return ['state', 'dot'];
-  return ['', 'dot'];
+  if (e.group === 'state') return ['state', /pause/i.test(e.text) ? 'pause' : /stop/i.test(e.text) ? 'stop' : 'play'];
+  return ['', 'list'];
 }
 function feedHtml(list){
   return list.map(e => { const key = e.id ?? (e.at + e.text), fresh = seen.size && !seen.has(key); seen.add(key);
-    const [cls, icon] = evIcon(e);
-    return `<div class="ev ${cls}${fresh ? ' fresh' : ''}"><time>${clock(e.at)}</time>${ico(icon)}<span title="${esc(e.text)}">${esc(e.text)}</span></div>`; }).join('');
+    const [cls] = evIcon(e), rar = e.group === 'catches' ? rarityOf(e.text) : null, rare = rar && RORDER.indexOf(rar) <= 3;
+    return `<div class="ev ${cls}${rare ? ' rar' : ''}${fresh ? ' fresh' : ''}"${rare ? ` style="--rc:${RVAR[rar]}"` : ''}><time>${clock(e.at)}</time><span title="${esc(e.text)}">${esc(e.text)}</span></div>`; }).join('');
 }
 function drawFeed(s){
   const ev = (s.events || []).slice().reverse();
@@ -565,16 +781,16 @@ const CHECKS = {
   'Unread items': ['alert', v => v + ' unread'],
 };
 function drawChecks(s){
-  $('checks').innerHTML = (s.checks || []).map(c => { const [i, short] = CHECKS[c.label] || ['dot', v => v];
+  $('checks').innerHTML = (s.checks || []).filter(c => c.ok === false || c.ok === 'warn').map(c => { const [i, short] = CHECKS[c.label] || ['dot', v => v];
     return `<span class="pill ${c.ok === true ? 'ok' : c.ok === false ? 'bad' : c.ok === 'warn' ? 'warn' : ''}" title="${esc(c.label)}: ${esc(c.value)}">${ico(i)}${esc(short(String(c.value)))}</span>`; }).join('');
 }
 
 /* --- other views --- */
 function drawItems(s){
-  const items = s.items || [], total = items.reduce((a, r) => a + r.quantity, 0);
+  const items = (s.items || []).map(r => ({...r, rarity: r.rarity || rarityOf(r.item)})).filter(r => r.quantity > 0).sort((a, b) => (RORDER.indexOf(a.rarity) + 9) % 9 - (RORDER.indexOf(b.rarity) + 9) % 9 || b.quantity - a.quantity), total = items.reduce((a, r) => a + r.quantity, 0);
   $('itemsCount').textContent = total ? fmt(total) : '';
-  $('items').innerHTML = items.length ? `<thead><tr><th>Item</th><th>Qty</th><th>Share</th></tr></thead><tbody>${items.map(r =>
-    `<tr><td><span class="chip"><i style="background:${RVAR[r.rarity] || 'var(--idle)'}"></i>${esc(r.item)}</span></td><td class="num mono">${fmt(r.quantity)}</td><td><span class="share"><b style="width:${(100*r.quantity/items[0].quantity).toFixed(1)}%"></b><em class="mono num">${fmt(100*r.quantity/total,1)}%</em></span></td></tr>`).join('')}</tbody>`
+  $('items').innerHTML = items.length ? `<thead><tr><th>Item</th><th>Rarity</th><th>Qty</th><th>Share</th></tr></thead><tbody>${items.map(r =>
+    `<tr><td>${esc(r.item)}</td><td>${r.rarity ? `<span class="rtag" style="--rc:${RVAR[r.rarity]}">${r.rarity}</span>` : ''}</td><td class="num mono">${fmt(r.quantity)}</td><td><span class="share"><b style="width:${(100*r.quantity/Math.max(...items.map(x => x.quantity))).toFixed(1)}%"></b><em class="mono num">${fmt(100*r.quantity/total,1)}%</em></span></td></tr>`).join('')}</tbody>`
     : `<tbody><tr><td class="empty">${ico('box', 'big')}</td></tr></tbody>`;
 }
 const KINDS = [['all','All','list'],['catch','Catches','fish'],['recovery','Fixes','refresh'],['problem','Problems','alert']];
@@ -589,25 +805,56 @@ function drawSettings(s){
   const u = $('sUser'); if (document.activeElement !== u) u.value = c.account_username || '';
   document.querySelectorAll('.switch').forEach(sw => sw.setAttribute('aria-checked', !!c[sw.dataset.key]));
   $('sSlot').value = c.rod_slot ?? 5;
+  segHtml($('sRod'), ['Legendary', 'Rare', 'Common'].map(r => `<button data-rod="${r}" aria-pressed="${c.rod === r}">${r}</button>`).join(''));
+  const h = $('sHook'); if (document.activeElement !== h) h.placeholder = c.webhook ? 'Saved · paste to replace' : 'Webhook URL';
   $('sCast').textContent = c.cast_point ? c.cast_point.join(', ') : '';
 }
-function drawOnboarding(s){
-  const c = s.config || {}, veil = $('veil'), sheet = $('sheet');
-  const step = c.spawn_gamepass == null ? 1 : (c.spawn_gamepass && !c.account_username && !drawOnboarding.skipped) ? 2 : 0;
-  if (!step) { veil.classList.remove('on'); return; }
-  if (veil.dataset.step == step && veil.classList.contains('on')) return;
-  veil.dataset.step = step; veil.classList.add('on');
-  sheet.innerHTML = step === 1 ? `<div class="dots"><i class="on"></i><i></i></div><div class="badge">${ico('ticket')}</div>
-    <h2 id="obTitle">Own the Set Spawn Anywhere gamepass?</h2>
-    <div class="choices"><button class="choice" data-gp="1">${ico('loop')}<b>Yes</b><span>Full farmer · rejoins by itself</span></button>
-    <button class="choice" data-gp="0">${ico('pin')}<b>No</b><span>Farm here · fishes where you stand</span></button></div>`
-  : `<div class="dots"><i></i><i class="on"></i></div><div class="badge">${ico('user')}</div>
-    <h2 id="obTitle">Your Roblox username</h2><p>${ico('check')}Saved only on this PC</p>
-    <input class="input" id="obUser" autocomplete="off" spellcheck="false" placeholder="Username, not display name">
-    <div class="btns"><button class="btn" id="obSkip">Later</button><button class="btn primary" id="obSave">${ico('check')}Save</button></div>`;
-  if (step === 2) setTimeout(() => $('obUser')?.focus(), 50);
+const OB_STEPS = [
+  {k:'spawn_gamepass', icon:'ticket', q:'Own the Set Spawn Anywhere gamepass?', sub:'Lets Autofish rejoin and walk back by itself', type:'choice',
+    opts:[{v:true, icon:'crown', label:'Yes', note:'Full farmer'}, {v:false, icon:'pin', label:'No', note:'Farm here'}]},
+  {k:'account_username', icon:'user', q:'Your Roblox username', sub:'Not your display name. Saved only on this PC', type:'input', ph:'Username', optional:true},
+  {k:'rod', icon:'rod', q:'Which rod are you fishing with?', sub:'Rod Lab keeps stats per rod', type:'choice', c3:true,
+    opts:[{v:'Legendary', label:'Legendary', rc:'var(--legendary)'}, {v:'Rare', label:'Rare', rc:'var(--rare)'}, {v:'Common', label:'Common', note:'Also called Basic', rc:'var(--text-2)'}]},
+  {k:'rod_slot', icon:'keys', q:'Which hotbar key is your rod on?', type:'keys'},
+  {k:'cast_point', icon:'target', q:'Where should it cast?', sub:'Press Capture, then hover over the water in Roblox', type:'cast'},
+  {k:'overnight', icon:'moon', q:'Keep farming when you step away?', sub:'Starts on its own when you leave the PC, stops when you move the mouse', type:'choice',
+    opts:[{v:true, icon:'moon', label:'Yes'}, {v:false, icon:'mouse', label:'Only when I press Start'}]},
+  {k:'auto_titles', icon:'crown', q:'Wear your best fishing titles for you?', type:'choice', opts:[{v:true, icon:'check', label:'Yes'}, {v:false, icon:'stop', label:'No'}]},
+  {k:'webhook', icon:'chat', q:'Discord reports?', sub:'One message per session that updates itself', type:'input', ph:'Paste a Discord webhook URL', optional:true, help:'https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks', helpText:'How to make a webhook'},
+];
+const OB = {i:0, active:false, done:false};
+function obShow(){
+  const veil = $('veil'), sheet = $('sheet'), c = S.config || {};
+  if (OB.i >= OB_STEPS.length) {
+    sheet.innerHTML = `<div class="obbar"><b style="width:100%"></b></div><div class="obstep"><div class="badge done-burst">${ico('check')}</div><h2 id="obTitle">All set</h2>
+      <p class="sub">Your recommended mode is marked</p><div class="btns"><button class="btn primary" id="obFinish">${ico('play')}Let's fish</button></div></div>`;
+    return;
+  }
+  const st = OB_STEPS[OB.i], val = c[st.k];
+  let body = '';
+  if (st.type === 'choice') body = `<div class="choices${st.c4 ? ' c4' : st.c3 ? ' c3' : ''}">${st.opts.map((o, n) => `<button class="choice" data-o="${n}"${o.rc ? ` style="--rc:${o.rc}"` : ''}>${o.rc ? ico('rod', 'rodi') : ico(o.icon)}<b>${o.label}</b>${o.note ? `<span>${o.note}</span>` : ''}</button>`).join('')}</div>`;
+  if (st.type === 'input') body = `${st.help ? `<div><a class="howto" href="${st.help}" target="_blank" rel="noopener">${ico('play-c')}${st.helpText}</a></div>` : ''}
+    <input class="input wide" id="obIn" ${st.k === 'webhook' ? 'type="password" ' : ''}autocomplete="off" spellcheck="false" placeholder="${st.ph}" value="${esc(st.k === 'account_username' ? val || '' : '')}">
+    <div class="btns"><button class="btn" id="obSkip">${st.optional ? 'Skip' : 'Later'}</button><button class="btn primary" id="obNext">${ico('check')}Save</button></div>`;
+  if (st.type === 'keys') body = `<div class="keys">${[1,2,3,4,5].map(k => `<button class="key${k === (val || 0) ? ' on' : ''}" data-key="${k}">${k}</button>`).join('')}</div>`;
+  if (st.type === 'cast') body = `<div class="capture"><div class="cring" id="cring">${ico('target')}<svg class="prog" viewBox="0 0 108 108"><circle cx="54" cy="54" r="50"/></svg></div>
+    <div class="btns"><button class="btn" id="obSkip">Later</button><button class="btn primary" id="obCap">${ico('pointer')}Capture</button></div></div>`;
+  sheet.innerHTML = `${OB.i ? `<button class="obback" id="obBack" aria-label="Back">${ico('back')}</button>` : ''}<div class="obbar"><b style="width:${100*OB.i/OB_STEPS.length}%"></b></div>
+    <div class="obstep"><div class="badge">${ico(st.icon)}</div><h2 id="obTitle">${st.q}</h2>${st.sub ? `<p class="sub">${st.sub}</p>` : ''}${body}</div>`;
+  if (st.type === 'input') setTimeout(() => $('obIn')?.focus(), 60);
 }
-
+function obAnswer(v){
+  const st = OB_STEPS[OB.i]; S.config = S.config || {}; S.config[st.k] = v;
+  if (st.k === 'overnight') { S.config.auto_idle = v; setting('auto_idle', v); }
+  if (st.k === 'webhook') S.config.webhook = true;
+  if (st.k !== 'cast_point') setting(st.k, v);
+  OB.i += st.k === 'spawn_gamepass' && v === false ? 1 : 1; obShow();
+}
+function drawOnboarding(s){
+  const veil = $('veil');
+  if (OB.active) return;
+  if ((s.config || {}).spawn_gamepass == null && !OB.done) { OB.active = true; OB.i = 0; veil.classList.add('on'); obShow(); }
+}
 function draw(s){
   S = s; drawHero(s); drawKpis(s); drawCatch(s); drawFeed(s); drawChecks(s);
   if (view === 'items') drawItems(s); if (view === 'log') drawLog(s); if (view === 'settings') drawSettings(s);
@@ -625,7 +872,14 @@ function show(v){
   if (v === 'lab' && !$('labFrame').src) $('labFrame').src = BOOT.sample ? (BOOT.labSrc || 'about:blank') : '/rodlab?t=' + encodeURIComponent(BOOT.token);
   if (S) draw(S);
 }
-$('modes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b || b.disabled) return; pickMode = b.dataset.m; drawHero(S); });
+$('deck').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (!b || b.disabled || b.dataset.m === pickMode) return; pickMode = b.dataset.m; drawHero(S); });
+function theme(next){ const root = document.documentElement, dark = next ?? !(root.dataset.theme === 'dark' || (!root.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches));
+  root.dataset.theme = dark ? 'dark' : 'light'; $('theme').innerHTML = ico(dark ? 'sun' : 'moon'); if (next === undefined) try { localStorage.setItem('autofish-theme', root.dataset.theme); } catch (e) {}
+  const f = $('labFrame'); try { f.contentDocument && (f.contentDocument.documentElement.dataset.theme = root.dataset.theme); } catch (e) {} }
+$('theme').onclick = () => theme();
+$('labFrame').addEventListener('load', () => { try { $('labFrame').contentDocument.documentElement.dataset.theme = document.documentElement.dataset.theme; } catch (e) {} });
+let savedTheme = null; try { savedTheme = localStorage.getItem('autofish-theme'); } catch (e) {}
+theme(savedTheme !== 'light');
 $('bStart').onclick = e => act({action:'start', mode: pickMode}, e.currentTarget);
 $('bResume').onclick = e => act({action:'resume'}, e.currentTarget);
 $('bPause').onclick = e => act({action:'pause'}, e.currentTarget);
@@ -637,13 +891,23 @@ $('logFilter').addEventListener('click', e => { const b = e.target.closest('butt
 async function setting(key, value){ try { const r = await api('/api/settings', {[key]: value}); if (r.state) draw(r.state); toast('Saved'); } catch (e) { toast(e.message); } }
 document.querySelectorAll('.switch').forEach(sw => sw.onclick = () => { const v = sw.getAttribute('aria-checked') !== 'true'; sw.setAttribute('aria-checked', v); setting(sw.dataset.key, v); });
 $('sUser').addEventListener('change', e => setting('account_username', e.target.value.trim()));
-document.querySelectorAll('.stepper button').forEach(b => b.onclick = () => { const v = Math.min(9, Math.max(1, (+$('sSlot').value || 5) + +b.dataset.step)); $('sSlot').value = v; const o = $('sSlot'); o.classList.remove('bump'); void o.offsetWidth; o.classList.add('bump'); setting('rod_slot', v); });
-$('sheet').addEventListener('click', async e => {
-  const gp = e.target.closest('[data-gp]'); if (gp) return setting('spawn_gamepass', gp.dataset.gp === '1');
-  if (e.target.closest('#obSkip')) { drawOnboarding.skipped = true; toast('Add it later in Settings'); return drawOnboarding(S); }
-  if (e.target.closest('#obSave')) { const v = $('obUser').value.trim(); if (v) setting('account_username', v); }
+$('sHook').addEventListener('change', e => { const v = e.target.value.trim(); if (v) setting('webhook', v); e.target.value = ''; });
+$('sRod').addEventListener('click', e => { const b = e.target.closest('[data-rod]'); if (b) setting('rod', b.dataset.rod); });
+document.querySelectorAll('.stepper button').forEach(b => b.onclick = () => { const v = Math.min(5, Math.max(1, (+$('sSlot').value || 5) + +b.dataset.step)); $('sSlot').value = v; const o = $('sSlot'); o.classList.remove('bump'); void o.offsetWidth; o.classList.add('bump'); setting('rod_slot', v); });
+$('sheet').addEventListener('click', e => {
+  const st = OB_STEPS[OB.i];
+  const o = e.target.closest('[data-o]'); if (o) { o.classList.add('done-burst'); return setTimeout(() => obAnswer(st.opts[+o.dataset.o].v), 180); }
+  const k = e.target.closest('[data-key]'); if (k) { $('sheet').querySelectorAll('.key').forEach(x => x.classList.toggle('on', x === k)); return setTimeout(() => obAnswer(+k.dataset.key), 300); }
+  if (e.target.closest('#obBack')) { OB.i = Math.max(0, OB.i - 1); return obShow(); }
+  if (e.target.closest('#obSkip')) { OB.i++; return obShow(); }
+  if (e.target.closest('#obNext')) { const v = $('obIn').value.trim(); if (v) obAnswer(v); else { OB.i++; obShow(); } return; }
+  if (e.target.closest('#obCap')) { const ring = $('cring'); ring.classList.add('go'); act({action:'capture_cast'});
+    let n = 4; ring.firstChild.outerHTML; const tickDown = () => { if (n === 0) { ring.innerHTML = ico('check'); toast('Cast point saved'); return setTimeout(() => { OB.i++; obShow(); }, 700); }
+      ring.querySelector('.i') && ring.querySelector('.i').remove(); ring.querySelector('b')?.remove(); ring.insertAdjacentHTML('afterbegin', `<b>${n}</b>`); n--; setTimeout(tickDown, 1000); }; tickDown(); return; }
+  if (e.target.closest('#obFinish')) { OB.active = false; OB.done = true; $('veil').classList.remove('on'); draw(S);
+    const rec = document.querySelector('#deck .mc.rec'); if (rec) { pickMode = rec.dataset.m; draw(S); burst(rec, 'var(--accent)'); } }
 });
-$('sheet').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'obUser') $('obSave').click(); });
+$('sheet').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'obIn') $('obNext').click(); });
 
 async function poll(){ try { draw(await api('/api/state')); } catch (e) { $('foot').textContent = 'Reconnecting…'; } }
 show(BOOT.view || 'farm'); addEventListener('resize', () => document.querySelectorAll('.seg').forEach(s => s.querySelector('.glide') && glide(s)));

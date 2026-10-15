@@ -21,6 +21,18 @@ RODS = ('Legendary', 'Rare', 'Uncommon', 'Common')
 RARITY = {'ouwfish': 'Common', 'ouwfwesh': 'Common', 'coral': 'Common', 'seahorse': 'Common',
           'clownfish': 'Uncommon', 'goldenfish': 'Uncommon', 'zebrafish': 'Uncommon',
           'crustadon': 'Legendary', 'krathulon': 'Legendary'}
+# In-game tier of every drop, fish and items, rarest first (user, 2026-10-15). "Ore" is
+# probably a clipped "Mythic Refinement Ore".
+TIERS = ('Impossible', 'Mythic', 'Legendary', 'Rare', 'Uncommon', 'Common')
+ITEM_RARITY = {'Refinement Guard': 'Impossible', 'Lost Shotgun': 'Impossible',
+               'Mythic Refinement Ore': 'Mythic', 'Lost Mask': 'Mythic', 'Lost Outfit': 'Mythic',
+               'Lost Lantern': 'Mythic', 'Lost Cape': 'Mythic', 'Ore': 'Mythic',
+               'Krathulon': 'Legendary', 'Crustadon': 'Legendary', 'Shotgun Schematic': 'Legendary',
+               'Refinement Ore': 'Rare', 'Squid Beanie': 'Rare',
+               'Clown Fish': 'Uncommon', 'Zebra Fish': 'Uncommon', 'Golden Fish': 'Uncommon',
+               'Coral': 'Common', 'Sea Horse': 'Common', 'OuwFish': 'Common', 'OuwFwesh': 'Common',
+               'Metal Scraps': 'Common', 'Silk Thread': 'Common'}
+_TIER_BY_KEY = {''.join(ch for ch in name.lower() if ch.isalnum()): tier for name, tier in ITEM_RARITY.items()}
 # Angler crate trades confirmed by the user on 2026-10-15. Base gold per crate; the
 # 1,580 / 2,070 the user saw included a temporary 2x money boost, which applies to
 # the crate quest only (never to direct merchant sales). The boost burns Mythic
@@ -36,7 +48,7 @@ CRATES_PER_BOOST_MINUTE = 10
 
 
 def crate_multiplier():
-    return BOOST_MULTIPLIER if load_config().get('money_boost', True) else 1
+    return BOOST_MULTIPLIER if load_config().get('money_boost', False) else 1
 # Known rod buffs; editable in config under rod_buffs.
 DEFAULT_BUFFS = {'Legendary': {'enchant': 10, 'fish_luck': 1.5, 'fishing_luck_factor': 1.2, 'bite_speed': 3.0, 'catch_tier': 'Items'},
                  'Rare': {'enchant': 0, 'fish_luck': .25, 'bite_speed': 1.5, 'catch_tier': 'Rare'},
@@ -53,6 +65,11 @@ def enchant_luck(level):
 
 def key_of(name):
     return ''.join(ch for ch in str(name).lower() if ch.isalnum())
+
+
+def item_rarity(name):
+    """Tier of a drop by name, or None when the item is unknown."""
+    return _TIER_BY_KEY.get(key_of(name))
 
 
 def sessions(root=None):
@@ -111,11 +128,13 @@ def session_stats(root, session, now=None):
     # Fishing time = gaps between worker events of under 60 s (pauses and rejoins excluded).
     times = sorted(r.get('at', 0) for r in events)
     active = sum(b-a for a, b in zip(times, times[1:]) if b-a < 60)
-    counts = {}; other = 0; ores = {}
+    counts = {}; other = 0; ores = {}; drops = {}
     for item in result.get('items', []):
         key = key_of(item['name'])
         if key in RARITY: counts[key] = counts.get(key, 0)+item['quantity']
-        else: other += item['quantity']
+        else:
+            other += item['quantity']
+            if item_rarity(item['name']): drops[item['name']] = drops.get(item['name'], 0)+item['quantity']
         if key in ORE_ITEMS: ores[key] = ores.get(key, 0)+item['quantity']
     fish = sum(counts.values())
     direct = sum(PRICES[k]*v for k, v in counts.items())
@@ -126,7 +145,7 @@ def session_stats(root, session, now=None):
     return {'rod': session['rod'], 'started': session['started'], 'ended': session.get('ended'),
             'active_hours': round(hours, 2), 'hooks': hooks,
             'hooks_per_minute': round(hooks/(active/60), 2) if active >= 120 else None,
-            'fish': fish, 'other_items': other, 'counts': counts, 'by_rarity': by_rarity,
+            'fish': fish, 'other_items': other, 'drops': drops, 'counts': counts, 'by_rarity': by_rarity,
             'ores': ores, 'titles': titles_at(root, window['ended']),
             'direct_gold': direct, 'crate': crates,
             'direct_gold_per_hour': round(direct/hours) if hours >= .05 else None,
@@ -164,11 +183,12 @@ def by_rod(root=None, now=None):
     for session in sessions(root):
         s = session_stats(root, session, now)
         row = rows.setdefault(s['rod'], {'rod': s['rod'], 'sessions': 0, 'active_hours': 0., 'hooks': 0,
-                                         'counts': {}, 'other_items': 0, 'ores': {}, 'titles': None})
+                                         'counts': {}, 'other_items': 0, 'drops': {}, 'ores': {}, 'titles': None})
         row['sessions'] += 1; row['active_hours'] += s['active_hours']; row['hooks'] += s['hooks']
         row['other_items'] += s['other_items']
         for k, v in s['counts'].items(): row['counts'][k] = row['counts'].get(k, 0)+v
         for k, v in s['ores'].items(): row['ores'][k] = row['ores'].get(k, 0)+v
+        for k, v in s['drops'].items(): row['drops'][k] = row['drops'].get(k, 0)+v
         row['titles'] = s['titles'] or row['titles']
     saved = load_config().get('rod_buffs') or {}
     buffs = {rod: {**DEFAULT_BUFFS.get(rod, {}), **saved.get(rod, {})} for rod in {*DEFAULT_BUFFS, *saved}}
@@ -209,14 +229,15 @@ def export_data(root=None, now=None):
         pass
     saved = load_config().get('rod_buffs') or {}
     return {'generated': time.strftime('%d %b %H:%M', time.localtime(now)), 'prices': PRICES, 'names': NAMES, 'rarity': RARITY,
+            'tiers': TIERS, 'item_rarity': ITEM_RARITY,
             'crates': {k: {'gold': v['gold'], 'needs': v['needs']} for k, v in CRATES.items()},
-            'boost': {'multiplier': BOOST_MULTIPLIER, 'on': bool(load_config().get('money_boost', True)),
+            'boost': {'multiplier': BOOST_MULTIPLIER, 'on': bool(load_config().get('money_boost', False)),
                       'crates_per_minute': CRATES_PER_BOOST_MINUTE, 'ore_minutes': 1},
             'title_buffs': title_buffs(root),
             'enchant_luck': {str(k): v for k, v in {**ENCHANT_LUCK, **{int(a): b for a, b in (load_config().get('enchant_luck') or {}).items()}}.items()},
             'bait_left': bait, 'bait_hours': bait_hours,
             'rods': [{'rod': r['rod'], 'active_hours': r['active_hours'], 'hooks': r['hooks'], 'fish': r['fish'], 'counts': r['counts'],
-                      'ores': r['ores'], 'titles': r['titles'],
+                      'ores': r['ores'], 'drops': r['drops'], 'titles': r['titles'],
                       'enchant_level': {**DEFAULT_BUFFS.get(r['rod'], {}), **saved.get(r['rod'], {})}.get('enchant', 0)} for r in rods],
             'runs': [{k: s[k] for k in ('rod', 'started', 'active_hours', 'hooks', 'fish', 'counts', 'ores', 'titles')}
                      for s in (session_stats(root, x, now) for x in sessions(root))]}
@@ -236,7 +257,10 @@ def font_faces():
 
 
 def dashboard(data, local=True):
-    """Rod Lab HTML from the shared template. local=True adds a page wrapper and auto-refresh."""
+    """Rod Lab HTML from the shared template. local=True adds a page wrapper and auto-refresh.
+
+    The local page is the simple public view; the published copy (local=False) keeps every chart."""
+    data = {**data, 'advanced': data.get('advanced', not local)}
     body = TEMPLATE.read_text(encoding='utf-8').replace('/*DATA*/', json.dumps(data)).replace('/*FONTS*/', font_faces())
     if not local:
         return body  # the published artifact supplies its own document wrapper

@@ -4,7 +4,8 @@ import re
 KNOWN={'coral':'Coral','silkthread':'Silk Thread','metalscraps':'Metal Scraps','seahorse':'Sea Horse','ouwfwesh':'OuwFwesh','ouwfish':'OuwFish','goldenfish':'Golden Fish','zebrafish':'Zebra Fish','clownfish':'Clown Fish','ore':'Ore',
        'krathulon':'Krathulon','crustadon':'Crustadon','squidbeanie':'Squid Beanie','refinementore':'Refinement Ore',
        'mythicrefinementore':'Mythic Refinement Ore','shotgunschematic':'Shotgun Schematic','lostmask':'Lost Mask',
-       'lostoutfit':'Lost Outfit','lostlantern':'Lost Lantern','lostcape':'Lost Cape','lostshotgun':'Lost Shotgun'}
+       'lostoutfit':'Lost Outfit','lostlantern':'Lost Lantern','lostcape':'Lost Cape','lostshotgun':'Lost Shotgun',
+       'refinementguard':'Refinement Guard'}
 
 
 def inventory_name(raw):
