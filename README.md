@@ -36,7 +36,7 @@ You don't need to know anything about coding. Download, double-click, done.
   <img src="docs/images/app.png" alt="The Autofish app: live status, session timer, mode cards, pace, gold, bait hours left, drops, activity and the last hour" width="100%">
 </p>
 
-Autofish.exe opens one window with everything in it: what the farmer is doing right now, Start / Pause / Stop, a session timer, pace and gold per hour graphs, bait left, your catch by rarity, a live log and a timeline of the last hour. Items shows everything you've collected as a map or a searchable list. It works in light and dark mode and runs offline on your PC.
+Autofish.exe opens one window with everything in it: what the farmer is doing right now, Start / Pause / Stop, a session timer, pace and gold per hour graphs, bait hours left, your best drops, a live log, the last hour in one strip and a banner when the farm needs you. Items shows everything you've collected as a map or a searchable list. It works in light and dark mode and runs offline on your PC.
 
 The **Overlay** button toggles a small translucent card over Roblox with your status, pace, gold, rod and latest catches. Pace is green; Gold / h and Session are gold. The live background is blurred through the translucent card while text stays solid. It appears only while Roblox is in front, lets clicks pass through, and never takes keyboard focus.
 
