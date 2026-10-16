@@ -347,7 +347,8 @@ def render(state, gear=None, scale=1.0, now=None, rarity_of=None):
     rows = [e for e in (s.get('events') or []) if e.get('group') == 'catches'][-5:][::-1]
     if not rows: c.text(PAD_X, y+4, 'Catches show up here', 12, T3)
     for e in rows:
-        name = e.get('text', '')
+        # Catch events read 'Collected Coral X1'; the card shows just the item name.
+        name = re.sub(r'\s+[xX×]\s*\d+$', '', re.sub(r'^collected\s+', '', e.get('text', ''), flags=re.I))
         r = (rarity_of(name) if rarity_of else None) or 'Common'
         if r == 'Impossible': c.rect((PAD_X-6, y, PAD_X+INNER+6, y+22), (255, 90, 138, 41), 7)
         c.text(PAD_X, y+5, time.strftime('%H:%M', time.localtime(e.get('at', 0))), 11, T3, 400, mono=True)
