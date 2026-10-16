@@ -327,7 +327,7 @@ footer a{color:inherit}
 .mc .face{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--mc) 14%,transparent);color:var(--mc);transition:transform .5s var(--spring)}
 .mc .face .i{width:22px;height:22px}
 .mc:hover .face{transform:rotate(-8deg) scale(1.08)}
-.mc[aria-checked="true"] .face{background:var(--mc);color:#fff}
+.mc[aria-checked="true"] .face{background:color-mix(in srgb,var(--mc) 24%,transparent);color:var(--mc);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mc) 40%,transparent)}
 .mc b{font:600 15px/1.2 var(--sans);letter-spacing:-.01em}
 .mc p{margin:0;font-size:12.5px;color:var(--text-2);line-height:1.35}
 .mc .ab{display:flex;gap:4px;margin-top:auto}
@@ -836,7 +836,7 @@ const MODES = [
   {k:'assist', name:'Minigame', icon:'pad', c:'var(--common)', line:'You cast and collect. It wins the minigame.', does:['reel']},
   {k:'spot', name:'Fish here', icon:'target', c:'var(--uncommon)', line:'You aim. It clicks, reels and collects.', does:['reel','cast','collect']},
   {k:'here', name:'Farm here', icon:'pin', c:'var(--accent)', line:'Stand at the water. It farms and fixes hiccups.', does:['reel','cast','collect','fix']},
-  {k:'full', name:'Full farmer', icon:'crown', c:'color-mix(in srgb,var(--legendary) 55%,var(--text-3))', line:'All night. Rejoins and walks back if kicked.', does:['reel','cast','collect','fix','rejoin'], pass:true}];
+  {k:'full', name:'Full farmer', icon:'crown', c:'var(--legendary)', line:'All night. Rejoins and walks back if kicked.', does:['reel','cast','collect','fix','rejoin'], pass:true}];
 const ABIL = [['reel','pad','Wins the minigame'],['cast','hook','Casts'],['collect','box','Collects drops'],['fix','wrench','Fixes small problems'],['rejoin','refresh','Rejoins after a disconnect']];
 const RVAR = {Common:'var(--common)', Uncommon:'var(--uncommon)', Rare:'var(--rare)', Legendary:'var(--legendary)', Mythic:'var(--mythic)', Impossible:'var(--impossible)'};
 const RORDER = ['Impossible','Mythic','Legendary','Rare','Uncommon','Common'];
