@@ -176,12 +176,13 @@ def titles_at(root, at):
     return titles
 
 
-def by_rod(root=None, now=None):
+def by_rod(root=None, now=None, stats=None):
     """Combine every session of each rod into one row."""
     root = Path(root or data_directory())
     rows = {}
-    for session in sessions(root):
-        s = session_stats(root, session, now)
+    if stats is None:
+        with run_log.reuse(): stats = [session_stats(root, x, now) for x in sessions(root)]
+    for s in stats:
         row = rows.setdefault(s['rod'], {'rod': s['rod'], 'sessions': 0, 'active_hours': 0., 'hooks': 0,
                                          'counts': {}, 'other_items': 0, 'drops': {}, 'ores': {}, 'titles': None})
         row['sessions'] += 1; row['active_hours'] += s['active_hours']; row['hooks'] += s['hooks']
@@ -219,7 +220,9 @@ LOCAL_REFRESH_SECONDS = 60
 def export_data(root=None, now=None):
     """Everything the Rod Lab dashboard draws, as plain JSON-ready data."""
     root = Path(root or data_directory())
-    rods = by_rod(root, now)
+    # Every session reads the logs; parse each file once and reuse the stats for both views.
+    with run_log.reuse(): runs = [session_stats(root, x, now) for x in sessions(root)]
+    rods = by_rod(root, now, runs)
     bait = bait_hours = None
     try:
         import status_view
@@ -240,7 +243,7 @@ def export_data(root=None, now=None):
                       'ores': r['ores'], 'drops': r['drops'], 'titles': r['titles'],
                       'enchant_level': {**DEFAULT_BUFFS.get(r['rod'], {}), **saved.get(r['rod'], {})}.get('enchant', 0)} for r in rods],
             'runs': [{k: s[k] for k in ('rod', 'started', 'active_hours', 'hooks', 'fish', 'counts', 'ores', 'titles')}
-                     for s in (session_stats(root, x, now) for x in sessions(root))]}
+                     for s in runs]}
 
 
 def font_faces():

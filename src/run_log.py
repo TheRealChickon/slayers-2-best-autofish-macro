@@ -1,4 +1,5 @@
 """Run-scoped views and durable archives, independent of lifetime counters."""
+import contextlib
 import json
 import time
 from pathlib import Path
@@ -35,6 +36,18 @@ def begin(root, resume=False):
 
 
 _RANGES={}
+_BATCH=None  # parsed rows per path while a reuse() block runs
+
+
+@contextlib.contextmanager
+def reuse():
+    """Parse each log file at most once inside the block (one Rod Lab export)."""
+    global _BATCH
+    outer=_BATCH
+    if outer is None:_BATCH={}
+    try:yield
+    finally:
+        if outer is None:_BATCH=None
 
 
 def _parse(path):
@@ -51,7 +64,10 @@ def _parse(path):
 def rows(root, run):
     root=Path(root);start=run.get('started',0);end=run.get('ended') or float('inf')
     result=[]
-    paths=sorted(root.glob('events-*.jsonl'))+[root/'recovery.jsonl',root/'controls.jsonl']
+    if _BATCH is not None and ('paths',str(root)) in _BATCH:paths=_BATCH[('paths',str(root))]
+    else:
+        paths=sorted(root.glob('events-*.jsonl'))+[root/'recovery.jsonl',root/'controls.jsonl']
+        if _BATCH is not None:_BATCH[('paths',str(root))]=paths
     for path in paths:
         # Each file's time range is remembered while the file is unchanged, so files
         # outside the window are skipped without parsing. Rod Lab used to re-parse
@@ -61,7 +77,10 @@ def rows(root, run):
             key=(stat.st_mtime_ns,stat.st_size)
             known=_RANGES.get(str(path))
             if known and known[0]==key and (known[2]<start or known[1]>end):continue
-            parsed=_parse(path)
+            parsed=_BATCH.get(str(path)) if _BATCH is not None else None
+            if parsed is None:
+                parsed=_parse(path)
+                if _BATCH is not None:_BATCH[str(path)]=parsed
             times=[row.get('at',0) for row in parsed]
             _RANGES[str(path)]=(key,min(times,default=float('inf')),max(times,default=float('-inf')))
             for row in parsed:
