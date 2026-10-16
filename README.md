@@ -33,7 +33,7 @@ You don't need to know anything about coding. Download, double-click, done.
 ## The app
 
 <p align="center">
-  <img src="docs/images/app.png" alt="The Autofish app: live status, session timer, pace and gold graphs, bait, catch by rarity, activity and the last hour" width="100%">
+  <img src="docs/images/app.png" alt="The Autofish app: live status, session timer, mode cards, pace, gold, bait hours left, drops, activity and the last hour" width="100%">
 </p>
 
 Autofish.exe opens one window with everything in it: what the farmer is doing right now, Start / Pause / Stop, a session timer, pace and gold per hour graphs, bait left, your catch by rarity, a live log and a timeline of the last hour. Items shows everything you've collected as a map or a searchable list. It works in light and dark mode and runs offline on your PC.
