@@ -326,6 +326,20 @@ def url_for(info):
     return f"http://127.0.0.1:{info['port']}/?t={info['token']}"
 
 
+def tray_wanted():
+    """Closing the window hides Autofish to the tray only while Start when idle is on."""
+    try: return bool(load_config().get('overnight_auto_enable_idle')) and os.name == 'nt'
+    except Exception: return False
+
+
+def start_tray(on_open, on_quit):
+    try:
+        from tray import Tray
+        return Tray(ROOT/'assets'/'fishing.ico', 'Autofish: start when idle is on', on_open, on_quit).start()
+    except Exception:
+        return None
+
+
 def main():
     existing = running_window()
     if existing:
@@ -339,15 +353,28 @@ def main():
     path.write_text(json.dumps(info), encoding='utf-8')
     threading.Thread(target=server.serve_forever, daemon=True).start()
     browser = open_window(url_for(info))
+    tray, wanted = None, {'open': False, 'quit': False}
     try:
         while True:
             time.sleep(1)
-            if browser is not None:
-                # Edge exits when its last app window closes; other windows may still be polling.
-                if browser.poll() is not None and time.time()-server.last_seen['at'] > 10: break
-            elif time.time()-server.last_seen['at'] > IDLE_EXIT_SECONDS:
-                break
+            if wanted['quit']: break
+            if wanted['open']:
+                wanted['open'] = False
+                if tray is not None: tray.stop(); tray = None
+                browser = open_window(url_for(info))
+                server.last_seen['at'] = time.time()
+                continue
+            closed = (browser.poll() is not None and time.time()-server.last_seen['at'] > 10) if browser is not None \
+                else time.time()-server.last_seen['at'] > IDLE_EXIT_SECONDS
+            if not closed or tray is not None: continue
+            # With Start when idle on, closing the window keeps Autofish in the tray so the
+            # idle start can still happen; with it off, closing the window quits as before.
+            if tray_wanted():
+                tray = start_tray(lambda: wanted.__setitem__('open', True), lambda: wanted.__setitem__('quit', True))
+                if tray is not None: continue
+            break
     finally:
+        if tray is not None: tray.stop()
         if OVERLAY is not None: OVERLAY.stop()
         server.shutdown()
         try:
