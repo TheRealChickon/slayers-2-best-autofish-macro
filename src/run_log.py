@@ -1,5 +1,6 @@
 """Run-scoped views and durable archives, independent of lifetime counters."""
 import json
+import re
 import time
 from pathlib import Path
 from discord_hourly import atomic_json, read_json
@@ -39,6 +40,14 @@ def rows(root, run):
     result=[]
     paths=sorted(root.glob('events-*.jsonl'))+[root/'recovery.jsonl',root/'controls.jsonl']
     for path in paths:
+        # Skip whole log files outside the window: an events file cannot hold rows
+        # older than the time in its name or newer than its last write. Without this,
+        # Rod Lab re-parsed every log (35 MB, 1,000+ files) once per rod session.
+        try:
+            if path.stat().st_mtime<start-60:continue
+            stamp=re.search(r'(\d{8}-\d{6})',path.name)
+            if stamp and path.name.startswith('events-') and time.mktime(time.strptime(stamp.group(1),'%Y%m%d-%H%M%S'))>end+60:continue
+        except (OSError,ValueError):pass
         try:
             with path.open('rb') as stream:
                 for line in stream:
