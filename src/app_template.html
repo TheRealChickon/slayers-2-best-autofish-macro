@@ -32,6 +32,7 @@
   --shadow:none; color-scheme:dark}
 *{box-sizing:border-box}
 html,body{height:100%}
+html{scrollbar-width:none}html::-webkit-scrollbar,body::-webkit-scrollbar{width:0;height:0;display:none}
 body{background:var(--bg);color:var(--text-1);font:14px/1.5 var(--sans);margin:0;-webkit-font-smoothing:antialiased}
 .page{max-width:1200px;margin:0 auto;padding:20px 16px 48px;display:grid;gap:16px}
 @media (min-width:720px){.page{padding-inline:28px}}
@@ -123,7 +124,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 ::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--text-3) 35%,transparent);border-radius:99px;border:2px solid transparent;background-clip:padding-box}
 ::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--text-3) 60%,transparent);background-clip:padding-box}
 ::-webkit-scrollbar-corner{background:transparent}
-.feed{display:grid;gap:0;max-height:318px;overflow:auto;margin:0 -18px;padding:0 18px;scrollbar-width:thin}
+.feed{display:grid;gap:0;max-height:212px;overflow:auto;margin:0 -18px;padding:0 18px;scrollbar-width:thin}
 .feed.tall{max-height:none}
 .ev{display:grid;grid-template-columns:52px 10px minmax(0,1fr);gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
 .ev:last-child{border-bottom:0}
@@ -669,10 +670,12 @@ footer a{color:inherit}
 .mc .tag{color:var(--text-3)}
 @media (max-width:820px){.deck{grid-template-columns:repeat(2,minmax(0,1fr))}.mc[aria-checked="true"]{grid-column:1/-1}}
 .drops{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.dt{position:relative;border-radius:16px;padding:14px 16px;min-width:0;background:color-mix(in srgb,var(--rc) 13%,var(--surface));border:1px solid color-mix(in srgb,var(--rc) 35%,transparent);animation:obin .5s var(--spring) backwards}
+.dt{position:relative;border-radius:14px;padding:10px 13px;min-width:0;background:color-mix(in srgb,var(--rc) 13%,var(--surface));border:1px solid color-mix(in srgb,var(--rc) 35%,transparent);animation:obin .5s var(--spring) backwards}
 .dt .t{font:700 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--rc)}
 .dt .n{font-size:14px;font-weight:550;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dt .q{font:700 30px/1 var(--sans);letter-spacing:-.03em;margin-top:10px}
+.dt .q{font:700 22px/1 var(--sans);letter-spacing:-.03em;margin-top:6px}
+.dt.more{cursor:pointer;display:flex;flex-direction:column;justify-content:center;--rc:var(--text-3)}
+.dt.more .q{margin-top:2px}
 .dt.imp{background:linear-gradient(135deg,color-mix(in srgb,var(--impossible) 18%,var(--surface)),color-mix(in srgb,#ff9a3c 10%,var(--surface)))}
 .dt.imp .t{background:linear-gradient(90deg,var(--impossible),#ff9a3c);-webkit-background-clip:text;background-clip:text;color:transparent}
 .dt .plus1{position:absolute;top:10px;right:12px;font:700 11.5px var(--sans);color:var(--rc);opacity:0}
@@ -680,7 +683,7 @@ footer a{color:inherit}
 .dt.hit .q{animation:bump .5s var(--spring)}
 @keyframes dplus{0%{opacity:0;transform:translateY(5px)}10%,75%{opacity:1;transform:none}100%{opacity:0}}
 .dnone{grid-column:1/-1;color:var(--text-3);font-size:13.5px;padding:18px 0}
-.restbar{display:flex;height:10px;gap:3px;border-radius:6px;overflow:hidden;margin-top:18px;background:var(--border)}
+.restbar{display:flex;height:8px;gap:3px;border-radius:6px;overflow:hidden;margin-top:12px;background:var(--border)}
 .restbar i{background:var(--uncommon);transition:flex-grow .9s var(--spring)} .restbar i.c{background:var(--common);opacity:.55}
 .restkey{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:9px;font-size:13px;color:var(--text-2)}
 .restkey b{font-weight:600;color:var(--text-1)} .restkey b.u{color:var(--uncommon)} .restkey b+b{margin-left:10px}
@@ -708,6 +711,53 @@ footer a{color:inherit}
 .alert b{display:block;font:600 15.5px var(--sans)} .alert small{display:block;color:var(--text-2);font-size:13.5px;margin-top:2px}
 .alert .later{margin-left:auto;flex:none}
 @keyframes alin{from{transform:translateY(-10px) scale(.97);opacity:0}}
+/* ===== Farm tab fits the window (Sami 2026-10-16: no scrolling on the first tab) ===== */
+.page{padding-bottom:16px}
+.view{gap:12px}
+.hero{padding:16px 20px;gap:14px}
+.hero .checks{padding-top:10px}
+.deck{padding-top:12px;gap:12px}
+.mc{min-height:108px;padding:14px 14px;border-radius:20px;gap:10px}
+.mc .shape{width:52px;height:52px}
+.mc .shape>.i{width:24px;height:24px}
+.mc[aria-checked="true"]{padding:14px 20px;gap:16px;border-radius:22px}
+.mc[aria-checked="true"] .shape{width:78px;height:78px}
+.mc[aria-checked="true"] .shape>.i{width:34px;height:34px}
+.mc[aria-checked="true"] b{font-size:21px}
+.kpi{padding:12px 16px}
+.kpi .v{font-size:24px;margin-top:3px}
+.kpi .spark{top:30px;height:34px}
+#v-farm .card .body{padding-top:10px;padding-bottom:14px}
+#v-farm .card header{padding-top:12px;padding-bottom:0}
+/* status pills share the title row on wide windows; drop tiles one line shorter; no inner scrollbars */
+@media (min-width:1100px){.card.hero{grid-template-columns:auto minmax(0,1fr) auto}
+  .hero .state{grid-column:1;grid-row:1} .hero .checks{grid-column:2;grid-row:1;border-top:0;padding-top:0;margin-top:0;justify-content:flex-start;align-self:center}
+  .hero .ctl{grid-column:3;grid-row:1} .hero .deck{grid-row:2}}
+.dt .t{display:none}
+.dt .n{color:color-mix(in srgb,var(--rc) 70%,var(--text-1));margin-top:0}
+.dt.imp .n{color:var(--impossible)}
+.dt.more .n{color:var(--text-2)}
+#v-farm .feed{max-height:176px;scrollbar-width:none}
+#v-farm .feed::-webkit-scrollbar{display:none}
+.tl1 .c{height:20px}
+.page{padding-top:10px}
+.kpi{padding:10px 16px}.kpi .v{font-size:22px}
+#v-farm .feed{max-height:160px}
+.tlx{margin-top:5px}
+.page:has(#v-farm.on)>footer{display:none}
+/* The Farm tab is exactly one window tall: Drops and Activity take the space that is left. */
+@media (min-height:640px) and (min-width:821px){
+  /* Fills the window; on short windows Drops keeps room for two rows and the page scrolls with no visible bar. */
+  .page:has(#v-farm.on){min-height:100vh;box-sizing:border-box;grid-template-rows:auto 1fr}
+  #v-farm.on{display:flex;flex-direction:column;min-height:0}
+  #v-farm .grid{flex:1 1 0;min-height:240px}
+  #v-farm .grid>.card{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  #v-farm .grid>.card>.body{flex:1;min-height:0;overflow:hidden}
+  #v-farm .feed{max-height:none;height:100%}}
+@media (min-height:640px) and (min-width:821px){
+  #catch{display:flex;flex-direction:column;height:100%}
+  #catch .drops{flex:1 1 auto;min-height:0;overflow:hidden;align-content:start}}
+.dt{padding:8px 12px}.dt .q{font-size:20px;margin-top:4px}.drops{gap:8px}.restbar{margin-top:10px}.restkey{margin-top:6px}
 </style>
 </head>
 <body>
@@ -1054,9 +1104,14 @@ function drawSparks(s){
 
 const ITEM_RARITY = BOOT.rarity || {};
 const rarityOf = name => ITEM_RARITY[name] || Object.entries(ITEM_RARITY).find(([k]) => new RegExp('\\b' + k + '\\b', 'i').test(name))?.[1];
-let lastCounts2 = null;
+let lastCounts2 = null, dropMax = 6, lastCatchState = null;
+// Two rows of tiles when they fit, one row on short windows; never a clipped tile.
+function fitDrops(){ const d = $('catch').querySelector('.drops'); if (!d || !lastCatchState) return;
+  if (d.scrollHeight > d.clientHeight + 2 && dropMax > 3) { dropMax = 3; $('catch')._k = null; drawCatch(lastCatchState); } }
+addEventListener('resize', () => { if (dropMax !== 6 && lastCatchState) { dropMax = 6; $('catch')._k = null; drawCatch(lastCatchState); } requestAnimationFrame(fitDrops); });
 // Drops (2.3): Rare and better as tiles, rarest first; uncommons and commons as one bar.
 function drawCatch(s){
+  lastCatchState = s;
   const rows = (s.items || []).map(r => ({...r, rarity: r.rarity || rarityOf(r.item)})).filter(r => r.quantity > 0 && r.rarity)
     .sort((a, b) => RORDER.indexOf(a.rarity) - RORDER.indexOf(b.rarity) || b.quantity - a.quantity);
   const total = rows.reduce((a, r) => a + r.quantity, 0); $('catchCount').textContent = total ? fmt(total) + ' total' : '';
@@ -1067,12 +1122,16 @@ function drawCatch(s){
   lastCounts2 = Object.fromEntries(rows.map(r => [r.item, r.quantity]));
   const key = rows.map(r => r.item + r.quantity).join(',');
   if (box._k === key) return; box._k = key;
-  const tiles = rare.length ? rare.map(r => `<div class="dt${r.rarity === 'Impossible' ? ' imp' : ''}${hits.has(r.item) ? ' hit' : ''}" data-i="${esc(r.item)}" style="--rc:${RVAR[r.rarity]}" title="${esc(r.item)}: ${fmt(r.quantity)}">
+  // Two rows of tiles at most so the Farm tab never needs scrolling; the rest open in Items.
+  const MAXT = dropMax, shown = rare.length > MAXT ? rare.slice(0, MAXT - 1) : rare, more = rare.slice(shown.length);
+  const tiles = rare.length ? shown.map(r => `<div class="dt${r.rarity === 'Impossible' ? ' imp' : ''}${hits.has(r.item) ? ' hit' : ''}" data-i="${esc(r.item)}" style="--rc:${RVAR[r.rarity]}" title="${esc(r.item)}: ${fmt(r.quantity)}">
       <span class="plus1">+1</span><div class="t">${r.rarity}</div><div class="n">${esc(r.item)}</div><div class="q num">${fmt(r.quantity)}</div></div>`).join('')
+      + (more.length ? `<div class="dt more" id="moreDrops" title="${esc(more.map(r => r.item + ': ' + fmt(r.quantity)).join(', '))}"><div class="n">+${more.length} more</div><div class="q num">${fmt(more.reduce((a, r) => a + r.quantity, 0))}</div></div>` : '')
     : `<div class="dnone">No rare drops yet</div>`;
   box.innerHTML = `<div class="drops">${tiles}</div>
     <div class="restbar">${unc ? `<i style="flex:${unc}"></i>` : ''}${com ? `<i class="c" style="flex:${com}"></i>` : ''}</div>
     <div class="restkey"><span><b class="u num">${fmt(unc)}</b> uncommon <b class="num">${fmt(com)}</b> common</span><a role="button" tabindex="0" id="openItems">Open Items${ico('chev', 'r')}</a></div>`;
+  requestAnimationFrame(fitDrops);
   hits.forEach(name => { const t = box.querySelector(`.dt[data-i="${CSS.escape(name)}"]`); if (t) burst(t, getComputedStyle(t).getPropertyValue('--rc')); });
 }
 function burst(el, color){
@@ -1367,7 +1426,7 @@ function show(v){
 }
 $('alert').addEventListener('click', e => { const b = e.target.closest('.later'); if (!b) return; alertHidden = b.dataset.k; drawAlert(S); });
 $('tlMore').addEventListener('click', () => { tlOpen = !tlOpen; try { localStorage.setItem('autofish-tl-rows', tlOpen ? '1' : '0'); } catch (e) {} $('timeline')._h = null; drawTimeline(S); });
-$('catch').addEventListener('click', e => { if (e.target.closest('#openItems')) show('items'); });
+$('catch').addEventListener('click', e => { if (e.target.closest('#openItems,#moreDrops')) show('items'); });
 $('catch').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest('#openItems')) show('items'); });
 $('deck').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (!b || b.disabled || b.dataset.m === pickMode) return; pickMode = b.dataset.m; drawHero(S); });
 function theme(next){ const root = document.documentElement, dark = next ?? !(root.dataset.theme === 'dark' || (!root.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches));

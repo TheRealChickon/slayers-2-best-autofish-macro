@@ -170,3 +170,14 @@ class OverlayPlacement(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TrayWhenIdle(unittest.TestCase):
+    def test_tray_only_while_start_when_idle_is_on(self):
+        import os
+        from unittest.mock import patch
+        import app_window
+        with patch.object(app_window, 'load_config', return_value={'overnight_auto_enable_idle': True}):
+            self.assertEqual(app_window.tray_wanted(), os.name == 'nt')
+        with patch.object(app_window, 'load_config', return_value={'overnight_auto_enable_idle': False}):
+            self.assertFalse(app_window.tray_wanted())
