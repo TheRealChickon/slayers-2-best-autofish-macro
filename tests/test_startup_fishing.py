@@ -45,7 +45,7 @@ class CurrentFishingStartup(unittest.TestCase):
     def test_existing_world_ignores_startup_rejoin_and_keeps_its_position(self):
         driver,clock,scene=self.driver()
         result=self.run_recovery(driver,clock,scene,force_menu=True,prefer_current=True)
-        self.assertEqual(result,'current_world');self.assertGreaterEqual(clock[0],3)
+        self.assertEqual(result,'current_world');self.assertGreaterEqual(clock[0],1.5)
         driver.click.assert_not_called();driver.key.assert_not_called();driver.equip_rod.assert_not_called()
         driver.backstep_after_join.assert_not_called();driver.launch.assert_not_called()
 

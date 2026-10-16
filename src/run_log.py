@@ -1,4 +1,5 @@
 """Run-scoped views and durable archives, independent of lifetime counters."""
+import contextlib
 import json
 import time
 from pathlib import Path
@@ -24,25 +25,66 @@ def begin(root, resume=False):
         if old:
             finish(root,old.get('reason','Previous run ended'),old.get('ended') or time.time(),old)
         started=time.time()
+        # Lifetime fishing seconds at the start, so views can show this run's own time.
+        active=(read_json(root/'totals.json') or {}).get('active_seconds')
         row={'id':time.strftime('%Y%m%d-%H%M%S',time.localtime(started)),
-             'started':started,'ended':None,'reason':'','legacy':False}
+             'started':started,'ended':None,'reason':'','legacy':False,
+             **({'active_at_start':active} if isinstance(active,(int,float)) else {})}
     directory=root/'runs'/row['id'];directory.mkdir(parents=True,exist_ok=True)
     atomic_json(directory/'run.json',row);atomic_json(root/'current-run.json',row)
     return row
 
 
+_RANGES={}
+_BATCH=None  # parsed rows per path while a reuse() block runs
+
+
+@contextlib.contextmanager
+def reuse():
+    """Parse each log file at most once inside the block (one Rod Lab export)."""
+    global _BATCH
+    outer=_BATCH
+    if outer is None:_BATCH={}
+    try:yield
+    finally:
+        if outer is None:_BATCH=None
+
+
+def _parse(path):
+    parsed=[]
+    with path.open('rb') as stream:
+        for line in stream:
+            if not line.endswith(b'\n'):continue
+            try:row=json.loads(line)
+            except ValueError:continue
+            parsed.append(row)
+    return parsed
+
+
 def rows(root, run):
     root=Path(root);start=run.get('started',0);end=run.get('ended') or float('inf')
     result=[]
-    paths=sorted(root.glob('events-*.jsonl'))+[root/'recovery.jsonl',root/'controls.jsonl']
+    if _BATCH is not None and ('paths',str(root)) in _BATCH:paths=_BATCH[('paths',str(root))]
+    else:
+        paths=sorted(root.glob('events-*.jsonl'))+[root/'recovery.jsonl',root/'controls.jsonl']
+        if _BATCH is not None:_BATCH[('paths',str(root))]=paths
     for path in paths:
+        # Each file's time range is remembered while the file is unchanged, so files
+        # outside the window are skipped without parsing. Rod Lab used to re-parse
+        # every log (35 MB, 1,000+ files) once per rod session.
         try:
-            with path.open('rb') as stream:
-                for line in stream:
-                    if not line.endswith(b'\n'):continue
-                    try:row=json.loads(line)
-                    except ValueError:continue
-                    if start<=row.get('at',0)<=end:result.append({**row,'source':path.name})
+            stat=path.stat()
+            key=(stat.st_mtime_ns,stat.st_size)
+            known=_RANGES.get(str(path))
+            if known and known[0]==key and (known[2]<start or known[1]>end):continue
+            parsed=_BATCH.get(str(path)) if _BATCH is not None else None
+            if parsed is None:
+                parsed=_parse(path)
+                if _BATCH is not None:_BATCH[str(path)]=parsed
+            times=[row.get('at',0) for row in parsed]
+            _RANGES[str(path)]=(key,min(times,default=float('inf')),max(times,default=float('-inf')))
+            for row in parsed:
+                if start<=row.get('at',0)<=end:result.append({**row,'source':path.name})
         except OSError:continue
     return sorted(result,key=lambda row:row.get('at',0))
 

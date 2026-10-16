@@ -26,7 +26,9 @@ class MenuPacer:
             self.kind=kind;self.target=target;self.since=now;self.samples=1
         else:self.samples+=1
 
-    def ready(self,action,now,stable_seconds=.6):
+    def ready(self,action,now,stable_seconds=.3):
+        # Two matching observations already prove the screen settled; 0.3 s (was 0.6 s)
+        # removes dead time before menu clicks without acting on a half-drawn frame.
         return (self.samples>=2 and now-self.since>=stable_seconds
                 and now>=self.retry_at.get(action,0)
                 and (self.kind not in ('world_selection','private_join') or now>=self.join_grace_until))

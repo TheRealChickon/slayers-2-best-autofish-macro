@@ -8,13 +8,13 @@
   --spring:cubic-bezier(.34,1.56,.64,1);
   --line:rgba(255,255,255,.09);
   --t1:#f3f5f8; --t2:rgba(232,237,245,.62); --t3:rgba(232,237,245,.38);
-  --amber:#ffc64b; --green:#75dcab;
+  --amber:#e7a928;
   --imp1:#ff5a8a; --imp2:#ff9a3c; --myth:#b47cf2; --leg:#d69a12; --rare:#22b5c9; --unc:#3987e5; --com:rgba(232,237,245,.72);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;background:transparent}
 body{font-family:Geist,system-ui,sans-serif;color:var(--t1);-webkit-font-smoothing:antialiased;font-feature-settings:"tnum" 1;user-select:none;cursor:default}
-.card{position:relative;height:100%;border-radius:18px;border:1px solid var(--line);background:linear-gradient(180deg,rgba(28,42,53,.68),rgba(31,28,43,.68));
+.card{position:relative;height:100%;border-radius:18px;border:1px solid var(--line);background:linear-gradient(180deg,rgba(23,26,33,.9),rgba(17,19,24,.92));
   padding:12px 14px 13px;display:flex;flex-direction:column;gap:11px;overflow:hidden}
 svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none;display:block}
 .glass{background:var(--glass);backdrop-filter:blur(18px) saturate(150%);-webkit-backdrop-filter:blur(18px) saturate(150%);
@@ -23,8 +23,6 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 body:not([data-v="A"]) .ov-A, body:not([data-v="B"]) .ov-B, body:not([data-v="C"]) .ov-C{opacity:0;transform:scale(.92);pointer-events:none}
 .mono{font-family:'Geist Mono',ui-monospace,monospace}
 
-#vPace{color:var(--green)}
-#vGold,#vTot{color:var(--amber)}
 /* ---------- state block ---------- */
 .st{display:flex;align-items:center;gap:11px;min-width:0}
 .st-ic{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.06);display:grid;place-items:center;flex:none}
