@@ -632,6 +632,82 @@ footer a{color:inherit}
 .itbl td.empty{text-align:center;height:120px;color:var(--text-3)}
 
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+
+/* ===== 2.3: mode picker B1, drops, one-strip last hour, attention banner ===== */
+.mc{--mink:#fff}
+.mc[data-m="assist"]{--mc:#3f74b8} .mc[data-m="spot"]{--mc:#2a8591} .mc[data-m="here"]{--mc:#7a5cb5} .mc[data-m="full"]{--mc:#97742c}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .mc{--mink:#15151a}
+  :root:not([data-theme="light"]) .mc[data-m="assist"]{--mc:#6f9fd8} :root:not([data-theme="light"]) .mc[data-m="spot"]{--mc:#5fb3be}
+  :root:not([data-theme="light"]) .mc[data-m="here"]{--mc:#a78fd0} :root:not([data-theme="light"]) .mc[data-m="full"]{--mc:#b8964a}}
+:root[data-theme="dark"] .mc{--mink:#15151a}
+:root[data-theme="dark"] .mc[data-m="assist"]{--mc:#6f9fd8} :root[data-theme="dark"] .mc[data-m="spot"]{--mc:#5fb3be}
+:root[data-theme="dark"] .mc[data-m="here"]{--mc:#a78fd0} :root[data-theme="dark"] .mc[data-m="full"]{--mc:#b8964a}
+.deck{grid-template-columns:var(--cols,repeat(4,minmax(0,1fr)));gap:14px;transition:grid-template-columns .5s var(--ease)}
+.mc{min-height:150px;padding:20px 18px;border-radius:24px;background:var(--raised);border:1px solid var(--border-strong);flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:center;align-content:center;gap:12px;text-align:center}
+.mc .txt{display:grid;gap:4px;min-width:0;width:100%}
+.mc[aria-checked="true"]{flex-wrap:nowrap;justify-content:flex-start;text-align:left;gap:20px;padding:22px 24px;border-radius:28px;background:color-mix(in srgb,var(--mc) 7%,var(--surface));
+  border:1.5px solid color-mix(in srgb,var(--mc) 45%,transparent);box-shadow:none}
+.mc[aria-checked="true"] .txt{width:auto}
+.deck.live .mc:not([aria-checked="true"]){opacity:1}
+.mc .shape{position:relative;width:64px;height:64px;flex:none;display:grid;place-items:center;color:var(--mc);transition:width .55s var(--spring),height .55s var(--spring),transform .5s var(--spring)}
+.mc .shape svg.bg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.mc .shape svg.bg path{fill:color-mix(in srgb,var(--mc) 28%,var(--surface));transition:fill .35s}
+.mc .shape>.i{position:relative;width:28px;height:28px;transition:width .55s var(--spring),height .55s var(--spring),color .3s}
+.mc[aria-checked="true"] .shape{width:104px;height:104px;color:var(--mink)}
+.mc[aria-checked="true"] .shape svg.bg path{fill:var(--mc)}
+.mc[aria-checked="true"] .shape>.i{width:44px;height:44px;stroke-width:2.2}
+.mc:hover:not(:disabled) .shape{transform:rotate(-8deg) scale(1.06)}
+.mc[aria-checked="true"] .shape{animation:shpin .6s var(--spring)}
+@keyframes shpin{0%{transform:scale(.7) rotate(-25deg)}100%{transform:none}}
+.mc .st{display:none;font:700 12px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--mc)}
+.mc[aria-checked="true"] .st{display:block}
+.mc b{font:600 16px/1.2 var(--sans)}
+.mc[aria-checked="true"] b{font:700 24px/1.15 var(--sans);letter-spacing:-.02em}
+.mc p{display:none;font-size:14px;line-height:1.45}
+.mc[aria-checked="true"] p{display:block}
+.mc .tick,.mc .ab{display:none}
+.mc .tag{color:var(--text-3)}
+@media (max-width:820px){.deck{grid-template-columns:repeat(2,minmax(0,1fr))}.mc[aria-checked="true"]{grid-column:1/-1}}
+.drops{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.dt{position:relative;border-radius:16px;padding:14px 16px;min-width:0;background:color-mix(in srgb,var(--rc) 13%,var(--surface));border:1px solid color-mix(in srgb,var(--rc) 35%,transparent);animation:obin .5s var(--spring) backwards}
+.dt .t{font:700 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--rc)}
+.dt .n{font-size:14px;font-weight:550;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dt .q{font:700 30px/1 var(--sans);letter-spacing:-.03em;margin-top:10px}
+.dt.imp{background:linear-gradient(135deg,color-mix(in srgb,var(--impossible) 18%,var(--surface)),color-mix(in srgb,#ff9a3c 10%,var(--surface)))}
+.dt.imp .t{background:linear-gradient(90deg,var(--impossible),#ff9a3c);-webkit-background-clip:text;background-clip:text;color:transparent}
+.dt .plus1{position:absolute;top:10px;right:12px;font:700 11.5px var(--sans);color:var(--rc);opacity:0}
+.dt.hit .plus1{animation:dplus 4s var(--ease) forwards}
+.dt.hit .q{animation:bump .5s var(--spring)}
+@keyframes dplus{0%{opacity:0;transform:translateY(5px)}10%,75%{opacity:1;transform:none}100%{opacity:0}}
+.dnone{grid-column:1/-1;color:var(--text-3);font-size:13.5px;padding:18px 0}
+.restbar{display:flex;height:10px;gap:3px;border-radius:6px;overflow:hidden;margin-top:18px;background:var(--border)}
+.restbar i{background:var(--uncommon);transition:flex-grow .9s var(--spring)} .restbar i.c{background:var(--common);opacity:.55}
+.restkey{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:9px;font-size:13px;color:var(--text-2)}
+.restkey b{font-weight:600;color:var(--text-1)} .restkey b.u{color:var(--uncommon)} .restkey b+b{margin-left:10px}
+.restkey a{color:var(--accent);cursor:pointer;display:inline-flex;align-items:center;gap:2px}
+.restkey a .i{width:14px;height:14px;transform:rotate(-90deg)}
+.tlsum{margin-left:auto;display:flex;gap:16px;align-items:center;font-size:13px;color:var(--text-2);align-self:center}
+.tlsum .p{color:var(--warn)}
+.card>header:has(.tlsum){align-items:center}
+.tlmore{display:inline-flex;align-items:center;gap:6px}
+.tlmore .i{width:14px;height:14px;transition:transform .45s var(--spring)}
+.tlmore[aria-expanded="true"] .i{transform:rotate(180deg)}
+.tl1{display:flex;gap:3px}
+.tl1 .c{flex:1;min-width:0;height:30px;border-radius:5px;background:var(--border-strong);animation:bin .5s var(--spring) backwards}
+.tl1 .c.idle{background:var(--border);opacity:.7}
+.tl1 .c.drop{background:var(--rc)}
+.tl1 .c.imp{background:linear-gradient(180deg,var(--impossible),#ff9a3c);box-shadow:0 0 10px color-mix(in srgb,var(--impossible) 60%,transparent)}
+.tl1 .c.fix{background:transparent;border:1.5px solid var(--accent)}
+.tl1 .c.prob{background:repeating-linear-gradient(135deg,var(--warn) 0 3px,var(--border) 3px 6px)}
+.tlx{display:flex;justify-content:space-between;margin-top:8px;font:400 12px var(--mono);color:var(--text-3)}
+#timeline{margin-top:14px}
+.kpi .segs+.d{margin-top:8px}
+.alert{display:flex;align-items:center;gap:16px;padding:16px 18px 16px 20px;border-radius:18px;background:color-mix(in srgb,var(--ac) 13%,var(--surface));border:1px solid color-mix(in srgb,var(--ac) 45%,transparent);animation:alin .55s var(--spring)}
+.alert[hidden]{display:none}
+.alert>.i{width:22px;height:22px;flex:none;color:var(--ac)}
+.alert b{display:block;font:600 15.5px var(--sans)} .alert small{display:block;color:var(--text-2);font-size:13.5px;margin-top:2px}
+.alert .later{margin-left:auto;flex:none}
+@keyframes alin{from{transform:translateY(-10px) scale(.97);opacity:0}}
 </style>
 </head>
 <body>
@@ -671,6 +747,7 @@ footer a{color:inherit}
     <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
     <symbol id="i-bobber" viewBox="0 0 24 24"><path d="M12 2v5"/><circle cx="12" cy="13" r="5"/><path d="M7 13h10"/><path d="M2 21c2 0 2-1 4-1s2 1 4 1 2-1 4-1 2 1 4 1 2-1 4-1"/></symbol>
     <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0 5 5L21 13l-8 8-3-3 8-8-1.3-1.3a4 4 0 0 1-5-5L10 2"/><path d="M14.5 4.5a4 4 0 0 0-5.3 5.3L3 16l3 3 6.2-6.2"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
     <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
     <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
     <symbol id="i-play-c" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="m10 9.5 5 2.5-5 2.5z"/></symbol>
@@ -698,6 +775,7 @@ footer a{color:inherit}
 
   <!-- Farm -->
   <section class="view on" id="v-farm">
+    <div class="alert" id="alert" role="status" hidden></div>
     <article class="card hero" id="hero">
       <div class="state">
         <div class="sico" id="sico" aria-hidden="true"></div>
@@ -725,7 +803,7 @@ footer a{color:inherit}
 
     <section class="grid">
       <article class="card">
-        <header><h3><svg class="i"><use href="#i-fish"/></svg>Catch</h3>
+        <header><h3><svg class="i"><use href="#i-box"/></svg>Drops</h3>
           <span class="count" id="catchCount"></span></header>
         <div class="body"><div id="catch"></div></div>
       </article>
@@ -735,8 +813,9 @@ footer a{color:inherit}
       </article>
     </section>
     <article class="card">
-      <header><h3><svg class="i"><use href="#i-clock"/></svg>Last hour</h3><div class="tlkey"><span><i class="b com"></i>Common</span><span><i class="b drop"></i>Drop</span><span><i class="b fix"></i>Fix</span><span><i class="b prob"></i>Problem</span></div></header>
-      <div class="body"><div class="tl" id="timeline"></div></div>
+      <header><h3><svg class="i"><use href="#i-clock"/></svg>Last hour</h3><div class="tlsum" id="tlSum"></div>
+        <button class="btn sm tlmore" id="tlMore" aria-expanded="false">10-min rows<svg class="i"><use href="#i-chev"/></svg></button></header>
+      <div class="body"><div class="tl1" id="tlStrip"></div><div class="tlx" id="tlAxis"></div><div class="tl" id="timeline" hidden></div></div>
     </article>
   </section>
 
@@ -836,7 +915,7 @@ const MODES = [
   {k:'assist', name:'Minigame', icon:'pad', c:'var(--common)', line:'You cast and collect. It wins the minigame.', does:['reel']},
   {k:'spot', name:'Fish here', icon:'target', c:'var(--uncommon)', line:'You aim. It clicks, reels and collects.', does:['reel','cast','collect']},
   {k:'here', name:'Farm here', icon:'pin', c:'var(--accent)', line:'Stand at the water. It farms and fixes hiccups.', does:['reel','cast','collect','fix']},
-  {k:'full', name:'Full farmer', icon:'crown', c:'var(--legendary)', line:'All night. Rejoins and walks back if kicked.', does:['reel','cast','collect','fix','rejoin'], pass:true}];
+  {k:'full', name:'Full farmer', icon:'moon', c:'var(--legendary)', line:'All night. Rejoins and walks back if kicked.', does:['reel','cast','collect','fix','rejoin'], pass:true}];
 const ABIL = [['reel','pad','Wins the minigame'],['cast','hook','Casts'],['collect','box','Collects drops'],['fix','wrench','Fixes small problems'],['rejoin','refresh','Rejoins after a disconnect']];
 const RVAR = {Common:'var(--common)', Uncommon:'var(--uncommon)', Rare:'var(--rare)', Legendary:'var(--legendary)', Mythic:'var(--mythic)', Impossible:'var(--impossible)'};
 const RORDER = ['Impossible','Mythic','Legendary','Rare','Uncommon','Common'];
@@ -907,20 +986,29 @@ function stateIcon(s){
   return /bite|wait/i.test(t) ? 'bobber' : /reel|minigame/i.test(t) ? 'pad' : /cast/i.test(t) ? 'hook' : /collect|claim|pick/i.test(t) ? 'box'
     : /rejoin|recover|fix|retry|stuck/i.test(t) ? 'refresh' : /roblox/i.test(t) ? 'pad' : 'rod';
 }
+// Mode picker (2.3): one big shape per mode; the chosen mode gets the wide card and an
+// inverted shape (filled with the mode's colour, dark icon). Nothing is greyed out.
+const SHAPES = (() => {
+  const polar = f => 'M' + Array.from({length: 361}, (_, d) => { const a = d*Math.PI/180, r = 50*f(a); return (50 + r*Math.cos(a)).toFixed(1) + ',' + (50 + r*Math.sin(a)).toFixed(1); }).join(' L') + 'Z';
+  return {assist: 'M50,0 A50,50 0 1 1 49.99,0Z', spot: 'M30,0 H70 Q100,0 100,30 V70 Q100,100 70,100 H30 Q0,100 0,70 V30 Q0,0 30,0Z',
+    here: polar(a => .78 + .22*Math.cos(4*a)), full: polar(a => .86 + .14*Math.cos(9*a))};
+})();
 function cardHtml(m, live, s){
   const locked = m.pass && s.config && s.config.spawn_gamepass === false;
   const rec = s.config && s.config.spawn_gamepass != null && m.k === (s.config.spawn_gamepass ? 'full' : 'here');
-  return `<button class="mc${locked ? ' locked' : ''}${rec ? ' rec' : ''}" role="radio" data-m="${m.k}" aria-checked="${m.k === pickMode}" style="--mc:${m.c}" title="${esc(m.line)}">
-    ${m.pass ? `<span class="tag" title="Needs the Set Spawn Anywhere gamepass">${ico(locked ? 'lock' : 'ticket')}</span>` : ''}<span class="tick">${ico('check')}</span><span class="rec-tag">${ico('star')}Recommended</span>
-    <span class="face">${ico(m.icon)}</span><b>${m.name}</b><p>${m.line}</p>
-    <span class="ab">${ABIL.map(([k, i, tip]) => `<span class="${m.does.includes(k) ? 'on' : ''}" title="${tip}">${ico(i)}</span>`).join('')}</span></button>`;
+  return `<button class="mc${locked ? ' locked' : ''}${rec ? ' rec' : ''}" role="radio" data-m="${m.k}" aria-checked="${m.k === pickMode}" title="${esc(m.line)}">
+    ${m.pass ? `<span class="tag" title="Needs the Set Spawn Anywhere gamepass">${ico(locked ? 'lock' : 'ticket')}</span>` : ''}<span class="rec-tag">${ico('star')}Recommended</span>
+    <span class="shape"><svg class="bg" viewBox="0 0 100 100" aria-hidden="true"><path d="${SHAPES[m.k]}"/></svg>${ico(m.icon)}</span>
+    <span class="txt"><span class="st"></span><b>${m.name}</b><p>${m.line}</p></span></button>`;
 }
 function drawDeck(s, live){
   const deck = $('deck'); deck.classList.toggle('live', !!live);
-  const key = [pickMode, live, s.config && s.config.spawn_gamepass].join('|');
+  const key = [pickMode, live, s.config && s.config.spawn_gamepass, s.mode, !!s.paused].join('|');
   if (deck._key === key) return; const prev = deck._key; deck._key = key;
   if (!deck.children.length || prev && prev.split('|')[2] !== String(s.config && s.config.spawn_gamepass)) deck.innerHTML = MODES.map(m => cardHtml(m, live, s)).join('');
-  deck.querySelectorAll('.mc').forEach(c => { c.setAttribute('aria-checked', c.dataset.m === pickMode); c.disabled = false; });
+  deck.style.setProperty('--cols', MODES.map(m => m.k === pickMode ? 'minmax(0,2.2fr)' : 'minmax(0,1fr)').join(' '));
+  const word = live && pickMode === s.mode ? (s.paused ? 'Paused' : 'Running') : s.paused && pickMode === s.mode ? 'Paused' : 'Selected';
+  deck.querySelectorAll('.mc').forEach(c => { const on = c.dataset.m === pickMode; c.setAttribute('aria-checked', on); c.disabled = false; c.querySelector('.st').textContent = on ? word : ''; });
 }
 function drawKpis(s){
   const pace = s.pace ?? (s.hooks_per_hour ? s.hooks_per_hour/60 : null);
@@ -929,17 +1017,16 @@ function drawKpis(s){
   const cards = [
     ['pace', 'gauge', 'Pace', pace, v => `${fmt(v,1)}<small>/min</small>`, s.hooks ? `${fmt(s.hooks)} hooks` : ''],
     ['gold', 'coins', 'Gold / h', s.gold_per_hour, v => `${fmt(v/1000,1)}<small>k</small>`, s.gold_per_hour && s.active_seconds ? `≈ ${fmt(s.gold_per_hour*s.active_seconds/3600/1000,1)}k this session` : ''],
-    ['bait', 'hook', 'Bait', bait, v => fmt(v), ''],
+    hrs != null ? ['bait', 'hook', 'Bait', hrs, v => `${v >= 10 ? Math.round(v) + 'h' : dur(v*3600)}<small>left</small>`, bait != null ? `${fmt(bait)} bait` : '']
+      : ['bait', 'hook', 'Bait', bait, v => fmt(v), ''],
   ];
   const box = $('kpis');
-  if (!box.children.length) box.innerHTML = cards.map(([id, i, l]) => `<div class="kpi"><div class="l">${ico(i)}${l}</div><div class="v num" id="k-${id}">—</div><div class="d" id="d-${id}"></div>${id === 'bait' ? `<div class="left" id="baitLeft"></div><div class="segs" id="baitBar">${'<i></i>'.repeat(20)}</div>` : ''}</div>`).join('');
+  if (!box.children.length) box.innerHTML = cards.map(([id, i, l]) => `<div class="kpi"><div class="l">${ico(i)}${l}</div><div class="v num" id="k-${id}">—</div>${id === 'bait' ? `<div class="segs" id="baitBar">${'<i></i>'.repeat(20)}</div>` : ''}<div class="d" id="d-${id}"></div></div>`).join('');
   for (const [id, , , v, render, d] of cards) { const el = $('k-'+id); v == null ? (el.textContent = '—', el.dataset.v = 0) : tween(el, v, render); $('d-'+id).innerHTML = d || '&nbsp;'; }
   drawSparks(s);
   // Bait bar (Farm option 5): 20 segments, the hours left at this pace on the right
   const lit = baitPct == null ? 0 : Math.max(1, Math.round(baitPct/5)), bar = $('baitBar');
   [...bar.children].forEach((x, n) => x.classList.toggle('on', n < lit)); bar.classList.toggle('low', baitPct != null && baitPct < 15);
-  const left = hrs ? `<b class="num">${hrs >= 10 ? Math.round(hrs) + 'h' : dur(hrs*3600)}</b><span>left at this pace</span>` : '';
-  if ($('baitLeft')._h !== left) { $('baitLeft')._h = left; $('baitLeft').innerHTML = left; }
 }
 
 // Pace comes from catches in the event feed (5-minute buckets over the last hour);
@@ -968,27 +1055,25 @@ function drawSparks(s){
 const ITEM_RARITY = BOOT.rarity || {};
 const rarityOf = name => ITEM_RARITY[name] || Object.entries(ITEM_RARITY).find(([k]) => new RegExp('\\b' + k + '\\b', 'i').test(name))?.[1];
 let lastCounts2 = null;
+// Drops (2.3): Rare and better as tiles, rarest first; uncommons and commons as one bar.
 function drawCatch(s){
   const rows = (s.items || []).map(r => ({...r, rarity: r.rarity || rarityOf(r.item)})).filter(r => r.quantity > 0 && r.rarity)
     .sort((a, b) => RORDER.indexOf(a.rarity) - RORDER.indexOf(b.rarity) || b.quantity - a.quantity);
-  const total = rows.reduce((a, r) => a + r.quantity, 0); $('catchCount').textContent = total ? fmt(total) : '';
+  const total = rows.reduce((a, r) => a + r.quantity, 0); $('catchCount').textContent = total ? fmt(total) + ' total' : '';
   const box = $('catch');
-  if (!rows.length) { box.innerHTML = `<div class="empty">${ico('fish', 'big')}</div>`; box._built = false; return; }
-  const by = {}; rows.forEach(r => by[r.rarity] = (by[r.rarity] || 0) + r.quantity);
-  const tiers = RORDER.filter(r => by[r]), hours = Math.max(.1, (s.active_seconds || 0)/3600);
-  if (!box._built) { box._built = true;
-    box.innerHTML = `<div class="rcols" id="mixbar">${RORDER.map(r => `<div class="rcol" data-r="${r}" style="--rc:${RVAR[r]}"><b class="num">0</b><span class="bar${r === 'Impossible' ? ' imp' : ''}"></span><small>${r}</small></div>`).join('')}</div><div class="ctbl"><table><thead><tr><th>Item</th><th>Rarity</th><th>Count</th><th>/ h</th></tr></thead><tbody id="ctb"></tbody></table></div>`; }
-  // Rarity columns (Farm option 9): log height so one Impossible still shows next to 400 commons.
-  const bar = $('mixbar'), top = Math.log1p(Math.max(...Object.values(by)));
-  bar.querySelectorAll('.rcol').forEach(c => { const n = by[c.dataset.r] || 0;
-    c.classList.toggle('zero', !n); c.querySelector('b').textContent = fmt(n); c.title = `${c.dataset.r}: ${fmt(n)}`;
-    c.querySelector('.bar').style.height = (n ? 8 + 80*Math.log1p(n)/top : 3) + 'px'; });
+  if (!rows.length) { if (box._k !== 'empty') { box._k = 'empty'; box.innerHTML = `<div class="empty">${ico('box', 'big')}</div>`; } return; }
+  const rare = rows.filter(r => RORDER.indexOf(r.rarity) <= 3), unc = rows.filter(r => r.rarity === 'Uncommon').reduce((a, r) => a + r.quantity, 0), com = rows.filter(r => r.rarity === 'Common').reduce((a, r) => a + r.quantity, 0);
   const hits = new Set(); if (lastCounts2) rows.forEach(r => { if ((lastCounts2[r.item] || 0) < r.quantity) hits.add(r.item); });
-  $('ctb').innerHTML = rows.map(r => `<tr class="${hits.has(r.item) ? 'hit' : ''}" style="--rc:${RVAR[r.rarity]}"><td class="n">${esc(r.item)}</td><td><span class="rtag" style="--rc:${RVAR[r.rarity]}">${r.rarity}</span></td>
-    <td class="q num">${fmt(r.quantity)}</td><td class="ph num">${fmt(r.quantity/hours, r.quantity/hours < 10 ? 1 : 0)}</td></tr>`).join('');
-  hits.forEach(name => { const r = rows.find(x => x.item === name); const seg = bar.querySelector(`[data-r="${r.rarity}"]`); if (seg) { seg.classList.remove('hit'); void seg.offsetWidth; seg.classList.add('hit'); }
-    if (RORDER.indexOf(r.rarity) <= 2 && seg) burst(seg, RVAR[r.rarity]); });
   lastCounts2 = Object.fromEntries(rows.map(r => [r.item, r.quantity]));
+  const key = rows.map(r => r.item + r.quantity).join(',');
+  if (box._k === key) return; box._k = key;
+  const tiles = rare.length ? rare.map(r => `<div class="dt${r.rarity === 'Impossible' ? ' imp' : ''}${hits.has(r.item) ? ' hit' : ''}" data-i="${esc(r.item)}" style="--rc:${RVAR[r.rarity]}" title="${esc(r.item)}: ${fmt(r.quantity)}">
+      <span class="plus1">+1</span><div class="t">${r.rarity}</div><div class="n">${esc(r.item)}</div><div class="q num">${fmt(r.quantity)}</div></div>`).join('')
+    : `<div class="dnone">No rare drops yet</div>`;
+  box.innerHTML = `<div class="drops">${tiles}</div>
+    <div class="restbar">${unc ? `<i style="flex:${unc}"></i>` : ''}${com ? `<i class="c" style="flex:${com}"></i>` : ''}</div>
+    <div class="restkey"><span><b class="u num">${fmt(unc)}</b> uncommon <b class="num">${fmt(com)}</b> common</span><a role="button" tabindex="0" id="openItems">Open Items${ico('chev', 'r')}</a></div>`;
+  hits.forEach(name => { const t = box.querySelector(`.dt[data-i="${CSS.escape(name)}"]`); if (t) burst(t, getComputedStyle(t).getPropertyValue('--rc')); });
 }
 function burst(el, color){
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -1149,7 +1234,25 @@ $('logDetail').addEventListener('click', e => {
   if (e.target.closest('#dItems')) return show('items');
   if (e.target.closest('#dCopy')) { const ev = (S.events || []).find(x => evKey(x) === logPick); if (ev) { navigator.clipboard?.writeText(`${clock(ev.at)} ${ev.text}`); toast('Copied'); } }
 });
+let tlOpen = false; try { tlOpen = localStorage.getItem('autofish-tl-rows') === '1'; } catch (e) {}
+function drawStrip(s){
+  const ev = s.events || [], now = Date.now()/1000, end = Math.floor(now/60)*60, from = end - 59*60, cells = [];
+  for (let a = from; a <= end; a += 60) {
+    const list = ev.filter(e => e.at >= a && e.at < a + 60), catches = list.filter(e => e.group === 'catches');
+    const best = catches.map(tierOf).filter(Boolean).sort((x, y) => RORDER.indexOf(x) - RORDER.indexOf(y))[0];
+    const prob = list.some(e => ['warn', 'error'].includes(e.level)), fix = list.some(e => e.group === 'recovery');
+    const cls = best === 'Impossible' ? 'imp' : best && RORDER.indexOf(best) <= 3 ? 'drop' : prob ? 'prob' : fix ? 'fix' : catches.length ? '' : 'idle';
+    const tip = `${clock(a)} · ${catches.length} catch${catches.length === 1 ? '' : 'es'}` + (catches.length ? ': ' + catches.map(e => e.text).slice(0, 6).join(', ') : '') + (prob ? ' · problem' : '') + (fix ? ' · fix' : '');
+    cells.push(`<i class="c ${cls}"${cls === 'drop' ? ` style="--rc:${RVAR[best]}"` : ''} title="${esc(tip)}"></i>`); }
+  const html = cells.join(''); if ($('tlStrip')._h !== html) { $('tlStrip')._h = html; $('tlStrip').innerHTML = html; }
+  const axis = `<span>${clock(from)}</span><span>${clock(from + 30*60)}</span><span>now</span>`; if ($('tlAxis')._h !== axis) { $('tlAxis')._h = axis; $('tlAxis').innerHTML = axis; }
+  const hour = ev.filter(e => e.at >= now - 3600), c = hour.filter(e => e.group === 'catches').length, f = hour.filter(e => e.group === 'recovery').length, p = hour.filter(e => ['warn', 'error'].includes(e.level)).length;
+  const sum = `<span>${fmt(c)} catches</span><span>${f} fix${f === 1 ? '' : 'es'}</span><span class="${p ? 'p' : ''}">${p} problem${p === 1 ? '' : 's'}</span>`;
+  if ($('tlSum')._h !== sum) { $('tlSum')._h = sum; $('tlSum').innerHTML = sum; }
+  $('timeline').hidden = !tlOpen; $('tlMore').setAttribute('aria-expanded', tlOpen);
+}
 function drawTimeline(s){
+  drawStrip(s); if (!tlOpen) return;
   const ev = s.events || [], now = Date.now()/1000, slot = 600, last = Math.floor(now/slot)*slot, rows = [];
   for (let n = 0; n < 6; n++) { const a = last - n*slot, list = ev.filter(e => e.at >= a && e.at < a + slot);
     const blocks = list.map(e => { const r = tierOf(e), [cls] = evIcon(e);
@@ -1181,7 +1284,7 @@ function drawSettings(s){
 
 const OB_STEPS = [
   {k:'spawn_gamepass', icon:'ticket', q:'Own the Set Spawn Anywhere gamepass?', sub:'Lets Autofish rejoin and walk back by itself', type:'choice',
-    opts:[{v:true, icon:'crown', label:'Yes', note:'Full farmer'}, {v:false, icon:'pin', label:'No', note:'Farm here'}]},
+    opts:[{v:true, icon:'moon', label:'Yes', note:'Full farmer'}, {v:false, icon:'pin', label:'No', note:'Farm here'}]},
   {k:'account_username', icon:'user', q:'Your Roblox username', sub:'Not your display name. Saved only on this PC', type:'input', ph:'Username', optional:true},
   {k:'rod', icon:'rod', q:'Which rod are you fishing with?', sub:'Stats are kept per rod', type:'choice', c3:true,
     opts:[{v:'Legendary', label:'Legendary', rc:'var(--legendary)'}, {v:'Rare', label:'Rare', rc:'var(--rare)'}, {v:'Common', label:'Common', note:'Also called Basic', rc:'var(--text-2)'}]},
@@ -1225,8 +1328,29 @@ function drawOnboarding(s){
   if (OB.active) return;
   if ((s.config || {}).spawn_gamepass == null && !OB.done) { OB.active = true; OB.i = 0; veil.classList.add('on'); obShow(); }
 }
+/* Attention banner (2.3): shown only when the farm needs you, with what to do. */
+let alertHidden = null;
+function alertFor(s){
+  const c = s.config || {}, bait = s.bait_remaining_estimate, hrs = s.bait_hours_remaining_estimate, pace = s.pace ?? (s.hooks_per_hour ? s.hooks_per_hour/60 : null);
+  if (bait != null && bait <= 0) return {k: 'bait-out', tone: 'bad', icon: 'hook', title: 'Out of bait', sub: 'Farming stops without bait. Buy more in the game, then press Start.'};
+  if (s.running && /Waiting for rod/i.test(s.state || '')) return {k: 'rod', tone: 'bad', icon: 'rod', title: `No rod in slot ${c.rod_slot || ''}`.trim(), sub: `Put your ${c.rod || ''} rod in hotbar slot ${c.rod_slot || ''}. Farming carries on by itself.`.replace(/\s+/g, ' ')};
+  if (s.running && /Close Roblox menu|Inspect statue/i.test(s.state || '')) return {k: 'scene', tone: 'warn', icon: 'pad', title: s.state, sub: 'The farmer waits for this before it carries on.'};
+  if (!s.running && !s.starting && s.reason && !/by user/i.test(s.reason)) return {k: 'stop:' + s.reason, tone: 'bad', icon: 'alert', title: s.paused ? 'Farming paused' : 'Farming stopped', sub: s.reason};
+  if (hrs != null && hrs < 8 && bait > 0) return {k: 'bait-low', tone: 'warn', icon: 'alert', title: `Bait runs out in about ${hrs >= 1 ? Math.round(hrs) + (Math.round(hrs) === 1 ? ' hour' : ' hours') : dur(hrs*3600)}`,
+    sub: `${fmt(bait)} left${pace ? ` at ${fmt(pace, 1)} hooks/min` : ''}. Farming stops when it hits 0.`};
+  return null;
+}
+function drawAlert(s){
+  const a = alertFor(s), box = $('alert'), show = a && a.k !== alertHidden;
+  $('reason').style.display = a && a.k.startsWith('stop:') ? 'none' : '';
+  if (!show) { box.hidden = true; box._k = null; return; }
+  const html = `${ico(a.icon)}<div><b>${esc(a.title)}</b><small>${esc(a.sub)}</small></div><button class="btn sm later" data-k="${esc(a.k)}">Later</button>`;
+  box.style.setProperty('--ac', a.tone === 'bad' ? 'var(--bad)' : 'var(--warn)');
+  if (box._k !== a.k + html) { box._k = a.k + html; box.innerHTML = html; }
+  box.hidden = false;
+}
 function draw(s){
-  S = s; drawHero(s); drawKpis(s); drawCatch(s); drawFeed(s); drawTimeline(s); drawChecks(s);
+  S = s; drawAlert(s); drawHero(s); drawKpis(s); drawCatch(s); drawFeed(s); drawTimeline(s); drawChecks(s);
   if (view === 'items') drawItems(s); if (view === 'log') drawLog(s); if (view === 'settings') drawSettings(s);
   drawOnboarding(s);
   $('sub').textContent = s.game || 'Project Slayers 2';
@@ -1241,6 +1365,10 @@ function show(v){
   glide($('tabs'));
   if (S) draw(S);
 }
+$('alert').addEventListener('click', e => { const b = e.target.closest('.later'); if (!b) return; alertHidden = b.dataset.k; drawAlert(S); });
+$('tlMore').addEventListener('click', () => { tlOpen = !tlOpen; try { localStorage.setItem('autofish-tl-rows', tlOpen ? '1' : '0'); } catch (e) {} $('timeline')._h = null; drawTimeline(S); });
+$('catch').addEventListener('click', e => { if (e.target.closest('#openItems')) show('items'); });
+$('catch').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest('#openItems')) show('items'); });
 $('deck').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (!b || b.disabled || b.dataset.m === pickMode) return; pickMode = b.dataset.m; drawHero(S); });
 function theme(next){ const root = document.documentElement, dark = next ?? !(root.dataset.theme === 'dark' || (!root.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches));
   root.dataset.theme = dark ? 'dark' : 'light'; $('theme').innerHTML = ico(dark ? 'sun' : 'moon'); if (next === undefined) try { localStorage.setItem('autofish-theme', root.dataset.theme); } catch (e) {}}
